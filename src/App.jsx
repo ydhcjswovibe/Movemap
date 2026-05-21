@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { resolveDropAction } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
+import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 
 const STORAGE_KEY = "choreo-stage-planner-project";
 const AUDIO_BUCKET = "choreo-audio";
@@ -1136,7 +1137,7 @@ function App() {
       moveMode: "smooth",
       positions: JSON.parse(JSON.stringify(positions)),
       frontFocus: [],
-      partnerSetId: previous?.partnerSetId || ""
+      partnerSetId: partnerSetIdForAddedSection(previous)
     };
     updatePlan((current) => ({ ...current, sections: [...current.sections, section] }));
     setSelectedSectionId(section.id);
