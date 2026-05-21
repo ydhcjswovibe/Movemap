@@ -72,6 +72,38 @@ function safeFilename(value = "") {
     .slice(0, 80);
 }
 
+function hashString(value = "") {
+  let hash = 5381;
+  for (const char of String(value)) {
+    hash = ((hash << 5) + hash) ^ char.codePointAt(0);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function safeStorageSegment(value = "", fallback = "file") {
+  const normalized = String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const ascii = normalized
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return ascii || `${fallback}-${hashString(value)}`;
+}
+
+function audioStorageName(file, fingerprint) {
+  const originalName = file.name || "audio";
+  const dotIndex = originalName.lastIndexOf(".");
+  const baseName = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
+  const extension = dotIndex > 0 ? originalName.slice(dotIndex + 1) : "audio";
+  return [
+    safeStorageSegment(baseName, "audio"),
+    safeStorageSegment(fingerprint, "audio"),
+    safeStorageSegment(extension, "audio")
+  ].join(".");
+}
+
 function audioPublicUrl(storagePath) {
   const { url } = supabaseConfig();
   if (!url || !storagePath) return "";
@@ -90,7 +122,7 @@ function audioUrlCandidates(audio) {
 
 function audioFingerprint(file) {
   return [
-    safeFilename(file.name || "audio"),
+    safeStorageSegment(file.name || "audio", "audio"),
     file.size || 0,
     file.lastModified || 0
   ].join("-");
@@ -454,8 +486,7 @@ async function loadFromSupabase(id) {
 async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFingerprint(file)) {
   const { url, key } = supabaseConfig();
   if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
-  const extension = file.name.includes(".") ? file.name.split(".").pop() : "audio";
-  const path = `projects/${safeFilename(projectKey || "local")}/audio/${safeFilename(fingerprint)}-${safeFilename(file.name || `audio.${extension}`)}`;
+  const path = `projects/${safeStorageSegment(projectKey || "local", "project")}/audio/${audioStorageName(file, fingerprint)}`;
   const response = await fetch(`${url}/storage/v1/object/${AUDIO_BUCKET}/${path}`, {
     method: "POST",
     headers: {
@@ -877,6 +908,29 @@ function App() {
     setSelectedSectionId(nextSections[0]?.id || "");
   }
 
+  function resetSelectedFormation() {
+    if (readonly || !selectedSection) return;
+    const confirmed = window.confirm("선택한 대형의 토큰 위치와 커플 연결을 기본 배치로 초기화할까요?");
+    if (!confirmed) return;
+    const resetPositions = defaultSections(plan.performers)[0].positions;
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === selectedSection.id
+        ? {
+            ...section,
+            positions: JSON.parse(JSON.stringify(resetPositions)),
+            partnerSetId: ""
+          }
+        : section)
+    }));
+    setSelectedPerformerId("");
+    setSelectedPairKey("");
+    setMagnetCandidateId("");
+    setDragPositions(null);
+    dragStateRef.current = null;
+    setStatus(`${selectedSection.name} 대형을 기본 배치로 초기화했습니다.`);
+  }
+
   function onStagePointerDown(event, performerId) {
     if (readonly || !selectedSection) return;
     event.preventDefault();
@@ -890,6 +944,7 @@ function App() {
       type: "token",
       performerId,
       sectionId: selectedSection.id,
+      pointerId: event.pointerId,
       offsetX: token.x - pointer.x,
       offsetY: token.y - pointer.y,
       pointer,
@@ -901,9 +956,10 @@ function App() {
   }
 
   function onStagePointerMove(event, performerId) {
-    if (readonly || !selectedSection || event.buttons !== 1) return;
+    if (readonly || !selectedSection) return;
     const drag = dragStateRef.current;
-    if (!drag || drag.performerId !== performerId || drag.sectionId !== selectedSection.id) return;
+    if (!drag || drag.performerId !== performerId || drag.sectionId !== selectedSection.id || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
     const pointer = clientToStagePoint(event);
     const rawPosition = {
       x: clamp(pointer.x + drag.offsetX, 4, 96),
@@ -995,6 +1051,7 @@ function App() {
       pairIndex,
       pair: [...pair],
       sectionId: selectedSection.id,
+      pointerId: event.pointerId,
       pointer,
       startPositions: {
         [firstId]: { ...selectedSection.positions[firstId] },
@@ -1010,9 +1067,10 @@ function App() {
   }
 
   function onPairPointerMove(event) {
-    if (readonly || event.buttons !== 1) return;
+    if (readonly) return;
     const drag = dragStateRef.current;
-    if (!drag || drag.type !== "pair" || drag.sectionId !== selectedSection?.id) return;
+    if (!drag || drag.type !== "pair" || drag.sectionId !== selectedSection?.id || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
     const pointer = clientToStagePoint(event);
     const [firstId, secondId] = drag.pair;
     const firstStart = drag.startPositions[firstId];
@@ -1341,6 +1399,7 @@ function App() {
           <strong>현재 선택</strong>
           <span>{selectedPerformer ? `${selectedPerformer.name || selectedPerformer.label} 토큰` : selectedPairKey ? "선택 커플" : "선택 없음"}</span>
           <p className="muted">토큰을 드래그해 배치하고, 다른 토큰과 겹치게 놓으면 커플로 연결됩니다. 격자 맞춤과 무대 크게 보기는 무대 오른쪽 위 아이콘으로 조작합니다.</p>
+          {!readonly && <button className="danger-button compact-danger" onClick={resetSelectedFormation}>대형 초기화</button>}
         </div>
         <div className="partner-box">
           <div className="panel-head">
