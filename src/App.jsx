@@ -713,6 +713,35 @@ function App() {
     }));
   }
 
+  function updateSectionTiming(sectionId, time, moveDuration = null) {
+    const safeTime = Math.max(0, Number(time) || 0);
+    const nextMoveDuration = moveDuration === null
+      ? pointMoveDuration(sortedSections.find((section) => section.id === sectionId) || {})
+      : Math.max(0, Number(moveDuration) || 0);
+    updateSection(sectionId, {
+      time: safeTime,
+      moveDuration: nextMoveDuration,
+      start: Math.max(0, safeTime - nextMoveDuration),
+      end: safeTime
+    });
+  }
+
+  function nudgeSelectedSection(delta) {
+    if (!selectedSection) return;
+    updateSectionTiming(selectedSection.id, pointTime(selectedSection) + delta);
+  }
+
+  function setSelectedMoveDuration(moveDuration) {
+    if (!selectedSection) return;
+    updateSectionTiming(selectedSection.id, pointTime(selectedSection), moveDuration);
+  }
+
+  function syncSelectedSectionToCurrentTime() {
+    if (!selectedSection) return;
+    const nextTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
+    updateSectionTiming(selectedSection.id, nextTime);
+  }
+
   function clientToStagePoint(event) {
     const rect = svgRef.current.getBoundingClientRect();
     return {
@@ -1221,15 +1250,6 @@ function App() {
   const hasPngBackup = false;
   const audioUrlSaved = Boolean(resolveAudioUrl(plan.audio));
   const audioLoadFailed = audioUploadStatus === "failed" && audioUrlSaved;
-  const audioStatusText = audioUploadStatus === "uploading"
-    ? "음악 업로드 중"
-    : audioUploadStatus === "failed"
-      ? audioUrlSaved ? "서버 음악 연결 실패" : "음악 업로드 실패"
-      : audioUrlSaved
-        ? `서버 음악 연결됨: ${plan.audio.fileName || "서버 음악"}`
-        : audioSrc
-          ? "로컬 음악 준비됨"
-          : "음악 없음";
 
   function renderMobileTabs(extraClass = "") {
     return (
@@ -1314,22 +1334,13 @@ function App() {
         <div className="panel-head">
           <div>
             <h2>배치</h2>
-            <p className="muted">무대 위 토큰, 커플, 격자 맞춤을 조작합니다.</p>
+            <p className="muted">무대 위 토큰과 커플을 조작합니다.</p>
           </div>
-          <button className={snapEnabled ? "toggle active" : "toggle"} onClick={() => setSnapEnabled((value) => !value)}>
-            격자 맞춤 {snapEnabled ? "ON" : "OFF"}
-          </button>
         </div>
         <div className="tool-card">
           <strong>현재 선택</strong>
           <span>{selectedPerformer ? `${selectedPerformer.name || selectedPerformer.label} 토큰` : selectedPairKey ? "선택 커플" : "선택 없음"}</span>
-          <p className="muted">토큰을 드래그해 배치하고, 다른 토큰과 겹치게 놓으면 커플로 연결됩니다. 다이아몬드 핸들을 드래그하면 커플이 함께 이동합니다.</p>
-        </div>
-        <div className="row-actions">
-          <button className={isStageFocus ? "toggle active" : "toggle"} onClick={() => setIsStageFocus((value) => !value)}>
-            {isStageFocus ? "패널 보기" : "무대 크게 보기"}
-          </button>
-          <button onClick={() => exportPng()}>현재 PNG</button>
+          <p className="muted">토큰을 드래그해 배치하고, 다른 토큰과 겹치게 놓으면 커플로 연결됩니다. 격자 맞춤과 무대 크게 보기는 무대 오른쪽 위 아이콘으로 조작합니다.</p>
         </div>
         <div className="partner-box">
           <div className="panel-head">
@@ -1424,7 +1435,7 @@ function App() {
 
         <div className="share-actions">
           <button onClick={() => exportPng()}>현재 PNG</button>
-          <button onClick={exportAllPng}>전체 PNG</button>
+          <button onClick={exportAllPng}>대형 PNG 전체 저장</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
         </div>
 
@@ -1457,166 +1468,186 @@ function App() {
 
   return (
     <div className={isStageFocus ? "app stage-focus" : "app"}>
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">음악 동기화 안무 대형 플래너</p>
-          <input
-            className="title-input"
-            value={plan.title}
-            readOnly={readonly}
-            onChange={(event) => updatePlan((current) => ({ ...current, title: event.target.value }))}
-          />
-        </div>
-        <div className="top-summary">
-          <span>{formatTime(sliderTime)} / {formatTime(timelineMax)}</span>
-          <strong>{audioStatusText}</strong>
-        </div>
-      </header>
-
       {status && <div className="status">{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</div>}
 
       <main className="workspace">
         <section className="stage-area">
           <div className="stage-toolbar">
-            <div>
-              <strong>{activeSection?.name}</strong>
-              <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
-            </div>
-            <div className="row-actions">
-              <button className={snapEnabled ? "toggle active" : "toggle"} onClick={() => setSnapEnabled((value) => !value)}>
-                격자 맞춤 {snapEnabled ? "ON" : "OFF"}
-              </button>
-              <button className={isStageFocus ? "toggle active" : "toggle"} onClick={() => setIsStageFocus((value) => !value)}>
-                {isStageFocus ? "패널 보기" : "무대 크게 보기"}
-              </button>
-              <button onClick={() => exportPng()}>현재 PNG</button>
+            <div className="stage-title-block">
+              <input
+                className="stage-title-input"
+                value={plan.title}
+                readOnly={readonly}
+                aria-label="프로젝트명"
+                onChange={(event) => updatePlan((current) => ({ ...current, title: event.target.value }))}
+              />
+              <div className="stage-meta">
+                <strong>{activeSection?.name}</strong>
+                <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
+              </div>
             </div>
           </div>
-          {!readonly && <p className="stage-hint">음악 재생 → 현재 시간에 대형 만들기 → 무대에서 토큰 배치</p>}
-          <svg ref={svgRef} className="stage" viewBox="0 0 100 100">
-            <defs>
-              <marker id="arrow-live" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-                <path d="M0,0 L5,2.5 L0,5 Z" fill="#334155" />
-              </marker>
-            </defs>
-            <rect x="0" y="0" width="100" height="100" rx="2" fill="#f8fafc" />
-            <rect x="0" y={plan.frontZone.y} width="100" height={100 - plan.frontZone.y} fill="#fee2e2" opacity="0.72" />
-            <text x="50" y="96" textAnchor="middle" fontSize="3.5" fill="#991b1b" fontWeight="700">관객 방향 / 앞줄</text>
-            <path d="M8 92 H92" stroke="#991b1b" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
-            <g stroke="#cbd5e1" strokeWidth="0.16">
-              {GRID_X.map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2="100" />)}
-              {GRID_Y.map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2="100" y2={y} />)}
-            </g>
-            <g className="grid-points">
-              {GRID_X.flatMap((x) => GRID_Y.map((y) => (
-                <circle key={`${x}-${y}`} cx={x} cy={y} r="0.55" />
-              )))}
-            </g>
-            {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
-              const pos = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
-              if (!pos) return null;
-              return <circle key={`ghost-${performer.id}`} cx={pos.x} cy={pos.y} r="2.5" fill="#475569" opacity="0.2" />;
-            })}
-            {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
-              const from = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
-              const to = activeSection?.positions?.[performer.id];
-              if (!from || !to || (Math.abs(from.x - to.x) < 1 && Math.abs(from.y - to.y) < 1)) return null;
-              const dim = selectedPerformerId && selectedPerformerId !== performer.id;
-              return <line key={`arrow-${performer.id}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={performer.color} strokeWidth="0.8" opacity={dim ? 0.12 : 0.65} markerEnd="url(#arrow-live)" />;
-            })}
-            {(plan.partnerSets.find((set) => set.id === activeSection?.partnerSetId)?.pairs || []).map(([a, b], index) => {
-              const from = visiblePositions[a];
-              const to = visiblePositions[b];
-              if (!from || !to) return null;
-              const selected = selectedPairKey === pairKey([a, b]);
-              return <line key={`pair-${index}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : "#334155"} strokeWidth={selected ? "1.1" : "0.55"} opacity={selected ? "0.9" : "0.58"} />;
-            })}
-            {magnetCandidateId && dragStateRef.current?.type === "token" && (() => {
-              const from = visiblePositions[dragStateRef.current.performerId] || selectedSection?.positions?.[dragStateRef.current.performerId];
-              const to = visiblePositions[magnetCandidateId] || selectedSection?.positions?.[magnetCandidateId];
-              if (!from || !to) return null;
-              const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-              return (
-                <g className="magnet-preview">
-                  <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#b4234f" strokeWidth="0.9" strokeDasharray="2 1.4" />
-                  <rect x={mid.x - 10} y={mid.y - 6.6} width="20" height="4.4" rx="1.3" fill="#b4234f" />
-                  <text x={mid.x} y={mid.y - 3.5} textAnchor="middle" fontSize="2.2" fill="#fff" fontWeight="800" pointerEvents="none">놓으면 연결</text>
-                </g>
-              );
-            })()}
-            {(partnerSet?.pairs || []).map((pair, index) => {
-              const [a, b] = pair;
-              const from = visiblePositions[a] || selectedSection?.positions?.[a];
-              const to = visiblePositions[b] || selectedSection?.positions?.[b];
-              if (!from || !to) return null;
-              const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-              const selected = selectedPairKey === pairKey(pair);
-              return (
-                <g
-                  key={`pair-handle-${pairKey(pair)}-${index}`}
-                  className="pair-handle"
-                  onPointerDown={(event) => onPairPointerDown(event, pair, index)}
-                  onPointerMove={onPairPointerMove}
-                  onPointerUp={finishPairDrag}
-                  onPointerCancel={clearDrag}
-                  onLostPointerCapture={clearDrag}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedPairKey(pairKey(pair));
-                  }}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    removePairByKey(pairKey(pair));
-                  }}
-                >
-                  <circle cx={mid.x} cy={mid.y} r="7.2" fill="transparent" />
-                  <polygon
-                    points={`${mid.x},${mid.y - 2.3} ${mid.x + 2.3},${mid.y} ${mid.x},${mid.y + 2.3} ${mid.x - 2.3},${mid.y}`}
-                    fill={selected ? "#b4234f" : "#ffffff"}
-                    stroke={selected ? "#7f1d1d" : "#334155"}
-                    strokeWidth="0.7"
-                  />
-                </g>
-              );
-            })}
-            {plan.performers.map((performer) => {
-              const pos = visiblePositions[performer.id] || selectedSection?.positions?.[performer.id];
-              if (!pos) return null;
-              const dim = selectedPerformerId && selectedPerformerId !== performer.id && magnetCandidateId !== performer.id;
-              const isCandidate = magnetCandidateId === performer.id;
-              const shortName = tokenShortName(performer);
-              const fullName = tokenName(performer);
-              const fontSize = tokenFontSize(performer);
-              return (
-                <g
-                  key={performer.id}
-                  className={readonly ? "token readonly" : "token"}
-                  opacity={dim ? 0.35 : 1}
-                  onPointerDown={(event) => onStagePointerDown(event, performer.id)}
-                  onPointerMove={(event) => onStagePointerMove(event, performer.id)}
-                  onPointerUp={finishTokenDrag}
-                  onPointerCancel={clearDrag}
-                  onLostPointerCapture={clearDrag}
-                  onClick={() => setSelectedPerformerId(performer.id)}
-                >
-                  <title>{fullName}</title>
-                  <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
-                  {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
-                  {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
-                  {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
-                  <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
-                  <text x={pos.x} y={pos.y + fontSize * 0.34} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="800" pointerEvents="none">{shortName}</text>
-                </g>
-              );
-            })}
-          </svg>
+          {!readonly && <p className="stage-hint">음악을 재생하고 원하는 순간에 대형을 만드세요.</p>}
+          <div className="stage-frame">
+            <div className="stage-corner-tools" aria-label="무대 도구">
+              <button
+                className={snapEnabled ? "icon-tool active" : "icon-tool"}
+                onClick={() => setSnapEnabled((value) => !value)}
+                title={`격자 맞춤 ${snapEnabled ? "끄기" : "켜기"}`}
+                aria-label={`격자 맞춤 ${snapEnabled ? "끄기" : "켜기"}`}
+              >
+                #
+              </button>
+              <button
+                className={isStageFocus ? "icon-tool active" : "icon-tool"}
+                onClick={() => setIsStageFocus((value) => !value)}
+                title={isStageFocus ? "패널 보기" : "무대 크게 보기"}
+                aria-label={isStageFocus ? "패널 보기" : "무대 크게 보기"}
+              >
+                {isStageFocus ? "↙" : "⛶"}
+              </button>
+            </div>
+            <svg ref={svgRef} className="stage" viewBox="0 0 100 100">
+              <defs>
+                <marker id="arrow-live" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+                  <path d="M0,0 L5,2.5 L0,5 Z" fill="#334155" />
+                </marker>
+              </defs>
+              <rect x="0" y="0" width="100" height="100" rx="2" fill="#f8fafc" />
+              <rect x="0" y={plan.frontZone.y} width="100" height={100 - plan.frontZone.y} fill="#fee2e2" opacity="0.72" />
+              <text x="50" y="96" textAnchor="middle" fontSize="3.5" fill="#991b1b" fontWeight="700">관객 방향 / 앞줄</text>
+              <path d="M8 92 H92" stroke="#991b1b" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
+              <g stroke="#cbd5e1" strokeWidth="0.16">
+                {GRID_X.map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2="100" />)}
+                {GRID_Y.map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2="100" y2={y} />)}
+              </g>
+              <g className="grid-points">
+                {GRID_X.flatMap((x) => GRID_Y.map((y) => (
+                  <circle key={`${x}-${y}`} cx={x} cy={y} r="0.55" />
+                )))}
+              </g>
+              {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
+                const pos = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
+                if (!pos) return null;
+                return <circle key={`ghost-${performer.id}`} cx={pos.x} cy={pos.y} r="2.5" fill="#475569" opacity="0.2" />;
+              })}
+              {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
+                const from = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
+                const to = activeSection?.positions?.[performer.id];
+                if (!from || !to || (Math.abs(from.x - to.x) < 1 && Math.abs(from.y - to.y) < 1)) return null;
+                const dim = selectedPerformerId && selectedPerformerId !== performer.id;
+                return <line key={`arrow-${performer.id}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={performer.color} strokeWidth="0.8" opacity={dim ? 0.12 : 0.65} markerEnd="url(#arrow-live)" />;
+              })}
+              {(plan.partnerSets.find((set) => set.id === activeSection?.partnerSetId)?.pairs || []).map(([a, b], index) => {
+                const from = visiblePositions[a];
+                const to = visiblePositions[b];
+                if (!from || !to) return null;
+                const selected = selectedPairKey === pairKey([a, b]);
+                return <line key={`pair-${index}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : "#334155"} strokeWidth={selected ? "1.1" : "0.55"} opacity={selected ? "0.9" : "0.58"} />;
+              })}
+              {magnetCandidateId && dragStateRef.current?.type === "token" && (() => {
+                const from = visiblePositions[dragStateRef.current.performerId] || selectedSection?.positions?.[dragStateRef.current.performerId];
+                const to = visiblePositions[magnetCandidateId] || selectedSection?.positions?.[magnetCandidateId];
+                if (!from || !to) return null;
+                const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+                return (
+                  <g className="magnet-preview">
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#b4234f" strokeWidth="0.9" strokeDasharray="2 1.4" />
+                    <rect x={mid.x - 10} y={mid.y - 6.6} width="20" height="4.4" rx="1.3" fill="#b4234f" />
+                    <text x={mid.x} y={mid.y - 3.5} textAnchor="middle" fontSize="2.2" fill="#fff" fontWeight="800" pointerEvents="none">놓으면 연결</text>
+                  </g>
+                );
+              })()}
+              {(partnerSet?.pairs || []).map((pair, index) => {
+                const [a, b] = pair;
+                const from = visiblePositions[a] || selectedSection?.positions?.[a];
+                const to = visiblePositions[b] || selectedSection?.positions?.[b];
+                if (!from || !to) return null;
+                const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+                const selected = selectedPairKey === pairKey(pair);
+                return (
+                  <g
+                    key={`pair-handle-${pairKey(pair)}-${index}`}
+                    className="pair-handle"
+                    onPointerDown={(event) => onPairPointerDown(event, pair, index)}
+                    onPointerMove={onPairPointerMove}
+                    onPointerUp={finishPairDrag}
+                    onPointerCancel={clearDrag}
+                    onLostPointerCapture={clearDrag}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedPairKey(pairKey(pair));
+                    }}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation();
+                      removePairByKey(pairKey(pair));
+                    }}
+                  >
+                    <circle cx={mid.x} cy={mid.y} r="7.2" fill="transparent" />
+                    <polygon
+                      points={`${mid.x},${mid.y - 2.3} ${mid.x + 2.3},${mid.y} ${mid.x},${mid.y + 2.3} ${mid.x - 2.3},${mid.y}`}
+                      fill={selected ? "#b4234f" : "#ffffff"}
+                      stroke={selected ? "#7f1d1d" : "#334155"}
+                      strokeWidth="0.7"
+                    />
+                  </g>
+                );
+              })}
+              {plan.performers.map((performer) => {
+                const pos = visiblePositions[performer.id] || selectedSection?.positions?.[performer.id];
+                if (!pos) return null;
+                const dim = selectedPerformerId && selectedPerformerId !== performer.id && magnetCandidateId !== performer.id;
+                const isCandidate = magnetCandidateId === performer.id;
+                const shortName = tokenShortName(performer);
+                const fullName = tokenName(performer);
+                const fontSize = tokenFontSize(performer);
+                return (
+                  <g
+                    key={performer.id}
+                    className={readonly ? "token readonly" : "token"}
+                    opacity={dim ? 0.35 : 1}
+                    onPointerDown={(event) => onStagePointerDown(event, performer.id)}
+                    onPointerMove={(event) => onStagePointerMove(event, performer.id)}
+                    onPointerUp={finishTokenDrag}
+                    onPointerCancel={clearDrag}
+                    onLostPointerCapture={clearDrag}
+                    onClick={() => setSelectedPerformerId(performer.id)}
+                  >
+                    <title>{fullName}</title>
+                    <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
+                    {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
+                    {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
+                    {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
+                    <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
+                    <text x={pos.x} y={pos.y + fontSize * 0.34} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="800" pointerEvents="none">{shortName}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          <div className="formation-rail" aria-label="대형 타임라인">
+            {sortedSections.map((section) => (
+              <button
+                key={section.id}
+                className={[
+                  "formation-chip",
+                  section.id === selectedSection?.id ? "selected" : "",
+                  section.id === sortedSections[timeSectionIndex]?.id ? "current" : ""
+                ].filter(Boolean).join(" ")}
+                onClick={() => jumpTo(section)}
+                title={`${section.name} / 도착 ${formatTime(pointTime(section))}`}
+              >
+                <span>{formatTime(pointTime(section))}</span>
+                <strong>{section.name}</strong>
+              </button>
+            ))}
+          </div>
           <div className={audioLoadFailed ? "transport has-reconnect" : "transport"}>
             <label className="file-button secondary audio-load">
               {audioUploadStatus === "uploading" ? "업로드 중..." : audioUrlSaved ? "음악 교체" : "음악 업로드"}
               <input type="file" accept="audio/*" onChange={handleAudioFile} />
             </label>
             {audioLoadFailed && <button className="secondary reconnect-button" onClick={reconnectServerAudio}>서버 음악 다시 연결</button>}
-            {!readonly && <button className="secondary capture-button" onClick={addSection}>현재 시간에 대형 만들기</button>}
             <button className="primary" onClick={togglePlayback}>
               {isPlaying ? "정지" : "재생"}
             </button>
@@ -1665,7 +1696,38 @@ function App() {
               }}
             />
             <span className="time-readout">{formatTime(sliderTime)} / {formatTime(timelineMax)}</span>
+            {!readonly && <button className="secondary capture-button" onClick={addSection}>현재 시간에 대형 만들기</button>}
           </div>
+          {selectedSection && (
+            <div className="selected-formation-bar">
+              <label className="compact-name">
+                <span>선택 대형</span>
+                <input readOnly={readonly} value={selectedSection.name} onChange={(event) => updateSection(selectedSection.id, { name: event.target.value })} />
+              </label>
+              <div className="formation-time-summary">
+                <span>도착 {formatTime(pointTime(selectedSection))}</span>
+                <span>이동 {pointMoveDuration(selectedSection)}초</span>
+              </div>
+              {!readonly && (
+                <>
+                  <button onClick={syncSelectedSectionToCurrentTime}>현재 시간으로 맞춤</button>
+                  <button onClick={() => nudgeSelectedSection(-0.5)}>-0.5초</button>
+                  <button onClick={() => nudgeSelectedSection(0.5)}>+0.5초</button>
+                  <div className="duration-chips" aria-label="이동 시간 빠른 선택">
+                    {[0, 2, 4, 8].map((seconds) => (
+                      <button
+                        key={seconds}
+                        className={pointMoveDuration(selectedSection) === seconds ? "active" : ""}
+                        onClick={() => setSelectedMoveDuration(seconds)}
+                      >
+                        {seconds}초
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </section>
 
         <aside className="tool-inspector">

@@ -154,40 +154,7 @@ label {
 
 .app {
   min-height: 100vh;
-  padding: 18px;
-}
-
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: center;
-  padding: 14px 16px;
-  background: #ffffff;
-  border: 1px solid #dbe3ee;
-  border-radius: 10px;
-}
-
-.top-summary {
-  display: grid;
-  gap: 3px;
-  justify-items: end;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.top-summary strong {
-  color: #162033;
-}
-
-.title-input {
-  border: 0;
-  padding: 0;
-  font-size: 26px;
-  font-weight: 900;
-  min-width: 420px;
+  padding: 14px;
 }
 
 .file-button {
@@ -213,7 +180,7 @@ label {
 }
 
 .status {
-  margin: 12px 0 0;
+  margin: 0 0 12px;
   padding: 10px 14px;
   background: #fff7ed;
   border: 1px solid #fed7aa;
@@ -230,7 +197,7 @@ label {
   display: grid;
   grid-template-columns: minmax(620px, 1fr) 360px;
   gap: 14px;
-  margin-top: 14px;
+  margin-top: 0;
   align-items: start;
 }
 
@@ -241,7 +208,6 @@ label {
 }
 
 @media (max-width: 840px) {
-  .topbar,
   .wizard-grid {
     grid-template-columns: 1fr;
     display: grid;
@@ -251,10 +217,6 @@ label {
     grid-template-columns: 1fr;
   }
 
-  .title-input {
-    min-width: 0;
-    width: 100%;
-  }
 }
 
 .stage-area,
@@ -383,14 +345,45 @@ h3 {
 .stage-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: start;
   margin-bottom: 10px;
 }
 
-.stage-toolbar div:first-child {
+.stage-title-block {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.stage-title-input {
+  width: min(420px, 100%);
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #162033;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.stage-title-input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.stage-meta {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: baseline;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.stage-meta strong {
+  color: #162033;
+  font-size: 15px;
 }
 
 .stage-toolbar span {
@@ -406,6 +399,42 @@ h3 {
 }
 
 .toggle.active {
+  background: #162033;
+  color: #ffffff;
+  border-color: #162033;
+}
+
+.stage-frame {
+  position: relative;
+}
+
+.stage-corner-tools {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.icon-tool {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.icon-tool.active {
   background: #162033;
   color: #ffffff;
   border-color: #162033;
@@ -461,14 +490,18 @@ h3 {
 
 .transport {
   display: grid;
-  grid-template-columns: 136px 182px 74px 1fr 118px;
+  grid-template-columns: 136px 74px minmax(120px, 1fr) 118px 182px;
   align-items: center;
   gap: 10px;
   margin-top: 12px;
 }
 
 .transport.has-reconnect {
-  grid-template-columns: 136px 154px 182px 74px 1fr 118px;
+  grid-template-columns: 136px 154px 74px minmax(120px, 1fr) 118px 182px;
+}
+
+.transport audio {
+  display: none;
 }
 
 .audio-load {
@@ -485,6 +518,106 @@ h3 {
   font-size: 12px;
   font-weight: 900;
   text-align: right;
+}
+
+.formation-rail {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.formation-chip {
+  min-width: 88px;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.formation-chip span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.formation-chip strong {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.formation-chip.current {
+  box-shadow: inset 4px 0 0 #b4234f;
+}
+
+.formation-chip.selected {
+  background: #162033;
+  color: #ffffff;
+  border-color: #162033;
+}
+
+.formation-chip.selected span {
+  color: #cbd5e1;
+}
+
+.selected-formation-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) auto auto auto auto minmax(180px, auto);
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.compact-name {
+  gap: 4px;
+}
+
+.compact-name span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.compact-name input {
+  padding: 8px 9px;
+}
+
+.formation-time-summary {
+  display: grid;
+  gap: 3px;
+  align-self: center;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.duration-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(48px, 1fr));
+  gap: 6px;
+}
+
+.duration-chips button {
+  padding: 8px 7px;
+}
+
+.duration-chips button.active {
+  background: #162033;
+  color: #ffffff;
+  border-color: #162033;
 }
 
 .form-stack {
@@ -818,7 +951,6 @@ h3 {
     background: #ffffff;
   }
 
-  .topbar,
   .status,
   .workspace,
   .mobile-editor {
@@ -866,22 +998,9 @@ h3 {
     padding-bottom: 76px;
   }
 
-  .topbar {
-    align-items: start;
-    padding: 12px;
-  }
-
-  .top-summary {
-    justify-items: start;
-  }
-
-  .title-input {
-    font-size: 21px;
-  }
-
   .workspace {
     display: block;
-    margin-top: 10px;
+    margin-top: 0;
   }
 
   .tool-inspector,
@@ -896,20 +1015,18 @@ h3 {
 
   .stage-toolbar {
     display: grid;
-    gap: 8px;
+    gap: 6px;
   }
 
-  .stage-toolbar div:first-child {
-    display: grid;
-    gap: 2px;
+  .stage-title-input {
+    width: 100%;
+    font-size: 16px;
   }
 
-  .stage-toolbar .row-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
+  .stage-meta {
+    gap: 6px;
   }
 
-  .stage-toolbar button,
   .transport button,
   .mobile-panel button,
   .mobile-panel input,
@@ -924,8 +1041,13 @@ h3 {
     max-height: 58vh;
   }
 
+  .stage-corner-tools {
+    top: 8px;
+    right: 8px;
+  }
+
   .transport {
-    grid-template-columns: 1fr 1fr 74px;
+    grid-template-columns: 1fr 74px;
   }
 
   .transport.has-reconnect {
@@ -936,9 +1058,33 @@ h3 {
     grid-column: 1 / -1;
   }
 
+  .capture-button {
+    grid-column: 1 / -1;
+  }
+
   .time-readout {
     grid-column: 1 / -1;
     text-align: left;
+  }
+
+  .formation-rail {
+    padding: 7px;
+  }
+
+  .formation-chip {
+    min-width: 76px;
+    padding: 7px 9px;
+  }
+
+  .selected-formation-bar {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+
+  .compact-name,
+  .formation-time-summary,
+  .duration-chips {
+    grid-column: 1 / -1;
   }
 
   .share-hero,
@@ -1017,7 +1163,6 @@ h3 {
     padding: 8px;
   }
 
-  .app.stage-focus .topbar,
   .app.stage-focus .status,
   .app.stage-focus .mobile-editor {
     display: none;
@@ -1042,25 +1187,10 @@ h3 {
     padding: 8px;
   }
 
-  .topbar {
-    padding: 8px 10px;
-    margin-bottom: 8px;
-  }
-
-  .topbar .eyebrow,
-  .top-summary {
-    display: none;
-  }
-
-  .title-input {
-    font-size: 18px;
-    min-width: 0;
-  }
-
   .workspace {
     grid-template-columns: minmax(0, 1fr) 300px;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 0;
   }
 
   .tool-inspector,
@@ -1081,20 +1211,13 @@ h3 {
 
   .stage-toolbar {
     display: grid;
-    grid-template-columns: 1fr auto;
     gap: 8px;
     margin-bottom: 6px;
   }
 
-  .stage-toolbar .row-actions {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(76px, 1fr));
-    gap: 6px;
-  }
-
-  .stage-toolbar button {
-    min-height: 40px;
-    padding: 7px 8px;
+  .stage-title-input {
+    width: 100%;
+    font-size: 15px;
   }
 
   .stage {
@@ -1102,12 +1225,16 @@ h3 {
   }
 
   .transport {
-    grid-template-columns: 126px 168px 68px 1fr 104px;
+    grid-template-columns: 126px 68px minmax(120px, 1fr) 104px 158px;
     margin-top: 8px;
   }
 
   .transport.has-reconnect {
-    grid-template-columns: 126px 146px 168px 68px 1fr 104px;
+    grid-template-columns: 126px 146px 68px minmax(120px, 1fr) 104px 158px;
+  }
+
+  .selected-formation-bar {
+    grid-template-columns: minmax(150px, 1fr) auto auto auto auto minmax(168px, auto);
   }
 
   .mobile-section-list {
@@ -1130,7 +1257,6 @@ h3 {
     padding: 6px;
   }
 
-  .app.stage-focus .topbar,
   .app.stage-focus .status,
   .app.stage-focus .landscape-tools {
     display: none;
