@@ -440,6 +440,11 @@ h3 {
   border-color: #162033;
 }
 
+.icon-tool:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .stage {
   width: 100%;
   aspect-ratio: 900 / 600;

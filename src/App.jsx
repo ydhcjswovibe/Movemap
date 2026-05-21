@@ -28,6 +28,7 @@ const MOVE_MODES = {
   smooth: "부드럽게 이동",
   late: "늦게 이동"
 };
+const HISTORY_LIMIT = 50;
 const MAGNET_DISTANCE = 4.8;
 const TOKEN_RADIUS = 4.2;
 const SELECTED_RING_RADIUS = 5.35;
@@ -54,6 +55,14 @@ function parseNumber(value, fallback = 0) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function clonePlan(plan) {
+  return plan ? JSON.parse(JSON.stringify(plan)) : plan;
+}
+
+function plansEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function escapeSvgText(value = "") {
@@ -637,6 +646,8 @@ function App() {
   const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
   const [isBottomSheetExpanded, setIsBottomSheetExpanded] = useState(false);
   const [isStageFocus, setIsStageFocus] = useState(false);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
   const audioRef = useRef(null);
   const svgRef = useRef(null);
   const dragStateRef = useRef(null);
@@ -738,8 +749,70 @@ function App() {
     if (isPlaying && activeSection?.id) setSelectedSectionId(activeSection.id);
   }, [isPlaying, activeSection?.id]);
 
-  function updatePlan(updater) {
-    setPlan((current) => updater(current));
+  function resetTransientEditState() {
+    clearLongPressTimer();
+    setMagnetCandidateId("");
+    setDragHint("");
+    setDragPositions(null);
+    dragStateRef.current = null;
+  }
+
+  function normalizeSelectionForPlan(nextPlan) {
+    const sections = nextPlan?.sections || [];
+    if (!sections.length) {
+      setSelectedSectionId("");
+      setSelectedPerformerId("");
+      setSelectedPairKey("");
+      return;
+    }
+    if (!sections.some((section) => section.id === selectedSectionId)) {
+      setSelectedSectionId(sections[0].id);
+    }
+    if (selectedPerformerId && !nextPlan.performers?.some((performer) => performer.id === selectedPerformerId)) {
+      setSelectedPerformerId("");
+    }
+    const hasSelectedPair = nextPlan.partnerSets?.some((set) => set.pairs?.some((pair) => pairKey(pair) === selectedPairKey));
+    if (selectedPairKey && !hasSelectedPair) {
+      setSelectedPairKey("");
+    }
+  }
+
+  function updatePlan(updater, options = {}) {
+    const { history = true } = options;
+    setPlan((current) => {
+      const next = updater(current);
+      if (!current || !next || plansEqual(current, next)) return next;
+      if (history && !readonly) {
+        const snapshot = clonePlan(current);
+        setUndoStack((stack) => [...stack.slice(-(HISTORY_LIMIT - 1)), snapshot]);
+        setRedoStack([]);
+      }
+      return next;
+    });
+  }
+
+  function undoPlan() {
+    if (readonly || !undoStack.length || !plan) return;
+    resetTransientEditState();
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [...stack.slice(-(HISTORY_LIMIT - 1)), clonePlan(plan)]);
+    setPlan(clonePlan(previous));
+    normalizeSelectionForPlan(previous);
+    restoreAudioFromPlan(previous, { clearWhenMissing: true });
+    setStatus("되돌렸습니다.");
+  }
+
+  function redoPlan() {
+    if (readonly || !redoStack.length || !plan) return;
+    resetTransientEditState();
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack.slice(-(HISTORY_LIMIT - 1)), clonePlan(plan)]);
+    setPlan(clonePlan(next));
+    normalizeSelectionForPlan(next);
+    restoreAudioFromPlan(next, { clearWhenMissing: true });
+    setStatus("다시 실행했습니다.");
   }
 
   function updateSection(sectionId, patch) {
@@ -1390,6 +1463,11 @@ function App() {
         const normalized = normalizePlan(loaded);
         setPlan(normalized);
         setSelectedSectionId(normalized.sections[0]?.id || "");
+        setSelectedPerformerId("");
+        setSelectedPairKey("");
+        setUndoStack([]);
+        setRedoStack([]);
+        resetTransientEditState();
         const restored = restoreAudioFromPlan(normalized, { clearWhenMissing: true });
         setStatus(restored ? "저장한 안무와 서버 음악을 불러왔습니다." : "저장한 안무를 불러왔습니다.");
       } catch {
@@ -1470,7 +1548,12 @@ function App() {
   }
 
   if (!plan && !readonly) {
-    return <Wizard onCreate={(project) => { setPlan(project); setSelectedSectionId(project.sections[0]?.id || ""); }} />;
+    return <Wizard onCreate={(project) => {
+      setPlan(project);
+      setSelectedSectionId(project.sections[0]?.id || "");
+      setUndoStack([]);
+      setRedoStack([]);
+    }} />;
   }
 
   if (!plan) {
@@ -1724,6 +1807,28 @@ function App() {
           {!readonly && <p className="stage-hint">음악을 재생하고 원하는 순간에 대형을 만드세요.</p>}
           <div className="stage-frame">
             <div className="stage-corner-tools" aria-label="무대 도구">
+              {!readonly && (
+                <>
+                  <button
+                    className="icon-tool"
+                    onClick={undoPlan}
+                    disabled={!undoStack.length}
+                    title="되돌리기"
+                    aria-label="되돌리기"
+                  >
+                    ↶
+                  </button>
+                  <button
+                    className="icon-tool"
+                    onClick={redoPlan}
+                    disabled={!redoStack.length}
+                    title="다시 실행"
+                    aria-label="다시 실행"
+                  >
+                    ↷
+                  </button>
+                </>
+              )}
               <button
                 className={snapEnabled ? "icon-tool active" : "icon-tool"}
                 onClick={() => setSnapEnabled((value) => !value)}
