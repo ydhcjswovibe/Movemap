@@ -34,5 +34,5 @@ test("share link creation saves through the cloud project path", () => {
   const shareProject = appSource.match(/async function shareProject\(\) \{[\s\S]*?function exportJson/)?.[0] || "";
 
   assert.match(shareProject, /const saved = await persistProjectToCloud\(\);/);
-  assert.match(shareProject, /\/share\/\$\{saved\.id\}/);
+  assert.match(shareProject, /const nextUrl = shareUrlForProject\(saved\.id\);/);
 });

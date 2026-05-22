@@ -4,6 +4,7 @@ import { loadCloudProject, saveCloudProject } from "./cloudProject.mjs";
 import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
+import { createShareUrl } from "./shareUrl.mjs";
 
 const STORAGE_KEY = "choreo-stage-planner-project";
 const AUDIO_BUCKET = "choreo-audio";
@@ -489,6 +490,13 @@ function supabaseConfig() {
     url: import.meta.env.VITE_SUPABASE_URL,
     key: import.meta.env.VITE_SUPABASE_ANON_KEY
   };
+}
+
+function shareUrlForProject(projectId) {
+  return createShareUrl(projectId, {
+    publicShareOrigin: import.meta.env.VITE_PUBLIC_SHARE_ORIGIN,
+    currentOrigin: window.location.origin
+  });
 }
 
 async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFingerprint(file)) {
@@ -1765,7 +1773,7 @@ function App() {
       setStatus("클라우드에 저장하는 중...");
       setStatusRecovery("");
       const saved = await persistProjectToCloud();
-      setShareUrl(`${window.location.origin}/share/${saved.id}`);
+      setShareUrl(shareUrlForProject(saved.id));
       setStatus(`클라우드에 저장됨 · ${formatClockTime(saved.savedAt)}`);
     } catch (error) {
       setStatusRecovery("share");
@@ -1778,7 +1786,7 @@ function App() {
       setStatus("공유 링크를 만드는 중...");
       setStatusRecovery("");
       const saved = await persistProjectToCloud();
-      const nextUrl = `${window.location.origin}/share/${saved.id}`;
+      const nextUrl = shareUrlForProject(saved.id);
       setShareUrl(nextUrl);
       setStatus("공유 링크가 생성되었습니다.");
     } catch (error) {
