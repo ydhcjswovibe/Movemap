@@ -37,6 +37,8 @@ const MAGNET_DISTANCE = 4.8;
 const LONG_PRESS_MS = 450;
 const TOKEN_RADIUS = 4.2;
 const SELECTED_RING_RADIUS = 5.35;
+const COUPLE_RING_RADIUS = 4.85;
+const SELECTED_COUPLE_RING_RADIUS = 5.45;
 const GRID_X = STAGE_GRID_X;
 const GRID_Y = STAGE_GRID_Y;
 
@@ -561,7 +563,7 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
     return `
       <g opacity="${ghost ? 0.22 : dim ? 0.35 : 1}">
         <title>${fullName}</title>
-        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${SELECTED_RING_RADIUS + 0.75}" fill="none" stroke="${pairColor}" stroke-width="1.15" opacity="0.72" />` : ""}
+        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${COUPLE_RING_RADIUS}" fill="none" stroke="${pairColor}" stroke-width="0.85" opacity="0.68" />` : ""}
         <circle cx="${pos.x}" cy="${pos.y}" r="${ghost ? 2.5 : TOKEN_RADIUS}" fill="${ghost ? "#475569" : performer.color}" stroke="#f8fafc" stroke-width="0.8" />
         ${ghost ? "" : `<text x="${pos.x}" y="${pos.y + fontSize * 0.34}" text-anchor="middle" font-size="${fontSize}" fill="#ffffff" font-family="Arial" font-weight="700" pointer-events="none" style="user-select:none">${shortName}</text>`}
       </g>`;
@@ -2319,7 +2321,7 @@ function App() {
                     <title>{fullName}</title>
                     <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
                     {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
-                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_RING_RADIUS + 1.05 : SELECTED_RING_RADIUS + 0.75} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "1.45" : "1.15"} opacity={isSelectedPairMember ? "0.9" : "0.72"} pointerEvents="none" />}
+                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_COUPLE_RING_RADIUS : COUPLE_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "1" : "0.85"} opacity={isSelectedPairMember ? "0.84" : "0.68"} pointerEvents="none" />}
                     {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
                     {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
                     <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
