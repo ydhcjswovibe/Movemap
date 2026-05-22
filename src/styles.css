@@ -581,23 +581,8 @@ h3 {
   cursor: pointer;
 }
 
-.pair-handle {
-  cursor: move;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
 .pair-link {
   cursor: move;
-}
-
-.pair-handle:hover .pair-handle-dot {
-  fill: #b4234f;
-  stroke: #7f1d1d;
-}
-
-.pair-handle.active .pair-handle-dot {
-  filter: drop-shadow(0 1px 2px rgba(127, 29, 29, 0.38));
 }
 
 .transport {

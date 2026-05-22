@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { horizontalCouplePositions, pairHandlePosition, pairPlacementCollides } from "./coupleLayout.mjs";
-import { resolveDropAction } from "./dragPolicy.mjs";
+import { STAGE_GRID_X, STAGE_GRID_Y, findCoupleGridPlacement, pairPlacementCollides } from "./coupleLayout.mjs";
+import { findIndependentMergeCandidate, resolveDropAction, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 
@@ -34,11 +34,11 @@ const MOVE_MODES = {
 };
 const HISTORY_LIMIT = 50;
 const MAGNET_DISTANCE = 4.8;
+const LONG_PRESS_MS = 450;
 const TOKEN_RADIUS = 4.2;
 const SELECTED_RING_RADIUS = 5.35;
-const COUPLE_PULL_OUT_DISTANCE = 6.4;
-const GRID_X = [14.8, 23.6, 32.4, 41.2, 50, 58.8, 67.6, 76.4, 85.2];
-const GRID_Y = [10.8, 19.6, 28.4, 37.2, 46, 54.8, 63.6, 72.4, 81.2, 90];
+const GRID_X = STAGE_GRID_X;
+const GRID_Y = STAGE_GRID_Y;
 
 function uid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -891,19 +891,26 @@ function App() {
     return plan.performers.find((performer) => performer.id === performerId);
   }
 
-  function findIndependentMagnetCandidate(performerId, nextPosition, positions, pairs = []) {
-    let nearest = null;
-    plan.performers.forEach((performer) => {
-      if (performer.id === performerId) return;
-      if (pairs.some((pair) => pair.includes(performer.id))) return;
-      const pos = positions?.[performer.id];
-      if (!pos) return;
-      const gap = distance(nextPosition, pos);
-      if (gap <= MAGNET_DISTANCE && (!nearest || gap < nearest.gap)) {
-        nearest = { id: performer.id, gap };
-      }
+  function coupleGridPlacement(currentPlan, section, firstId, secondId, point, extraPositions = {}, excludeIds = [firstId, secondId]) {
+    return findCoupleGridPlacement({
+      plan: currentPlan,
+      firstId,
+      secondId,
+      point,
+      positions: { ...(section?.positions || {}), ...extraPositions },
+      excludeIds
     });
-    return nearest?.id || "";
+  }
+
+  function findIndependentMagnetCandidate(performerId, rawPosition, positions, pairs = [], sourcePair = null) {
+    return findIndependentMergeCandidate({
+      performerId,
+      rawPosition,
+      positions,
+      performers: plan.performers,
+      pairs,
+      sourcePair
+    })?.id || "";
   }
 
   function findSameRoleSwapCandidate(performerId, nextPosition, positions, pairs = []) {
@@ -978,8 +985,8 @@ function App() {
       const pairCenter = center || (firstPosition && secondPosition
         ? { x: (firstPosition.x + secondPosition.x) / 2, y: (firstPosition.y + secondPosition.y) / 2 }
         : firstPosition || secondPosition || { x: 50, y: 50 });
-      const pairPositions = horizontalCouplePositions(current, firstId, secondId, snapPoint(pairCenter, snapEnabled));
-      if (pairPlacementCollides(section.positions, pairPositions, [firstId, secondId])) return current;
+      const pairPositions = coupleGridPlacement(current, section, firstId, secondId, pairCenter);
+      if (!pairPositions) return current;
       const nextPositions = {
         ...section.positions,
         ...pairPositions
@@ -1012,8 +1019,8 @@ function App() {
         const center = dragged && target
           ? snapPoint({ x: (dragged.x + target.x) / 2, y: (dragged.y + target.y) / 2 }, snapEnabled)
           : drag.pointer;
-        const pairPositions = horizontalCouplePositions(current, action.performerId, action.targetId, center);
-        if (pairPlacementCollides(section.positions, pairPositions, [action.performerId, action.targetId])) return current;
+        const pairPositions = coupleGridPlacement(current, section, action.performerId, action.targetId, center);
+        if (!pairPositions) return current;
         const nextPositions = {
           ...basePositions,
           ...pairPositions
@@ -1057,10 +1064,30 @@ function App() {
         };
         const sourcePair = nextPairs[sourcePairIndex];
         const targetPair = nextPairs[targetPairIndex];
+        const sourcePositions = coupleGridPlacement(
+          current,
+          section,
+          sourcePair[0],
+          sourcePair[1],
+          centerForPair(currentSet.pairs[sourcePairIndex]),
+          {},
+          [...sourcePair, ...targetPair]
+        );
+        if (!sourcePositions) return current;
+        const targetPositions = coupleGridPlacement(
+          current,
+          section,
+          targetPair[0],
+          targetPair[1],
+          centerForPair(currentSet.pairs[targetPairIndex]),
+          sourcePositions,
+          targetPair
+        );
+        if (!targetPositions) return current;
         const nextPositions = {
           ...basePositions,
-          ...horizontalCouplePositions(current, sourcePair[0], sourcePair[1], centerForPair(currentSet.pairs[sourcePairIndex])),
-          ...horizontalCouplePositions(current, targetPair[0], targetPair[1], centerForPair(currentSet.pairs[targetPairIndex]))
+          ...sourcePositions,
+          ...targetPositions
         };
         return {
           ...current,
@@ -1231,37 +1258,14 @@ function App() {
     const performerPair = pairForPerformer(partnerSet?.pairs || [], performerId);
     if (performerPair) {
       const [firstId, secondId] = performerPair;
-      const wasSelectedPair = selectedPairKey === pairKey(performerPair);
-      if (wasSelectedPair) {
-        dragStateRef.current = {
-          mode: "token-move",
-          source: "selected-pair-member",
-          performerId,
-          sectionId: selectedSection.id,
-          pointerId: event.pointerId,
-          individual: true,
-          sourcePair: [...performerPair],
-          offsetX: token.x - pointer.x,
-          offsetY: token.y - pointer.y,
-          pointer,
-          startPointer: pointer,
-          moved: false,
-          finalPositions: {
-            [performerId]: token
-          }
-        };
-        setSelectedPairKey("");
-        setDragPositions({ [performerId]: token });
-        setDragHint("드래그하면 커플 해제");
-        return;
-      }
       const firstStart = { ...(selectedSection.positions[firstId] || { x: pointer.x, y: pointer.y }) };
       const secondStart = { ...(selectedSection.positions[secondId] || { x: pointer.x, y: pointer.y }) };
       dragStateRef.current = {
         mode: "pair-move",
         source: "token",
         draggedPerformerId: performerId,
-        canPullOutMember: wasSelectedPair,
+        canPullOutMember: true,
+        longPressReady: false,
         pair: [...performerPair],
         sectionId: selectedSection.id,
         pointerId: event.pointerId,
@@ -1280,6 +1284,14 @@ function App() {
       setSelectedPairKey(pairKey(performerPair));
       setDragPositions(dragStateRef.current.finalPositions);
       clearLongPressTimer();
+      longPressTimerRef.current = setTimeout(() => {
+        const activeDrag = dragStateRef.current;
+        if (activeDrag?.mode === "pair-move" && activeDrag.pointerId === event.pointerId) {
+          activeDrag.longPressReady = true;
+          setDragHint("해제 후 이동 준비");
+        }
+        longPressTimerRef.current = null;
+      }, LONG_PRESS_MS);
       return;
     }
     dragStateRef.current = {
@@ -1302,17 +1314,7 @@ function App() {
   }
 
   function shouldPullOutPairMember(drag, pointer) {
-    if (!drag.canPullOutMember || drag.source !== "token" || !drag.draggedPerformerId) return false;
-    const memberStart = drag.startPositions?.[drag.draggedPerformerId];
-    const partnerId = drag.pair?.find((id) => id !== drag.draggedPerformerId);
-    const partnerStart = partnerId ? drag.startPositions?.[partnerId] : null;
-    if (!memberStart || !partnerStart) return false;
-    const basePointer = drag.startPointer || drag.pointer;
-    const currentMember = {
-      x: memberStart.x + pointer.x - basePointer.x,
-      y: memberStart.y + pointer.y - basePointer.y
-    };
-    return distance(currentMember, partnerStart) - distance(memberStart, partnerStart) >= COUPLE_PULL_OUT_DISTANCE;
+    return Boolean(drag.draggedPerformerId) && shouldStartPairMemberPullOut(drag, pointer);
   }
 
   function convertPairDragToMemberPullOut(drag, pointer) {
@@ -1373,7 +1375,9 @@ function App() {
     const swapCandidate = drag.individual && drag.sourcePair
       ? findSameRoleSwapCandidate(performerId, nextPosition, nextPositions, pairs)
       : null;
-    const candidateId = swapCandidate?.targetId || findIndependentMagnetCandidate(performerId, nextPosition, nextPositions, pairs);
+    const candidateId = swapCandidate
+      ? ""
+      : findIndependentMagnetCandidate(performerId, rawPosition, nextPositions, pairs, drag.sourcePair);
     drag.candidateId = candidateId;
     drag.swapCandidate = swapCandidate;
     drag.pointer = pointer;
@@ -1480,27 +1484,21 @@ function App() {
     const firstStart = drag.startPositions[firstId];
     const secondStart = drag.startPositions[secondId];
     if (!firstStart || !secondStart) return null;
-    let dx = pointer.x - drag.pointer.x;
-    let dy = pointer.y - drag.pointer.y;
-    if (snapEnabled && !event.altKey) {
-      const startCenter = {
-        x: (firstStart.x + secondStart.x) / 2,
-        y: (firstStart.y + secondStart.y) / 2
-      };
-      const targetCenter = snapPoint({ x: startCenter.x + dx, y: startCenter.y + dy }, true);
-      dx = targetCenter.x - startCenter.x;
-      dy = targetCenter.y - startCenter.y;
-    }
-    const minX = Math.min(firstStart.x, secondStart.x);
-    const maxX = Math.max(firstStart.x, secondStart.x);
-    const minY = Math.min(firstStart.y, secondStart.y);
-    const maxY = Math.max(firstStart.y, secondStart.y);
-    dx = clamp(dx, 4 - minX, 96 - maxX);
-    dy = clamp(dy, 5 - minY, 95 - maxY);
-    drag.finalPositions = {
-      [firstId]: { x: firstStart.x + dx, y: firstStart.y + dy },
-      [secondId]: { x: secondStart.x + dx, y: secondStart.y + dy }
+    const startCenter = {
+      x: (firstStart.x + secondStart.x) / 2,
+      y: (firstStart.y + secondStart.y) / 2
     };
+    const basePointer = drag.startPointer || drag.pointer;
+    const targetCenter = {
+      x: startCenter.x + pointer.x - basePointer.x,
+      y: startCenter.y + pointer.y - basePointer.y
+    };
+    const finalPositions = coupleGridPlacement(plan, selectedSection, firstId, secondId, targetCenter);
+    if (!finalPositions) {
+      setDragHint("이동할 빈 그리드가 없습니다");
+      return null;
+    }
+    drag.finalPositions = finalPositions;
     setDragPositions(drag.finalPositions);
     setDragHint(drag.source === "token" ? "커플 이동 중" : "");
     return drag.finalPositions;
@@ -1508,25 +1506,7 @@ function App() {
 
   function positionsForPairCenter(pair, center) {
     const [firstId, secondId] = pair;
-    const firstStart = selectedSection?.positions?.[firstId];
-    const secondStart = selectedSection?.positions?.[secondId];
-    if (!firstStart || !secondStart) return null;
-    const startCenter = {
-      x: (firstStart.x + secondStart.x) / 2,
-      y: (firstStart.y + secondStart.y) / 2
-    };
-    let dx = center.x - startCenter.x;
-    let dy = center.y - startCenter.y;
-    const minX = Math.min(firstStart.x, secondStart.x);
-    const maxX = Math.max(firstStart.x, secondStart.x);
-    const minY = Math.min(firstStart.y, secondStart.y);
-    const maxY = Math.max(firstStart.y, secondStart.y);
-    dx = clamp(dx, 4 - minX, 96 - maxX);
-    dy = clamp(dy, 5 - minY, 95 - maxY);
-    return {
-      [firstId]: { x: firstStart.x + dx, y: firstStart.y + dy },
-      [secondId]: { x: secondStart.x + dx, y: secondStart.y + dy }
-    };
+    return coupleGridPlacement(plan, selectedSection, firstId, secondId, center);
   }
 
   function handleStageTap(event) {
@@ -1536,7 +1516,7 @@ function App() {
       return;
     }
     if (dragStateRef.current) return;
-    if (event.target.closest?.(".token, .pair-handle, .pair-link")) return;
+    if (event.target.closest?.(".token, .pair-link")) return;
     const pointer = clientToStagePoint(event);
     const targetPoint = snapPoint(pointer, snapEnabled);
     const partnerSet = getPartnerSetForSection(selectedSection);
@@ -1566,7 +1546,7 @@ function App() {
       y: clamp(targetPoint.y, 5, 95)
     };
     const nextPositions = { ...selectedSection.positions, [selectedPerformerId]: nextPosition };
-    const candidateId = findIndependentMagnetCandidate(selectedPerformerId, nextPosition, nextPositions, partnerSet?.pairs || []);
+    const candidateId = findIndependentMagnetCandidate(selectedPerformerId, pointer, nextPositions, partnerSet?.pairs || []);
     const drag = {
       mode: "token-move",
       source: "tap",
@@ -1950,8 +1930,8 @@ function App() {
           <span>{selectionTitle}</span>
           {selectedPair ? (
             <div className="selection-actions">
-              <em>핸들이나 커플 선을 드래그하면 함께 이동</em>
-              <em>한 명만 조정: Alt/Option+드래그</em>
+              <em>커플 토큰이나 선을 드래그하면 함께 이동</em>
+              <em>한 명만 조정: 길게 누른 뒤 드래그</em>
               {!readonly && <button className="danger-button compact-danger" onClick={() => removePairByKey(selectedPairKey)}>커플 해제</button>}
             </div>
           ) : selectedPerformer ? (
@@ -2274,41 +2254,6 @@ function App() {
                   </g>
                 );
               })()}
-              {(partnerSet?.pairs || []).map((pair, index) => {
-                const [a, b] = pair;
-                const from = visiblePositions[a] || selectedSection?.positions?.[a];
-                const to = visiblePositions[b] || selectedSection?.positions?.[b];
-                if (!from || !to) return null;
-                const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
-                const handle = pairHandlePosition(mid);
-                const selected = selectedPairKey === pairKey(pair);
-                return (
-                  <g
-                    key={`pair-handle-${pairKey(pair)}-${index}`}
-                    className={selected ? "pair-handle active" : "pair-handle"}
-                    onPointerDown={(event) => onPairPointerDown(event, pair, index)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedPairKey(pairKey(pair));
-                    }}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation();
-                      removePairByKey(pairKey(pair));
-                    }}
-                  >
-                    <circle cx={handle.x} cy={handle.y} r="9" fill="transparent" />
-                    <circle
-                      className="pair-handle-dot"
-                      cx={handle.x}
-                      cy={handle.y}
-                      r={selected ? "2.7" : "1.8"}
-                      fill={selected ? "#b4234f" : "#ffffff"}
-                      stroke={selected ? "#7f1d1d" : "#334155"}
-                      strokeWidth="0.8"
-                    />
-                  </g>
-                );
-              })}
               {plan.performers.map((performer) => {
                 const pos = visiblePositions[performer.id] || selectedSection?.positions?.[performer.id];
                 if (!pos) return null;

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveDropAction } from "./dragPolicy.mjs";
+import {
+  COUPLE_MERGE_DISTANCE,
+  findIndependentMergeCandidate,
+  resolveDropAction,
+  shouldStartPairMemberPullOut
+} from "./dragPolicy.mjs";
 
 const nearCandidate = { id: "p2", gap: 2 };
 const nearSwap = { targetId: "p3", gap: 3 };
@@ -96,4 +101,76 @@ test("pull-out movement without an allowed target only splits and moves the toke
     sourcePair: ["p1", "p2"],
     positions: { p1: { x: 80, y: 40 } }
   });
+});
+
+test("merge candidates use raw drag position and a narrow distance", () => {
+  const candidate = findIndependentMergeCandidate({
+    performerId: "p1",
+    rawPosition: { x: 53.1, y: 50 },
+    positions: {
+      p1: { x: 50, y: 50 },
+      p2: { x: 56.2, y: 50 }
+    },
+    performers: [{ id: "p1" }, { id: "p2" }],
+    pairs: []
+  });
+
+  assert.equal(candidate?.id, "p2");
+  assert.ok(candidate.gap <= COUPLE_MERGE_DISTANCE);
+});
+
+test("snapped closeness alone does not create a merge candidate", () => {
+  const candidate = findIndependentMergeCandidate({
+    performerId: "p1",
+    rawPosition: { x: 52.9, y: 50 },
+    positions: {
+      p1: { x: 50, y: 50 },
+      p2: { x: 56.2, y: 50 }
+    },
+    performers: [{ id: "p1" }, { id: "p2" }],
+    pairs: []
+  });
+
+  assert.equal(candidate, null);
+});
+
+test("merge candidates require both tokens to be independent", () => {
+  const candidate = findIndependentMergeCandidate({
+    performerId: "p1",
+    rawPosition: { x: 53.1, y: 50 },
+    positions: {
+      p1: { x: 50, y: 50 },
+      p2: { x: 56.2, y: 50 },
+      p3: { x: 65, y: 50 }
+    },
+    performers: [{ id: "p1" }, { id: "p2" }, { id: "p3" }],
+    pairs: [["p2", "p3"]]
+  });
+
+  assert.equal(candidate, null);
+});
+
+test("pair member pull-out requires long-press readiness before movement", () => {
+  const drag = {
+    mode: "pair-move",
+    source: "token",
+    canPullOutMember: true,
+    startPointer: { x: 10, y: 10 }
+  };
+
+  assert.equal(shouldStartPairMemberPullOut(drag, { x: 12, y: 10 }), false);
+  drag.longPressReady = true;
+  assert.equal(shouldStartPairMemberPullOut(drag, { x: 12, y: 10 }), true);
+});
+
+test("long-press readiness without movement keeps the pair together", () => {
+  const drag = {
+    mode: "pair-move",
+    source: "token",
+    canPullOutMember: true,
+    longPressReady: true,
+    startPointer: { x: 10, y: 10 }
+  };
+
+  assert.equal(shouldStartPairMemberPullOut(drag, { x: 10.2, y: 10.1 }), false);
 });
