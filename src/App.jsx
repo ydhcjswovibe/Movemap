@@ -200,6 +200,41 @@ function tokenFontSize(performer) {
   return 2.85;
 }
 
+function hexToRgb(hex) {
+  const value = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(value)) return null;
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16)
+  };
+}
+
+function rgbToHex({ r, g, b }) {
+  return `#${[r, g, b].map((value) => Math.round(value).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function blendHexColors(first, second, fallback = "#7f1d1d") {
+  const left = hexToRgb(first);
+  const right = hexToRgb(second);
+  if (!left || !right) return fallback;
+  return rgbToHex({
+    r: (left.r + right.r) / 2,
+    g: (left.g + right.g) / 2,
+    b: (left.b + right.b) / 2
+  });
+}
+
+function performerColorForPair(plan, pair) {
+  const first = plan.performers.find((performer) => performer.id === pair?.[0]);
+  const second = plan.performers.find((performer) => performer.id === pair?.[1]);
+  return blendHexColors(first?.color, second?.color);
+}
+
+function pairForPerformerId(pairs = [], performerId) {
+  return pairs.find((pair) => pair.includes(performerId)) || null;
+}
+
 function snapPoint(point, enabled) {
   if (!enabled) return point;
   const nearest = (value, points) => points.reduce((best, item) => (
@@ -518,12 +553,15 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
   const pairs = plan.partnerSets.find((set) => set.id === section?.partnerSetId)?.pairs || [];
   const token = (performer, pos, ghost = false) => {
     const dim = selectedId && selectedId !== performer.id;
+    const performerPair = ghost ? null : pairForPerformerId(pairs, performer.id);
+    const pairColor = performerPair ? performerColorForPair(plan, performerPair) : "";
     const shortName = escapeSvgText(tokenShortName(performer));
     const fullName = escapeSvgText(tokenName(performer));
     const fontSize = tokenFontSize(performer);
     return `
       <g opacity="${ghost ? 0.22 : dim ? 0.35 : 1}">
         <title>${fullName}</title>
+        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${SELECTED_RING_RADIUS + 0.75}" fill="none" stroke="${pairColor}" stroke-width="1.15" opacity="0.72" />` : ""}
         <circle cx="${pos.x}" cy="${pos.y}" r="${ghost ? 2.5 : TOKEN_RADIUS}" fill="${ghost ? "#475569" : performer.color}" stroke="#f8fafc" stroke-width="0.8" />
         ${ghost ? "" : `<text x="${pos.x}" y="${pos.y + fontSize * 0.34}" text-anchor="middle" font-size="${fontSize}" fill="#ffffff" font-family="Arial" font-weight="700" pointer-events="none" style="user-select:none">${shortName}</text>`}
       </g>`;
@@ -542,7 +580,10 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
       const from = positions[a];
       const to = positions[b];
       if (!from || !to) return "";
-      return `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="#334155" stroke-width="0.55" opacity="0.55" />`;
+      const color = performerColorForPair(plan, [a, b]);
+      return `
+        <line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="#ffffff" stroke-width="4.8" opacity="0.9" stroke-linecap="round" />
+        <line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="${color}" stroke-width="2.1" opacity="0.74" stroke-linecap="round" />`;
     })
     .join("");
   return `
@@ -884,7 +925,7 @@ function App() {
   }
 
   function pairForPerformer(pairs = [], performerId) {
-    return pairs.find((pair) => pair.includes(performerId)) || null;
+    return pairForPerformerId(pairs, performerId);
   }
 
   function performerById(performerId) {
@@ -2226,6 +2267,7 @@ function App() {
                 if (!from || !to) return null;
                 const selected = selectedPairKey === pairKey([a, b]) || (magnetCandidateId && [a, b].includes(magnetCandidateId));
                 const pair = [a, b];
+                const bridgeColor = performerColorForPair(plan, pair);
                 return (
                   <g
                     key={`pair-${index}`}
@@ -2237,7 +2279,8 @@ function App() {
                     }}
                   >
                     <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="transparent" strokeWidth="9" strokeLinecap="round" />
-                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : "#334155"} strokeWidth={selected ? "1.1" : "0.55"} opacity={selected ? "0.9" : "0.58"} pointerEvents="none" />
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#ffffff" strokeWidth={selected ? "5.4" : "4.8"} opacity="0.9" strokeLinecap="round" pointerEvents="none" />
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : bridgeColor} strokeWidth={selected ? "2.8" : "2.1"} opacity={selected ? "0.92" : "0.74"} strokeLinecap="round" pointerEvents="none" />
                   </g>
                 );
               })}
@@ -2259,6 +2302,9 @@ function App() {
                 if (!pos) return null;
                 const dim = selectedPerformerId && selectedPerformerId !== performer.id && magnetCandidateId !== performer.id;
                 const isCandidate = magnetCandidateId === performer.id;
+                const performerPair = pairForPerformer(partnerSet?.pairs || [], performer.id);
+                const isSelectedPairMember = performerPair && selectedPairKey === pairKey(performerPair);
+                const pairColor = performerPair ? performerColorForPair(plan, performerPair) : "";
                 const shortName = tokenShortName(performer);
                 const fullName = tokenName(performer);
                 const fontSize = tokenFontSize(performer);
@@ -2273,6 +2319,7 @@ function App() {
                     <title>{fullName}</title>
                     <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
                     {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
+                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_RING_RADIUS + 1.05 : SELECTED_RING_RADIUS + 0.75} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "1.45" : "1.15"} opacity={isSelectedPairMember ? "0.9" : "0.72"} pointerEvents="none" />}
                     {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
                     {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
                     <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
