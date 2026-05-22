@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { STAGE_GRID_X, STAGE_GRID_Y, findCoupleGridPlacement, pairPlacementCollides } from "./coupleLayout.mjs";
+import { loadCloudProject, saveCloudProject } from "./cloudProject.mjs";
 import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
@@ -490,39 +491,6 @@ function supabaseConfig() {
   };
 }
 
-async function saveToSupabase(plan) {
-  const { url, key } = supabaseConfig();
-  if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
-  const response = await fetch(`${url}/rest/v1/choreo_projects`, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({ title: plan.title, plan })
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  return data[0]?.id;
-}
-
-async function loadFromSupabase(id) {
-  const { url, key } = supabaseConfig();
-  if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
-  const response = await fetch(`${url}/rest/v1/choreo_projects?id=eq.${encodeURIComponent(id)}&select=*`, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`
-    }
-  });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  if (!data[0]) throw new Error("공유 프로젝트를 찾을 수 없습니다.");
-  return data[0].plan;
-}
-
 async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFingerprint(file)) {
   const { url, key } = supabaseConfig();
   if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
@@ -712,7 +680,7 @@ function App() {
 
   useEffect(() => {
     if (readonly) {
-      loadFromSupabase(shareId)
+      loadCloudProject(shareId, supabaseConfig())
         .then((loaded) => {
           const normalized = normalizePlan(loaded);
           setPlan(normalized);
@@ -1783,17 +1751,39 @@ function App() {
     window.location.href = "/";
   }
 
+  async function persistProjectToCloud() {
+    const saved = await saveCloudProject(plan, supabaseConfig());
+    const normalized = normalizePlan(saved.plan);
+    setPlan(normalized);
+    setLocalSavedAt(saved.savedAt);
+    return { ...saved, plan: normalized };
+  }
+
+  async function saveProjectToCloud() {
+    if (!plan) return;
+    try {
+      setStatus("클라우드에 저장하는 중...");
+      setStatusRecovery("");
+      const saved = await persistProjectToCloud();
+      setShareUrl(`${window.location.origin}/share/${saved.id}`);
+      setStatus(`클라우드에 저장됨 · ${formatClockTime(saved.savedAt)}`);
+    } catch (error) {
+      setStatusRecovery("share");
+      setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
+    }
+  }
+
   async function shareProject() {
     try {
       setStatus("공유 링크를 만드는 중...");
       setStatusRecovery("");
-      const id = await saveToSupabase(plan);
-      const nextUrl = `${window.location.origin}/share/${id}`;
+      const saved = await persistProjectToCloud();
+      const nextUrl = `${window.location.origin}/share/${saved.id}`;
       setShareUrl(nextUrl);
       setStatus("공유 링크가 생성되었습니다.");
     } catch (error) {
       setStatusRecovery("share");
-      setStatus(`Supabase 저장 실패: ${error.message}. 안무 파일/PNG/PDF 백업을 사용하세요.`);
+      setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
     }
   }
 
@@ -2134,6 +2124,7 @@ function App() {
           <span className={unnamedPerformers.length ? "check warn" : "check ok"}>
             이름 미입력 {unnamedPerformers.length ? `${unnamedPerformers.length}명` : "없음"}
           </span>
+          <span className={plan.cloudProjectId ? "check ok" : "check neutral"}>클라우드 저장 {plan.cloudProjectId ? "완료" : "미저장"}</span>
           <span className={shareUrl ? "check ok" : "check neutral"}>공유 링크 {shareUrl ? "생성됨" : "미생성"}</span>
           <span className={audioLoadFailed ? "check warn" : audioUrlSaved ? "check ok" : audioUploadStatus === "failed" ? "check warn" : "check neutral"}>
             {audioLoadFailed ? "음악 로드 실패" : audioUrlSaved ? "음악 URL 저장됨" : audioUploadStatus === "failed" ? "음악 업로드 실패" : "음악 미포함"}
@@ -2142,7 +2133,8 @@ function App() {
         </div>
 
         <div className="share-actions">
-          <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "저장하기"}</button>
+          {!readonly && <button onClick={saveProjectToCloud}>저장하기</button>}
+          <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "안무 파일 공유"}</button>
           <button onClick={() => exportPng()}>현재 PNG</button>
           <button onClick={exportAllPng}>대형 PNG 전체 저장</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
@@ -2150,10 +2142,10 @@ function App() {
 
         <div className="backup-actions">
           {!readonly && <label className="file-button tertiary">저장한 안무 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
-          <span>공유 링크가 실패해도 저장한 파일로 복원할 수 있습니다.</span>
+          <span>클라우드 저장이 실패해도 파일로 공유하거나 복원할 수 있습니다.</span>
         </div>
 
-        <p className="muted">공유 링크 저장이 실패하면 안무 파일 저장 또는 PNG/PDF로 대신 공유할 수 있습니다. 안무 파일은 .json 형식으로 저장되며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
+        <p className="muted">기본 저장은 Supabase 클라우드에 저장됩니다. 파일 공유가 필요하면 안무 파일(.json), PNG, PDF로 내보낼 수 있으며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
       </div>
     );
   }
@@ -2182,7 +2174,7 @@ function App() {
     if (statusRecovery === "share" && status.includes("Supabase 저장 실패")) {
       return (
         <div className="status-actions">
-          <button onClick={exportJson}>저장하기</button>
+          <button onClick={exportJson}>안무 파일 공유</button>
           <button onClick={() => exportPng()}>현재 PNG</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
         </div>
