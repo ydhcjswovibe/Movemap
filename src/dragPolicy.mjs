@@ -37,6 +37,32 @@ export function shouldStartPairMemberPullOut(drag, pointer, threshold = PULL_OUT
   return distance(pointer, start) > threshold;
 }
 
+export function resolveEmptyStageTap({ selectedPerformerId = "", selectedPairKey = "", tapMoveArmed = false } = {}) {
+  if (!tapMoveArmed) return { type: "none", clearSelection: false };
+  if (selectedPairKey) return { type: "move-pair", clearSelection: true };
+  if (selectedPerformerId) return { type: "move-token", clearSelection: true };
+  return { type: "none", clearSelection: true };
+}
+
+export function resolveSelectionClick({
+  selectedPerformerId = "",
+  selectedPairKey = "",
+  performerId = "",
+  performerPairKey = "",
+  pairKey = ""
+} = {}) {
+  if (pairKey) {
+    return selectedPairKey === pairKey ? { type: "clear" } : { type: "select-pair", pairKey };
+  }
+
+  if (performerPairKey) {
+    return selectedPairKey === performerPairKey ? { type: "clear" } : { type: "select-pair", pairKey: performerPairKey };
+  }
+
+  if (performerId && selectedPerformerId === performerId && !selectedPairKey) return { type: "clear" };
+  return performerId ? { type: "select-token", performerId } : { type: "none" };
+}
+
 export function resolveDropAction({ drag, connectCandidate = null, swapCandidate = null }) {
   if (!drag) return { type: "none" };
 

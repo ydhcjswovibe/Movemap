@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   COUPLE_MERGE_DISTANCE,
   findIndependentMergeCandidate,
+  resolveEmptyStageTap,
+  resolveSelectionClick,
   resolveDropAction,
   shouldStartPairMemberPullOut
 } from "./dragPolicy.mjs";
@@ -73,6 +75,67 @@ test("tap movement uses the same action priority as drag movement", () => {
   });
 
   assert.equal(action.type, "swap-same-role");
+});
+
+test("armed selection moves on the first empty stage tap", () => {
+  assert.deepEqual(resolveEmptyStageTap({
+    selectedPerformerId: "p1",
+    selectedPairKey: "",
+    tapMoveArmed: true
+  }), {
+    type: "move-token",
+    clearSelection: true
+  });
+
+  assert.deepEqual(resolveEmptyStageTap({
+    selectedPerformerId: "",
+    selectedPairKey: "p1:p2",
+    tapMoveArmed: true
+  }), {
+    type: "move-pair",
+    clearSelection: true
+  });
+});
+
+test("empty stage tap does not repeat after move disarms selection", () => {
+  assert.deepEqual(resolveEmptyStageTap({
+    selectedPerformerId: "",
+    selectedPairKey: "",
+    tapMoveArmed: false
+  }), {
+    type: "none",
+    clearSelection: false
+  });
+});
+
+test("reclicking a selected independent token clears selection", () => {
+  assert.deepEqual(resolveSelectionClick({
+    selectedPerformerId: "p1",
+    selectedPairKey: "",
+    performerId: "p1",
+    performerPairKey: ""
+  }), {
+    type: "clear"
+  });
+});
+
+test("reclicking a selected pair line or pair member clears pair selection", () => {
+  assert.deepEqual(resolveSelectionClick({
+    selectedPerformerId: "",
+    selectedPairKey: "p1:p2",
+    pairKey: "p1:p2"
+  }), {
+    type: "clear"
+  });
+
+  assert.deepEqual(resolveSelectionClick({
+    selectedPerformerId: "p1",
+    selectedPairKey: "p1:p2",
+    performerId: "p1",
+    performerPairKey: "p1:p2"
+  }), {
+    type: "clear"
+  });
 });
 
 test("pull-out movement can connect to an independent token", () => {

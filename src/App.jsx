@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { STAGE_GRID_X, STAGE_GRID_Y, findCoupleGridPlacement, pairPlacementCollides } from "./coupleLayout.mjs";
-import { findIndependentMergeCandidate, resolveDropAction, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
+import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 
@@ -676,6 +676,7 @@ function App() {
   const [magnetCandidateId, setMagnetCandidateId] = useState("");
   const [dragHint, setDragHint] = useState("");
   const [selectedPairKey, setSelectedPairKey] = useState("");
+  const [tapMoveArmed, setTapMoveArmed] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [dragPositions, setDragPositions] = useState(null);
   const [activeToolTab, setActiveToolTab] = useState("formations");
@@ -932,6 +933,38 @@ function App() {
 
   function performerById(performerId) {
     return plan.performers.find((performer) => performer.id === performerId);
+  }
+
+  function clearSelection() {
+    setSelectedPerformerId("");
+    setSelectedPairKey("");
+    setTapMoveArmed(false);
+  }
+
+  function selectPerformer(performerId) {
+    setSelectedPerformerId(performerId);
+    setSelectedPairKey("");
+    setTapMoveArmed(Boolean(performerId));
+  }
+
+  function selectPair(nextPairKey, performerId = "") {
+    setSelectedPerformerId(performerId);
+    setSelectedPairKey(nextPairKey);
+    setTapMoveArmed(Boolean(nextPairKey));
+  }
+
+  function applySelectionClick(action) {
+    if (action.type === "clear") {
+      clearSelection();
+      return;
+    }
+    if (action.type === "select-pair") {
+      selectPair(action.pairKey);
+      return;
+    }
+    if (action.type === "select-token") {
+      selectPerformer(action.performerId);
+    }
   }
 
   function coupleGridPlacement(currentPlan, section, firstId, secondId, point, extraPositions = {}, excludeIds = [firstId, secondId]) {
@@ -1292,13 +1325,25 @@ function App() {
     event.preventDefault();
     ignoreNextStageTapRef.current = false;
     captureStagePointer(event);
-    setSelectedPerformerId(performerId);
-    setSelectedPairKey("");
     setIsBottomSheetExpanded(false);
     const pointer = clientToStagePoint(event);
     const token = selectedSection.positions?.[performerId] || { x: pointer.x, y: pointer.y };
     const partnerSet = getPartnerSetForSection(selectedSection);
     const performerPair = pairForPerformer(partnerSet?.pairs || [], performerId);
+    const performerPairKey = performerPair ? pairKey(performerPair) : "";
+    const selectionAction = resolveSelectionClick({
+      selectedPerformerId,
+      selectedPairKey,
+      performerId,
+      performerPairKey
+    });
+    if (selectionAction.type === "clear") {
+      clearSelection();
+      setDragPositions(null);
+      clearLongPressTimer();
+      return;
+    }
+    selectPerformer(performerId);
     if (performerPair) {
       const [firstId, secondId] = performerPair;
       const firstStart = { ...(selectedSection.positions[firstId] || { x: pointer.x, y: pointer.y }) };
@@ -1324,7 +1369,7 @@ function App() {
           [secondId]: secondStart
         }
       };
-      setSelectedPairKey(pairKey(performerPair));
+      selectPair(performerPairKey, performerId);
       setDragPositions(dragStateRef.current.finalPositions);
       clearLongPressTimer();
       longPressTimerRef.current = setTimeout(() => {
@@ -1495,6 +1540,15 @@ function App() {
     event.preventDefault();
     event.stopPropagation();
     ignoreNextStageTapRef.current = false;
+    const nextPairKey = pairKey(pair);
+    const selectionAction = resolveSelectionClick({ selectedPerformerId, selectedPairKey, pairKey: nextPairKey });
+    if (selectionAction.type === "clear") {
+      clearSelection();
+      setDragPositions(null);
+      clearLongPressTimer();
+      dragStateRef.current = null;
+      return;
+    }
     captureStagePointer(event);
     clearLongPressTimer();
     setIsBottomSheetExpanded(false);
@@ -1519,7 +1573,7 @@ function App() {
       [firstId]: { ...selectedSection.positions[firstId] },
       [secondId]: { ...selectedSection.positions[secondId] }
     });
-    setSelectedPairKey(pairKey(pair));
+    selectPair(nextPairKey);
   }
 
   function updatePairDrag(event, drag, pointer = clientToStagePoint(event)) {
@@ -1560,13 +1614,18 @@ function App() {
     }
     if (dragStateRef.current) return;
     if (event.target.closest?.(".token, .pair-link")) return;
+    const tapAction = resolveEmptyStageTap({ selectedPerformerId, selectedPairKey, tapMoveArmed });
+    if (tapAction.type === "none") {
+      if (tapAction.clearSelection) clearSelection();
+      return;
+    }
     const pointer = clientToStagePoint(event);
     const targetPoint = snapPoint(pointer, snapEnabled);
     const partnerSet = getPartnerSetForSection(selectedSection);
     const selectedPair = (partnerSet?.pairs || []).find((pair) => pairKey(pair) === selectedPairKey)
       || (selectedPerformerId ? pairForPerformer(partnerSet?.pairs || [], selectedPerformerId) : null);
 
-    if (selectedPair) {
+    if (tapAction.type === "move-pair" && selectedPair) {
       const finalPositions = positionsForPairCenter(selectedPair, targetPoint);
       if (!finalPositions) return;
       const drag = {
@@ -1579,11 +1638,11 @@ function App() {
       };
       commitDropAction(resolveDropAction({ drag }), drag);
       setDragPositions(null);
-      setSelectedPairKey(pairKey(selectedPair));
+      clearSelection();
       return;
     }
 
-    if (!selectedPerformerId) return;
+    if (tapAction.type !== "move-token" || !selectedPerformerId) return;
     const nextPosition = {
       x: clamp(targetPoint.x, 4, 96),
       y: clamp(targetPoint.y, 5, 95)
@@ -1608,6 +1667,7 @@ function App() {
     setMagnetCandidateId("");
     setDragHint("");
     setDragPositions(null);
+    clearSelection();
   }
 
   async function handleAudioFile(event) {
@@ -1973,14 +2033,15 @@ function App() {
           <span>{selectionTitle}</span>
           {selectedPair ? (
             <div className="selection-actions">
+              <em>빈 무대 클릭: 1회 이동 / 다시 클릭: 선택 해제</em>
               <em>커플 토큰이나 선을 드래그하면 함께 이동</em>
               <em>한 명만 조정: 길게 누른 뒤 드래그</em>
               {!readonly && <button className="danger-button compact-danger" onClick={() => removePairByKey(selectedPairKey)}>커플 해제</button>}
             </div>
           ) : selectedPerformer ? (
-            <p className="muted">드래그로 이동하고, 다른 토큰 가까이에 놓으면 커플로 연결됩니다.</p>
+            <p className="muted">빈 무대 클릭: 1회 이동 / 다시 클릭: 선택 해제</p>
           ) : (
-            <p className="muted">토큰을 선택하거나 커플 선을 선택하세요. 빈 무대를 탭하면 선택한 토큰을 바로 이동할 수 있습니다.</p>
+            <p className="muted">토큰이나 커플을 선택하세요.</p>
           )}
           {!readonly && <button className="danger-button compact-danger" onClick={resetSelectedFormation}>대형 초기화</button>}
         </div>
@@ -1990,7 +2051,11 @@ function App() {
             {!readonly && <button onClick={addPair}>직접 커플 추가</button>}
           </div>
           {(partnerSet?.pairs || []).map((pair, index) => (
-            <div className={selectedPairKey === pairKey(pair) ? "pair-row active" : "pair-row"} key={index} onClick={() => setSelectedPairKey(pairKey(pair))}>
+            <div
+              className={selectedPairKey === pairKey(pair) ? "pair-row active" : "pair-row"}
+              key={index}
+              onClick={() => applySelectionClick(resolveSelectionClick({ selectedPerformerId, selectedPairKey, pairKey: pairKey(pair) }))}
+            >
               <select disabled={readonly} value={pair[0]} onChange={(event) => updatePair(index, 0, event.target.value)}>
                 {plan.performers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -2014,7 +2079,11 @@ function App() {
           {plan.performers.map((performer) => {
             const count = counts[performer.id] || 0;
             return (
-              <div key={performer.id} className={selectedPerformerId === performer.id ? "performer active" : "performer"} onClick={() => setSelectedPerformerId(performer.id)}>
+              <div
+                key={performer.id}
+                className={selectedPerformerId === performer.id ? "performer active" : "performer"}
+                onClick={() => applySelectionClick(resolveSelectionClick({ selectedPerformerId, selectedPairKey, performerId: performer.id }))}
+              >
                 <span style={{ background: performer.color }}>{performer.label}</span>
                 <input readOnly={readonly} value={performer.name} onChange={(event) => updatePlan((current) => ({
                   ...current,
