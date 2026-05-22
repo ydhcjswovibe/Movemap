@@ -1972,7 +1972,7 @@ function App() {
           ))}
         </div>
         {!sortedSections.length && (
-          <p className="muted">하단의 {hasUsableAudio ? "현재 시간에 대형 만들기" : "대형 추가"} 버튼으로 첫 대형을 추가하세요.</p>
+          <p className="muted">하단의 대형 추가 버튼으로 첫 대형을 추가하세요.</p>
         )}
         {!readonly && (
           <div className="row-actions">
@@ -2142,7 +2142,7 @@ function App() {
         </div>
 
         <div className="share-actions">
-          <button onClick={exportJson}>저장하기</button>
+          <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "저장하기"}</button>
           <button onClick={() => exportPng()}>현재 PNG</button>
           <button onClick={exportAllPng}>대형 PNG 전체 저장</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
@@ -2217,7 +2217,6 @@ function App() {
             <span>공유된 안무를 확인 중입니다. 수정하려면 이 기기에 사본을 만드세요.</span>
           </div>
           <div className="readonly-actions">
-            <button onClick={exportJson}>저장하기</button>
             <button onClick={saveEditableCopy}>사본으로 편집</button>
           </div>
         </div>
@@ -2423,7 +2422,7 @@ function App() {
                 <button className="primary" onClick={togglePlayback}>
                   {isPlaying ? "정지" : "재생"}
                 </button>
-                {!readonly && <button className="secondary capture-button" onClick={addSection}>현재 시간에 대형 만들기</button>}
+                {!readonly && <button className="secondary capture-button" onClick={addSection}>대형 추가</button>}
                 <input
                   type="range"
                   min="0"
@@ -2481,15 +2480,19 @@ function App() {
                 <span>선택 대형</span>
                 <input readOnly={readonly} value={selectedSection.name} onChange={(event) => updateSection(selectedSection.id, { name: event.target.value })} />
               </label>
-              <div className="formation-time-summary">
+              <div className="arrival-time-control">
                 <span>도착 {formatTime(pointTime(selectedSection))}</span>
-                <span>이동 {pointMoveDuration(selectedSection)}초</span>
+                {!readonly && (
+                  <div className="arrival-nudges" aria-label="도착 시각 빠른 조정">
+                    <button onClick={() => nudgeSelectedSection(-0.1)}>-</button>
+                    <button onClick={() => nudgeSelectedSection(0.1)}>+</button>
+                  </div>
+                )}
               </div>
-              {!readonly && (
-                <>
-                  <button onClick={syncSelectedSectionToCurrentTime}>현재 시간으로 맞춤</button>
-                  <button onClick={() => nudgeSelectedSection(-0.5)}>-0.5초</button>
-                  <button onClick={() => nudgeSelectedSection(0.5)}>+0.5초</button>
+              <div className="movement-duration-control">
+                <span>이동 시간</span>
+                <strong>{pointMoveDuration(selectedSection)}초 적용</strong>
+                {!readonly && (
                   <div className="duration-chips" aria-label="이동 시간 빠른 선택">
                     {[0, 2, 4, 8].map((seconds) => (
                       <button
@@ -2497,12 +2500,12 @@ function App() {
                         className={pointMoveDuration(selectedSection) === seconds ? "active" : ""}
                         onClick={() => setSelectedMoveDuration(seconds)}
                       >
-                        {seconds}초
+                        {seconds === 0 ? "즉시" : `${seconds}초`}
                       </button>
                     ))}
                   </div>
-                </>
-              )}
+                )}
+              </div>
             </div>
           )}
         </section>
