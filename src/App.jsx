@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { horizontalCouplePositions, pairHandlePosition } from "./coupleLayout.mjs";
+import { horizontalCouplePositions, pairHandlePosition, pairPlacementCollides } from "./coupleLayout.mjs";
 import { resolveDropAction } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
@@ -50,6 +50,13 @@ function formatTime(seconds = 0) {
   const secs = Math.floor(safe % 60);
   const tenths = Math.floor((safe % 1) * 10);
   return `${mins}:${String(secs).padStart(2, "0")}.${tenths}`;
+}
+
+function formatClockTime(value) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function parseNumber(value, fallback = 0) {
@@ -621,6 +628,8 @@ function App() {
   const [audioUploadStatus, setAudioUploadStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState("");
   const [status, setStatus] = useState("");
+  const [statusRecovery, setStatusRecovery] = useState("");
+  const [localSavedAt, setLocalSavedAt] = useState("");
   const [magnetCandidateId, setMagnetCandidateId] = useState("");
   const [dragHint, setDragHint] = useState("");
   const [selectedPairKey, setSelectedPairKey] = useState("");
@@ -677,6 +686,7 @@ function App() {
           const normalized = normalizePlan(loaded);
           setPlan(normalized);
           setSelectedSectionId(normalized.sections[0]?.id || "");
+          setLocalSavedAt(loaded.updatedAt || "");
           restoreAudioFromPlan(normalized, { clearWhenMissing: true });
         } else {
           localStorage.removeItem(STORAGE_KEY);
@@ -691,7 +701,9 @@ function App() {
 
   useEffect(() => {
     if (!plan || readonly) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...plan, updatedAt: new Date().toISOString() }));
+    const updatedAt = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...plan, updatedAt }));
+    setLocalSavedAt(updatedAt);
   }, [plan, readonly]);
 
   useEffect(() => () => {
@@ -966,9 +978,11 @@ function App() {
       const pairCenter = center || (firstPosition && secondPosition
         ? { x: (firstPosition.x + secondPosition.x) / 2, y: (firstPosition.y + secondPosition.y) / 2 }
         : firstPosition || secondPosition || { x: 50, y: 50 });
+      const pairPositions = horizontalCouplePositions(current, firstId, secondId, snapPoint(pairCenter, snapEnabled));
+      if (pairPlacementCollides(section.positions, pairPositions, [firstId, secondId])) return current;
       const nextPositions = {
         ...section.positions,
-        ...horizontalCouplePositions(current, firstId, secondId, snapPoint(pairCenter, snapEnabled))
+        ...pairPositions
       };
       return {
         ...current,
@@ -998,9 +1012,11 @@ function App() {
         const center = dragged && target
           ? snapPoint({ x: (dragged.x + target.x) / 2, y: (dragged.y + target.y) / 2 }, snapEnabled)
           : drag.pointer;
+        const pairPositions = horizontalCouplePositions(current, action.performerId, action.targetId, center);
+        if (pairPlacementCollides(section.positions, pairPositions, [action.performerId, action.targetId])) return current;
         const nextPositions = {
           ...basePositions,
-          ...horizontalCouplePositions(current, action.performerId, action.targetId, center)
+          ...pairPositions
         };
         const pairs = [
           ...baseSet.pairs.filter((pair) => !pair.includes(action.performerId) && !pair.includes(action.targetId)),
@@ -1056,6 +1072,15 @@ function App() {
             };
           }),
           sections: current.sections.map((item) => item.id === drag.sectionId ? { ...item, positions: nextPositions } : item)
+        };
+      }
+
+      if (action.type === "move-pair") {
+        const movingIds = Object.keys(action.positions || {});
+        if (pairPlacementCollides(section.positions, action.positions || {}, movingIds)) return current;
+        return {
+          ...current,
+          sections: current.sections.map((item) => item.id === drag.sectionId ? { ...item, positions: basePositions } : item)
         };
       }
 
@@ -1588,6 +1613,7 @@ function App() {
     }
     setAudioUploadStatus("uploading");
     setStatus(replacingAudio ? "새 음악으로 교체하는 중..." : "음악을 선택했습니다. 서버에 업로드하는 중...");
+    setStatusRecovery("");
     try {
       const audio = await uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint);
       updatePlan((current) => ({ ...current, audio }));
@@ -1608,6 +1634,7 @@ function App() {
           localAudioUrlRef.current = "";
         }
       }
+      setStatusRecovery("audio");
       setStatus(`${replacingAudio ? "음악 교체 실패" : "음악 업로드 실패"}: ${error.message}`);
       event.target.value = "";
     }
@@ -1616,7 +1643,9 @@ function App() {
   function reconnectServerAudio() {
     if (restoreAudioFromPlan(plan)) {
       setStatus("저장된 서버 음악을 다시 연결했습니다.");
+      setStatusRecovery("");
     } else {
+      setStatusRecovery("audio");
       setStatus("저장된 음악 URL이 없습니다. 음악을 다시 선택해 주세요.");
     }
   }
@@ -1646,7 +1675,9 @@ function App() {
         await audioRef.current.play();
         setIsPlaying(true);
         setStatus("");
+        setStatusRecovery("");
       } catch (error) {
+        setStatusRecovery("audio");
         setStatus(`재생을 시작할 수 없습니다: ${error.message}`);
       }
     } else {
@@ -1656,14 +1687,29 @@ function App() {
     }
   }
 
+  function saveEditableCopy() {
+    if (!plan) return;
+    const copiedAt = new Date().toISOString();
+    const copy = {
+      ...clonePlan(plan),
+      id: uid("project"),
+      title: `${plan.title || "공유 안무"} 사본`,
+      updatedAt: copiedAt
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(copy));
+    window.location.href = "/";
+  }
+
   async function shareProject() {
     try {
       setStatus("공유 링크를 만드는 중...");
+      setStatusRecovery("");
       const id = await saveToSupabase(plan);
       const nextUrl = `${window.location.origin}/share/${id}`;
       setShareUrl(nextUrl);
       setStatus("공유 링크가 생성되었습니다.");
     } catch (error) {
+      setStatusRecovery("share");
       setStatus(`Supabase 저장 실패: ${error.message}. 안무 파일/PNG/PDF 백업을 사용하세요.`);
     }
   }
@@ -1824,7 +1870,6 @@ function App() {
             <h2>대형</h2>
             <p className="muted">시각마다 도착할 대형을 관리합니다.</p>
           </div>
-          {!readonly && <button onClick={addSection}>{hasUsableAudio ? "현재 시간에 대형 만들기" : "대형 추가"}</button>}
         </div>
         <div className="section-list mobile-section-list">
           {sortedSections.map((section) => (
@@ -1843,6 +1888,9 @@ function App() {
             </button>
           ))}
         </div>
+        {!sortedSections.length && (
+          <p className="muted">하단의 {hasUsableAudio ? "현재 시간에 대형 만들기" : "대형 추가"} 버튼으로 첫 대형을 추가하세요.</p>
+        )}
         {!readonly && (
           <div className="row-actions">
             <button onClick={duplicateSection}>복제</button>
@@ -1875,6 +1923,20 @@ function App() {
 
   function renderArrangePanel() {
     const selectedPerformer = plan.performers.find((performer) => performer.id === selectedPerformerId);
+    const selectedPair = (partnerSet?.pairs || []).find((pair) => pairKey(pair) === selectedPairKey);
+    const selectedPairNames = selectedPair
+      ? selectedPair.map((id) => {
+        const performer = plan.performers.find((item) => item.id === id);
+        return performer?.name || performer?.label || id;
+      })
+      : [];
+    const selectionTitle = dragHint || (
+      selectedPair
+        ? `${selectedPairNames.join(" - ")} 커플`
+        : selectedPerformer
+          ? `${selectedPerformer.name || selectedPerformer.label} 토큰`
+          : "선택 없음"
+    );
     return (
       <div className="form-stack">
         <div className="panel-head">
@@ -1885,8 +1947,18 @@ function App() {
         </div>
         <div className="tool-card">
           <strong>현재 선택</strong>
-          <span>{dragHint || (selectedPerformer ? `${selectedPerformer.name || selectedPerformer.label} 토큰` : selectedPairKey ? "선택 커플" : "선택 없음")}</span>
-          <p className="muted">토큰을 선택한 뒤 무대 빈 곳을 탭해도 이동합니다. 커플 토큰은 기본적으로 함께 이동합니다.</p>
+          <span>{selectionTitle}</span>
+          {selectedPair ? (
+            <div className="selection-actions">
+              <em>핸들이나 커플 선을 드래그하면 함께 이동</em>
+              <em>한 명만 조정: Alt/Option+드래그</em>
+              {!readonly && <button className="danger-button compact-danger" onClick={() => removePairByKey(selectedPairKey)}>커플 해제</button>}
+            </div>
+          ) : selectedPerformer ? (
+            <p className="muted">드래그로 이동하고, 다른 토큰 가까이에 놓으면 커플로 연결됩니다.</p>
+          ) : (
+            <p className="muted">토큰을 선택하거나 커플 선을 선택하세요. 빈 무대를 탭하면 선택한 토큰을 바로 이동할 수 있습니다.</p>
+          )}
           {!readonly && <button className="danger-button compact-danger" onClick={resetSelectedFormation}>대형 초기화</button>}
         </div>
         <div className="partner-box">
@@ -1894,9 +1966,6 @@ function App() {
             <h3>커플</h3>
             {!readonly && <button onClick={addPair}>직접 커플 추가</button>}
           </div>
-          {selectedPairKey && !readonly && (
-            <button className="danger-button" onClick={() => removePairByKey(selectedPairKey)}>선택 커플 해제</button>
-          )}
           {(partnerSet?.pairs || []).map((pair, index) => (
             <div className={selectedPairKey === pairKey(pair) ? "pair-row active" : "pair-row"} key={index} onClick={() => setSelectedPairKey(pairKey(pair))}>
               <select disabled={readonly} value={pair[0]} onChange={(event) => updatePair(index, 0, event.target.value)}>
@@ -1990,10 +2059,11 @@ function App() {
           <div className="backup-actions">
             <button className="tertiary" onClick={exportJson}>저장하기</button>
             <label className="file-button tertiary">저장한 안무 열기<input type="file" accept="application/json" onChange={importJson} /></label>
+            <span>공유 링크가 실패해도 이 파일로 복원할 수 있습니다.</span>
           </div>
         )}
 
-        <p className="muted">공유 링크 저장이 실패하면 저장하기 또는 PNG/PDF로 대신 공유할 수 있습니다. 안무 파일은 .json 형식으로 저장되며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
+        <p className="muted">공유 링크 저장이 실패하면 안무 파일 저장 또는 PNG/PDF로 대신 공유할 수 있습니다. 안무 파일은 .json 형식으로 저장되며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
       </div>
     );
   }
@@ -2007,15 +2077,58 @@ function App() {
 
   const activeToolLabel = MOBILE_TABS.find(([value]) => value === activeToolTab)?.[1] || "대형";
   const selectedPerformer = plan.performers.find((performer) => performer.id === selectedPerformerId);
+  const localSaveLabel = readonly
+    ? "보기 전용"
+    : localSavedAt
+      ? `이 기기에 자동 저장됨 · ${formatClockTime(localSavedAt)}`
+      : "이 기기에 자동 저장 준비됨";
   const selectedStateText = selectedPairKey
     ? "커플 선택됨"
     : selectedPerformer
       ? `${selectedPerformer.name || selectedPerformer.label} 선택됨`
       : "선택 없음";
 
+  function renderStatusActions() {
+    if (statusRecovery === "share" && status.includes("Supabase 저장 실패")) {
+      return (
+        <div className="status-actions">
+          <button onClick={exportJson}>저장하기</button>
+          <button onClick={() => exportPng()}>현재 PNG</button>
+          <button onClick={() => window.print()}>인쇄/PDF</button>
+        </div>
+      );
+    }
+    if (statusRecovery === "audio" && /음악|재생/.test(status)) {
+      return (
+        <div className="status-actions">
+          <button onClick={reconnectServerAudio}>음악 다시 연결</button>
+          <label className="file-button">
+            다시 업로드
+            <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+          </label>
+        </div>
+      );
+    }
+    return null;
+  }
+
   return (
     <div className={isStageFocus ? "app stage-focus" : "app"}>
-      {status && <div className="status">{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</div>}
+      {status && (
+        <div className="status">
+          <span>{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</span>
+          {renderStatusActions()}
+        </div>
+      )}
+      {readonly && (
+        <div className="readonly-banner">
+          <div>
+            <strong>보기 전용 링크</strong>
+            <span>공유된 안무를 확인 중입니다. 수정하려면 이 기기에 사본을 만드세요.</span>
+          </div>
+          <button onClick={saveEditableCopy}>사본으로 편집</button>
+        </div>
+      )}
 
       <main className="workspace">
         <section className="stage-area">
@@ -2031,6 +2144,7 @@ function App() {
               <div className="stage-meta">
                 <strong>{activeSection?.name}</strong>
                 <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
+                <span className="save-meta">{localSaveLabel}</span>
                 <span className="music-meta">
                   {musicTitle && <span className="music-name" title={musicTitle}>{musicTitle}</span>}
                   {!readonly && audioLoadFailed ? (
@@ -2171,7 +2285,7 @@ function App() {
                 return (
                   <g
                     key={`pair-handle-${pairKey(pair)}-${index}`}
-                    className="pair-handle"
+                    className={selected ? "pair-handle active" : "pair-handle"}
                     onPointerDown={(event) => onPairPointerDown(event, pair, index)}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -2187,7 +2301,7 @@ function App() {
                       className="pair-handle-dot"
                       cx={handle.x}
                       cy={handle.y}
-                      r="1.8"
+                      r={selected ? "2.7" : "1.8"}
                       fill={selected ? "#b4234f" : "#ffffff"}
                       stroke={selected ? "#7f1d1d" : "#334155"}
                       strokeWidth="0.8"
@@ -2288,9 +2402,11 @@ function App() {
                   setAudioSrc(fallbackUrl);
                   setAudioUploadStatus("uploaded");
                   setStatus("저장된 Storage 경로로 음악을 다시 연결합니다.");
+                  setStatusRecovery("");
                   return;
                 }
                 setAudioUploadStatus(plan.audio?.storagePath || plan.audio?.publicUrl ? "failed" : "idle");
+                setStatusRecovery("audio");
                 setStatus("음악 URL을 불러오지 못했습니다. 다시 음악을 불러오세요.");
               }}
             />

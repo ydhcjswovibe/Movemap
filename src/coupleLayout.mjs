@@ -1,5 +1,6 @@
 export const COUPLE_GRID_SPACING = 8.8;
 export const PAIR_HANDLE_OFFSET = 6.4;
+export const TOKEN_COLLISION_DISTANCE = 8.4;
 
 export function pairHandlePosition(midpoint) {
   return {
@@ -26,4 +27,19 @@ export function horizontalCouplePositions(plan, firstId, secondId, center) {
     [leftId]: { x: safeCenter.x - half, y: safeCenter.y },
     [rightId]: { x: safeCenter.x + half, y: safeCenter.y }
   };
+}
+
+function distance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+export function pairPlacementCollides(existingPositions, proposedPositions, movingIds = [], minimumGap = TOKEN_COLLISION_DISTANCE) {
+  const moving = new Set(movingIds);
+  return Object.entries(proposedPositions).some(([proposedId, proposed]) => {
+    if (!proposed) return false;
+    return Object.entries(existingPositions || {}).some(([existingId, existing]) => {
+      if (!existing || moving.has(existingId) || existingId === proposedId) return false;
+      return distance(proposed, existing) < minimumGap;
+    });
+  });
 }

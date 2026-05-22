@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COUPLE_GRID_SPACING, PAIR_HANDLE_OFFSET, horizontalCouplePositions, pairHandlePosition } from "./coupleLayout.mjs";
+import {
+  COUPLE_GRID_SPACING,
+  PAIR_HANDLE_OFFSET,
+  horizontalCouplePositions,
+  pairHandlePosition,
+  pairPlacementCollides
+} from "./coupleLayout.mjs";
 
 const plan = {
   performers: [
@@ -32,4 +38,32 @@ test("pair handle sits above the couple midpoint without changing the movement c
 
   assert.equal(handle.x, midpoint.x);
   assert.equal(handle.y, midpoint.y - PAIR_HANDLE_OFFSET);
+});
+
+test("pair placement rejects another token sitting in either couple slot", () => {
+  const existing = {
+    lead: { x: 10, y: 10 },
+    follow: { x: 18.8, y: 10 },
+    other: { x: 45.6, y: 55 }
+  };
+  const proposed = {
+    lead: { x: 45.6, y: 55 },
+    follow: { x: 54.4, y: 55 }
+  };
+
+  assert.equal(pairPlacementCollides(existing, proposed, ["lead", "follow"]), true);
+});
+
+test("pair placement allows the moving pair itself and adjacent open grid slots", () => {
+  const existing = {
+    lead: { x: 45.6, y: 55 },
+    follow: { x: 54.4, y: 55 },
+    other: { x: 63.2, y: 55 }
+  };
+  const proposed = {
+    lead: { x: 45.6, y: 55 },
+    follow: { x: 54.4, y: 55 }
+  };
+
+  assert.equal(pairPlacementCollides(existing, proposed, ["lead", "follow"]), false);
 });
