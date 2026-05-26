@@ -1,4 +1,4 @@
-export const COUPLE_MERGE_DISTANCE = 7.0;
+export const PAIR_MERGE_DISTANCE = 7.0;
 export const PULL_OUT_MOVE_THRESHOLD = 0.8;
 
 function distance(a, b) {
@@ -12,7 +12,7 @@ export function findIndependentMergeCandidate({
   performers = [],
   pairs = [],
   sourcePair = null,
-  maxDistance = COUPLE_MERGE_DISTANCE
+  maxDistance = PAIR_MERGE_DISTANCE
 }) {
   if (!performerId || !rawPosition || sourcePair) return null;
   if (pairs.some((pair) => pair.includes(performerId))) return null;

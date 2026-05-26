@@ -1,25 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { STAGE_GRID_X, STAGE_GRID_Y, findCoupleGridPlacement, pairPlacementCollides } from "./coupleLayout.mjs";
+import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, saveCloudProject } from "./cloudProject.mjs";
 import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 import { createShareUrl } from "./shareUrl.mjs";
+import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, nextAudioSourceCandidate } from "./audioStorage.mjs";
 
-const STORAGE_KEY = "choreo-stage-planner-project";
-const AUDIO_BUCKET = "choreo-audio";
+const STORAGE_KEY = "movemap-project";
+const LEGACY_STORAGE_KEY = "choreo-stage-planner-project";
 const STAGE_WIDTH = 900;
 const STAGE_HEIGHT = 560;
 const ROLE_COLORS = {
-  male: ["#2457c5", "#3478f6", "#3b82f6", "#60a5fa", "#1d4ed8"],
-  female: ["#c0265f", "#e84a7f", "#f9739a", "#fb7185", "#be185d"],
+  groupA: ["#2457c5", "#3478f6", "#3b82f6", "#60a5fa", "#1d4ed8"],
+  groupB: ["#c0265f", "#e84a7f", "#f9739a", "#fb7185", "#be185d"],
   other: ["#6d5dfc", "#14b8a6", "#f59e0b", "#64748b"]
 };
 
 const PERFORMANCE_TYPES = {
-  shine: "샤인공연",
-  couple: "커플공연",
-  mixed: "혼합공연"
+  shine: "솔로/그룹",
+  pair: "페어/파트너",
+  mixed: "혼합 대형"
 };
 
 const MOVE_MODES = {
@@ -32,8 +33,8 @@ const MAGNET_DISTANCE = 4.8;
 const LONG_PRESS_MS = 450;
 const TOKEN_RADIUS = 4.2;
 const SELECTED_RING_RADIUS = 5.35;
-const COUPLE_RING_RADIUS = 4.45;
-const SELECTED_COUPLE_RING_RADIUS = 4.9;
+const PAIR_RING_RADIUS = 4.45;
+const SELECTED_PAIR_RING_RADIUS = 4.9;
 const GRID_X = STAGE_GRID_X;
 const GRID_Y = STAGE_GRID_Y;
 
@@ -121,20 +122,9 @@ function audioStorageName(file, fingerprint) {
   ].join(".");
 }
 
-function audioPublicUrl(storagePath) {
-  const { url } = supabaseConfig();
-  if (!url || !storagePath) return "";
-  return `${url}/storage/v1/object/public/${AUDIO_BUCKET}/${encodeURI(storagePath)}`;
-}
-
 function resolveAudioUrl(audio) {
   if (!audio) return "";
-  return audio.publicUrl || audioPublicUrl(audio.storagePath);
-}
-
-function audioUrlCandidates(audio) {
-  if (!audio) return [];
-  return [audio.publicUrl, audioPublicUrl(audio.storagePath)].filter(Boolean).filter((url, index, urls) => urls.indexOf(url) === index);
+  return audio.publicUrl || audioPublicUrl(audio.storagePath, supabaseConfig());
 }
 
 function audioFingerprint(file) {
@@ -159,7 +149,8 @@ function audioMetadataFromFile(file, storagePath, fingerprint) {
     lastModified: file.lastModified || 0,
     fingerprint,
     storagePath,
-    publicUrl: audioPublicUrl(storagePath),
+    bucket: MOVEMAP_AUDIO_BUCKET,
+    publicUrl: audioPublicUrl(storagePath, supabaseConfig()),
     uploadedAt: new Date().toISOString()
   };
 }
@@ -326,29 +317,29 @@ function defaultSections(performers) {
   ];
 }
 
-function createProject({ title, performanceType, maleCount, femaleCount, names }) {
+function createProject({ title, performanceType, groupACount, groupBCount, names }) {
   const performers = [];
-  for (let i = 0; i < maleCount; i += 1) {
+  for (let i = 0; i < groupACount; i += 1) {
     performers.push({
-      id: uid("m"),
-      label: `M${i + 1}`,
-      name: names?.male?.[i] || `M${i + 1}`,
-      role: "male",
-      color: ROLE_COLORS.male[i % ROLE_COLORS.male.length]
+      id: uid("a"),
+      label: `A${i + 1}`,
+      name: names?.groupA?.[i] || `A${i + 1}`,
+      role: "groupA",
+      color: ROLE_COLORS.groupA[i % ROLE_COLORS.groupA.length]
     });
   }
-  for (let i = 0; i < femaleCount; i += 1) {
+  for (let i = 0; i < groupBCount; i += 1) {
     performers.push({
-      id: uid("w"),
-      label: `W${i + 1}`,
-      name: names?.female?.[i] || `W${i + 1}`,
-      role: "female",
-      color: ROLE_COLORS.female[i % ROLE_COLORS.female.length]
+      id: uid("b"),
+      label: `B${i + 1}`,
+      name: names?.groupB?.[i] || `B${i + 1}`,
+      role: "groupB",
+      color: ROLE_COLORS.groupB[i % ROLE_COLORS.groupB.length]
     });
   }
 
   return {
-    title: title || "새 안무 프로젝트",
+    title: title || "새 Movemap 프로젝트",
     performanceType,
     performers,
     sections: defaultSections(performers),
@@ -362,13 +353,13 @@ function createProject({ title, performanceType, maleCount, femaleCount, names }
 
 function createSampleProject() {
   const project = createProject({
-    title: "Yiyo Sarante - Que Agonia 연습안",
+    title: "리허설 데모 프로젝트",
     performanceType: "mixed",
-    maleCount: 4,
-    femaleCount: 4,
+    groupACount: 4,
+    groupBCount: 4,
     names: {
-      male: ["M1", "M2", "M3", "M4"],
-      female: ["W1", "W2", "W3", "W4"]
+      groupA: ["A1", "A2", "A3", "A4"],
+      groupB: ["B1", "B2", "B3", "B4"]
     }
   });
 
@@ -381,7 +372,7 @@ function createSampleProject() {
     moveDuration: 0,
     start: 22,
     end: 22,
-    notes: "포즈. 여자 라인을 앞쪽에 두고 남자는 뒤에서 프레임.",
+    notes: "포즈. 역할 B 라인을 앞쪽에 두고 역할 A는 뒤에서 프레임.",
     moveMode: "hold"
   };
   const c = {
@@ -392,12 +383,12 @@ function createSampleProject() {
     moveDuration: 6,
     start: 53,
     end: 59,
-    notes: "기존 파트너워크 느낌. 대형 변화는 크게 만들지 않음.",
+    notes: "페어/파트너 구간. 대형 변화는 크게 만들지 않음.",
     moveMode: "late",
     positions: b.positions
   };
   project.sections = [
-    { ...a, name: "A", time: 0, moveDuration: 0, start: 0, end: 0, notes: "넓게 시작하는 샤인/위치 잡기.", moveMode: "hold" },
+    { ...a, name: "A", time: 0, moveDuration: 0, start: 0, end: 0, notes: "넓게 시작하는 오프닝 위치 잡기.", moveMode: "hold" },
     pause,
     c,
     {
@@ -408,7 +399,7 @@ function createSampleProject() {
       moveDuration: 18,
       start: 90,
       end: 108,
-      notes: "중앙으로 모이며 체인지. 여자 이동선을 크게 보여줌.",
+      notes: "중앙으로 모이며 전환. 역할 B 이동선을 크게 보여줌.",
       moveMode: "smooth"
     }
   ].sort((left, right) => pointTime(left) - pointTime(right));
@@ -496,7 +487,7 @@ async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFinger
   const { url, key } = supabaseConfig();
   if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
   const path = `projects/${safeStorageSegment(projectKey || "local", "project")}/audio/${audioStorageName(file, fingerprint)}`;
-  const response = await fetch(`${url}/storage/v1/object/${AUDIO_BUCKET}/${path}`, {
+  const response = await fetch(`${url}/storage/v1/object/${MOVEMAP_AUDIO_BUCKET}/${path}`, {
     method: "POST",
     headers: {
       apikey: key,
@@ -532,7 +523,7 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
     return `
       <g opacity="${ghost ? 0.22 : dim ? 0.35 : 1}">
         <title>${fullName}</title>
-        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${COUPLE_RING_RADIUS}" fill="none" stroke="${pairColor}" stroke-width="0.65" opacity="0.62" />` : ""}
+        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${PAIR_RING_RADIUS}" fill="none" stroke="${pairColor}" stroke-width="0.65" opacity="0.62" />` : ""}
         <circle cx="${pos.x}" cy="${pos.y}" r="${ghost ? 2.5 : TOKEN_RADIUS}" fill="${ghost ? "#475569" : performer.color}" stroke="#f8fafc" stroke-width="0.8" />
         ${ghost ? "" : `<text x="${pos.x}" y="${pos.y + fontSize * 0.34}" text-anchor="middle" font-size="${fontSize}" fill="#ffffff" font-family="Arial" font-weight="700" pointer-events="none" style="user-select:none">${shortName}</text>`}
       </g>`;
@@ -582,18 +573,18 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
 }
 
 function Wizard({ onCreate }) {
-  const [title, setTitle] = useState("새 안무 프로젝트");
+  const [title, setTitle] = useState("새 Movemap 프로젝트");
   const [performanceType, setPerformanceType] = useState("mixed");
-  const [maleCount, setMaleCount] = useState(4);
-  const [femaleCount, setFemaleCount] = useState(4);
-  const maleNames = Array.from({ length: maleCount }, (_, index) => `M${index + 1}`);
-  const femaleNames = Array.from({ length: femaleCount }, (_, index) => `W${index + 1}`);
+  const [groupACount, setGroupACount] = useState(4);
+  const [groupBCount, setGroupBCount] = useState(4);
+  const groupANames = Array.from({ length: groupACount }, (_, index) => `A${index + 1}`);
+  const groupBNames = Array.from({ length: groupBCount }, (_, index) => `B${index + 1}`);
 
   return (
     <div className="wizard">
       <div className="wizard-card">
-        <p className="eyebrow">Choreo Stage Planner</p>
-        <h1>안무 대형을 만들고, 음악에 맞춰 움직임을 확인하세요.</h1>
+        <p className="eyebrow">Movemap</p>
+        <h1>음악과 큐에 맞춰 대형과 동선을 설계하세요.</h1>
         <div className="wizard-grid">
           <label>
             공연명
@@ -608,16 +599,16 @@ function Wizard({ onCreate }) {
             </select>
           </label>
           <label>
-            남자 수
-            <input type="number" min="0" max="16" value={maleCount} onChange={(event) => setMaleCount(parseNumber(event.target.value, 0))} />
+            역할 A
+            <input type="number" min="0" max="16" value={groupACount} onChange={(event) => setGroupACount(parseNumber(event.target.value, 0))} />
           </label>
           <label>
-            여자 수
-            <input type="number" min="0" max="16" value={femaleCount} onChange={(event) => setFemaleCount(parseNumber(event.target.value, 0))} />
+            역할 B
+            <input type="number" min="0" max="16" value={groupBCount} onChange={(event) => setGroupBCount(parseNumber(event.target.value, 0))} />
           </label>
         </div>
         <div className="wizard-actions">
-          <button className="primary" onClick={() => onCreate(createProject({ title, performanceType, maleCount, femaleCount, names: { male: maleNames, female: femaleNames } }))}>
+          <button className="primary" onClick={() => onCreate(createProject({ title, performanceType, groupACount, groupBCount, names: { groupA: groupANames, groupB: groupBNames } }))}>
             빈 프로젝트 시작
           </button>
           <button onClick={() => onCreate(createSampleProject())}>샘플로 시작</button>
@@ -660,9 +651,11 @@ function App() {
   const ignoreNextStageTapRef = useRef(false);
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
+  const rejectedAudioUrlsRef = useRef(new Set());
 
   function restoreAudioFromPlan(nextPlan, options = {}) {
     const restoredAudioUrl = resolveAudioUrl(nextPlan?.audio);
+    rejectedAudioUrlsRef.current = new Set();
     if (!restoredAudioUrl) {
       if (options.clearWhenMissing) {
         setAudioSrc("");
@@ -691,8 +684,9 @@ function App() {
         .catch((error) => setStatus(error.message));
       return;
     }
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+    for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY]) {
+      const saved = localStorage.getItem(key);
+      if (!saved) continue;
       try {
         const loaded = JSON.parse(saved);
         if (isValidPlan(loaded)) {
@@ -701,13 +695,14 @@ function App() {
           setSelectedSectionId(normalized.sections[0]?.id || "");
           setLocalSavedAt(loaded.updatedAt || "");
           restoreAudioFromPlan(normalized, { clearWhenMissing: true });
+          break;
         } else {
-          localStorage.removeItem(STORAGE_KEY);
-          setStatus("깨진 저장 데이터를 초기화했습니다. 새 프로젝트를 만들어 주세요.");
+          localStorage.removeItem(key);
+          continue;
         }
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
-        setStatus("읽을 수 없는 저장 데이터를 초기화했습니다. 새 프로젝트를 만들어 주세요.");
+        localStorage.removeItem(key);
+        continue;
       }
     }
   }, [readonly, shareId]);
@@ -716,6 +711,7 @@ function App() {
     if (!plan || readonly) return;
     const updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...plan, updatedAt }));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     setLocalSavedAt(updatedAt);
   }, [plan, readonly]);
 
@@ -946,8 +942,8 @@ function App() {
     }
   }
 
-  function coupleGridPlacement(currentPlan, section, firstId, secondId, point, extraPositions = {}, excludeIds = [firstId, secondId]) {
-    return findCoupleGridPlacement({
+  function pairGridPlacement(currentPlan, section, firstId, secondId, point, extraPositions = {}, excludeIds = [firstId, secondId]) {
+    return findPairGridPlacement({
       plan: currentPlan,
       firstId,
       secondId,
@@ -1040,7 +1036,7 @@ function App() {
       const pairCenter = center || (firstPosition && secondPosition
         ? { x: (firstPosition.x + secondPosition.x) / 2, y: (firstPosition.y + secondPosition.y) / 2 }
         : firstPosition || secondPosition || { x: 50, y: 50 });
-      const pairPositions = coupleGridPlacement(current, section, firstId, secondId, pairCenter);
+      const pairPositions = pairGridPlacement(current, section, firstId, secondId, pairCenter);
       if (!pairPositions) return current;
       const nextPositions = {
         ...section.positions,
@@ -1074,7 +1070,7 @@ function App() {
         const center = dragged && target
           ? snapPoint({ x: (dragged.x + target.x) / 2, y: (dragged.y + target.y) / 2 }, snapEnabled)
           : drag.pointer;
-        const pairPositions = coupleGridPlacement(current, section, action.performerId, action.targetId, center);
+        const pairPositions = pairGridPlacement(current, section, action.performerId, action.targetId, center);
         if (!pairPositions) return current;
         const nextPositions = {
           ...basePositions,
@@ -1119,7 +1115,7 @@ function App() {
         };
         const sourcePair = nextPairs[sourcePairIndex];
         const targetPair = nextPairs[targetPairIndex];
-        const sourcePositions = coupleGridPlacement(
+        const sourcePositions = pairGridPlacement(
           current,
           section,
           sourcePair[0],
@@ -1129,7 +1125,7 @@ function App() {
           [...sourcePair, ...targetPair]
         );
         if (!sourcePositions) return current;
-        const targetPositions = coupleGridPlacement(
+        const targetPositions = pairGridPlacement(
           current,
           section,
           targetPair[0],
@@ -1188,7 +1184,7 @@ function App() {
       setStatus(`${source?.name || source?.label || "출연자"}와 ${target?.name || target?.label || "출연자"}를 교체했습니다.`);
     } else if (action.sourcePair) {
       setSelectedPairKey("");
-      setStatus("커플을 해제하고 토큰을 이동했습니다.");
+    setStatus("페어를 해제하고 토큰을 이동했습니다.");
     }
   }
 
@@ -1271,7 +1267,7 @@ function App() {
 
   function resetSelectedFormation() {
     if (readonly || !selectedSection) return;
-    const confirmed = window.confirm("선택한 대형의 토큰 위치와 커플 연결을 기본 배치로 초기화할까요?");
+    const confirmed = window.confirm("선택한 대형의 토큰 위치와 페어 연결을 기본 배치로 초기화할까요?");
     if (!confirmed) return;
     const resetPositions = defaultSections(plan.performers)[0].positions;
     updatePlan((current) => ({
@@ -1400,7 +1396,7 @@ function App() {
     drag.moved = true;
     drag.finalPositions = { [performerId]: currentToken };
     setSelectedPairKey("");
-    setDragHint("놓으면 커플 해제");
+    setDragHint("놓으면 페어 해제");
   }
 
   function onStagePointerMove(event) {
@@ -1571,20 +1567,20 @@ function App() {
       x: startCenter.x + pointer.x - basePointer.x,
       y: startCenter.y + pointer.y - basePointer.y
     };
-    const finalPositions = coupleGridPlacement(plan, selectedSection, firstId, secondId, targetCenter);
+    const finalPositions = pairGridPlacement(plan, selectedSection, firstId, secondId, targetCenter);
     if (!finalPositions) {
       setDragHint("이동할 빈 그리드가 없습니다");
       return null;
     }
     drag.finalPositions = finalPositions;
     setDragPositions(drag.finalPositions);
-    setDragHint(drag.source === "token" ? "커플 이동 중" : "");
+    setDragHint(drag.source === "token" ? "페어 이동 중" : "");
     return drag.finalPositions;
   }
 
   function positionsForPairCenter(pair, center) {
     const [firstId, secondId] = pair;
-    return coupleGridPlacement(plan, selectedSection, firstId, secondId, center);
+    return pairGridPlacement(plan, selectedSection, firstId, secondId, center);
   }
 
   function handleStageTap(event) {
@@ -1658,6 +1654,7 @@ function App() {
     const restoredAudioUrl = resolveAudioUrl(plan.audio);
     const replacingAudio = Boolean(restoredAudioUrl || audioSrc);
     if (restoredAudioUrl && audioMatchesFile(plan.audio, file, fingerprint)) {
+      rejectedAudioUrlsRef.current = new Set();
       if (localAudioUrlRef.current) {
         URL.revokeObjectURL(localAudioUrlRef.current);
         localAudioUrlRef.current = "";
@@ -1673,6 +1670,7 @@ function App() {
       if (localAudioUrlRef.current) URL.revokeObjectURL(localAudioUrlRef.current);
       localUrl = URL.createObjectURL(file);
       localAudioUrlRef.current = localUrl;
+      rejectedAudioUrlsRef.current = new Set();
       setAudioSrc(localUrl);
     }
     setAudioUploadStatus("uploading");
@@ -1681,6 +1679,7 @@ function App() {
     try {
       const audio = await uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint);
       updatePlan((current) => ({ ...current, audio }));
+      rejectedAudioUrlsRef.current = new Set();
       setAudioSrc(resolveAudioUrl(audio));
       setAudioUploadStatus("uploaded");
       setStatus(`음악 저장됨: ${audio.fileName}`);
@@ -1758,7 +1757,7 @@ function App() {
     const copy = {
       ...clonePlan(plan),
       id: uid("project"),
-      title: `${plan.title || "공유 안무"} 사본`,
+      title: `${plan.title || "공유 Movemap"} 사본`,
       updatedAt: copiedAt
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(copy));
@@ -1827,7 +1826,7 @@ function App() {
       try {
     const loaded = JSON.parse(reader.result);
         if (!isValidPlan(loaded)) {
-          setStatus("올바른 안무 파일이 아닙니다.");
+          setStatus("올바른 Movemap 프로젝트 파일이 아닙니다.");
           return;
         }
         const normalized = normalizePlan(loaded);
@@ -1839,9 +1838,9 @@ function App() {
         setRedoStack([]);
         resetTransientEditState();
         const restored = restoreAudioFromPlan(normalized, { clearWhenMissing: true });
-        setStatus(restored ? "저장한 안무와 서버 음악을 불러왔습니다." : "저장한 안무를 불러왔습니다.");
+        setStatus(restored ? "저장한 프로젝트와 서버 음악을 불러왔습니다." : "저장한 프로젝트를 불러왔습니다.");
       } catch {
-        setStatus("안무 파일을 읽을 수 없습니다.");
+        setStatus("프로젝트 파일을 읽을 수 없습니다.");
       }
     };
     reader.readAsText(file);
@@ -1952,11 +1951,11 @@ function App() {
             <button onClick={copyShareUrl}>링크 복사</button>
           </>
         )}
-        <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "안무 파일 공유"}</button>
+        <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "프로젝트 파일 공유"}</button>
         <button onClick={() => exportPng()}>현재 PNG</button>
         <button onClick={exportAllPng}>대형 PNG 전체 저장</button>
         <button onClick={() => window.print()}>인쇄/PDF</button>
-        {!readonly && <label className="file-button tertiary">저장한 안무 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
+        {!readonly && <label className="file-button tertiary">저장한 프로젝트 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
       </div>
     );
   }
@@ -2031,7 +2030,7 @@ function App() {
       : [];
     const selectionTitle = dragHint || (
       selectedPair
-        ? `${selectedPairNames.join(" - ")} 커플`
+        ? `${selectedPairNames.join(" - ")} 페어`
         : selectedPerformer
           ? `${selectedPerformer.name || selectedPerformer.label} 토큰`
           : "선택 없음"
@@ -2041,7 +2040,7 @@ function App() {
         <div className="panel-head">
           <div>
             <h2>배치</h2>
-            <p className="muted">무대 위 토큰과 커플을 조작합니다.</p>
+            <p className="muted">무대 위 토큰과 페어를 조작합니다.</p>
           </div>
         </div>
         <div className="tool-card">
@@ -2050,21 +2049,21 @@ function App() {
           {selectedPair ? (
             <div className="selection-actions">
               <em>빈 무대 클릭: 1회 이동 / 다시 클릭: 선택 해제</em>
-              <em>커플 토큰이나 선을 드래그하면 함께 이동</em>
+              <em>페어 토큰이나 선을 드래그하면 함께 이동</em>
               <em>한 명만 조정: 길게 누른 뒤 드래그</em>
-              {!readonly && <button className="danger-button compact-danger" onClick={() => removePairByKey(selectedPairKey)}>커플 해제</button>}
+              {!readonly && <button className="danger-button compact-danger" onClick={() => removePairByKey(selectedPairKey)}>페어 해제</button>}
             </div>
           ) : selectedPerformer ? (
             <p className="muted">빈 무대 클릭: 1회 이동 / 다시 클릭: 선택 해제</p>
           ) : (
-            <p className="muted">토큰이나 커플을 선택하세요.</p>
+            <p className="muted">토큰이나 페어를 선택하세요.</p>
           )}
           {!readonly && <button className="danger-button compact-danger" onClick={resetSelectedFormation}>대형 초기화</button>}
         </div>
         <div className="partner-box">
           <div className="panel-head">
-            <h3>커플</h3>
-            {!readonly && <button onClick={addPair}>직접 커플 추가</button>}
+            <h3>페어</h3>
+            {!readonly && <button onClick={addPair}>직접 페어 추가</button>}
           </div>
           {(partnerSet?.pairs || []).map((pair, index) => (
             <div
@@ -2181,18 +2180,18 @@ function App() {
 
         <div className="share-actions">
           {!readonly && <button onClick={saveProjectToCloud}>저장하기</button>}
-          <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "안무 파일 공유"}</button>
+          <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "프로젝트 파일 공유"}</button>
           <button onClick={() => exportPng()}>현재 PNG</button>
           <button onClick={exportAllPng}>대형 PNG 전체 저장</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
         </div>
 
         <div className="backup-actions">
-          {!readonly && <label className="file-button tertiary">저장한 안무 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
+          {!readonly && <label className="file-button tertiary">저장한 프로젝트 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
           <span>클라우드 저장이 실패해도 파일로 공유하거나 복원할 수 있습니다.</span>
         </div>
 
-        <p className="muted">기본 저장은 Supabase 클라우드에 저장됩니다. 파일 공유가 필요하면 안무 파일(.json), PNG, PDF로 내보낼 수 있으며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
+        <p className="muted">기본 저장은 Supabase 클라우드에 저장됩니다. 파일 공유가 필요하면 프로젝트 파일(.json), PNG, PDF로 내보낼 수 있으며, 음악은 public URL로 저장되어 링크를 아는 사람이 접근할 수 있습니다.</p>
       </div>
     );
   }
@@ -2220,7 +2219,7 @@ function App() {
       ? `이 기기에 자동 저장됨 · ${formatClockTime(localSavedAt)}`
       : "이 기기에 자동 저장 준비됨";
   const selectedStateText = selectedPairKey
-    ? "커플 선택됨"
+    ? "페어 선택됨"
     : selectedPerformer
       ? `${selectedPerformer.name || selectedPerformer.label} 선택됨`
       : "선택 없음";
@@ -2229,7 +2228,7 @@ function App() {
     if (statusRecovery === "share" && status.includes("Supabase 저장 실패")) {
       return (
         <div className="status-actions">
-          <button onClick={exportJson}>안무 파일 공유</button>
+          <button onClick={exportJson}>프로젝트 파일 공유</button>
           <button onClick={() => exportPng()}>현재 PNG</button>
           <button onClick={() => window.print()}>인쇄/PDF</button>
         </div>
@@ -2261,7 +2260,7 @@ function App() {
         <div className="readonly-banner">
           <div>
             <strong>보기 전용 링크</strong>
-            <span>공유된 안무를 확인 중입니다. 수정하려면 이 기기에 사본을 만드세요.</span>
+            <span>공유된 Movemap 프로젝트를 확인 중입니다. 수정하려면 이 기기에 사본을 만드세요.</span>
           </div>
           <div className="readonly-actions">
             <button onClick={saveEditableCopy}>사본으로 편집</button>
@@ -2446,7 +2445,7 @@ function App() {
                     <title>{fullName}</title>
                     <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
                     {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
-                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_COUPLE_RING_RADIUS : COUPLE_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.78" : "0.62"} pointerEvents="none" />}
+                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_PAIR_RING_RADIUS : PAIR_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.78" : "0.62"} pointerEvents="none" />}
                     {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
                     {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
                     <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
@@ -2516,7 +2515,8 @@ function App() {
                 syncAudioTime();
               }}
               onError={() => {
-                const fallbackUrl = audioUrlCandidates(plan.audio).find((url) => url !== audioSrc);
+                rejectedAudioUrlsRef.current.add(audioSrc);
+                const fallbackUrl = nextAudioSourceCandidate(plan.audio, supabaseConfig(), [...rejectedAudioUrlsRef.current]);
                 if (fallbackUrl) {
                   setAudioSrc(fallbackUrl);
                   setAudioUploadStatus("uploaded");

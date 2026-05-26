@@ -24,6 +24,7 @@ class ErrorBoundary extends React.Component {
             <button
               className="primary"
               onClick={() => {
+                localStorage.removeItem("movemap-project");
                 localStorage.removeItem("choreo-stage-planner-project");
                 window.location.reload();
               }}

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  COUPLE_MERGE_DISTANCE,
+  PAIR_MERGE_DISTANCE,
   findIndependentMergeCandidate,
   resolveEmptyStageTap,
   resolveSelectionClick,
@@ -180,7 +180,7 @@ test("merge candidates allow visually overlapping tokens", () => {
   });
 
   assert.equal(candidate?.id, "p2");
-  assert.ok(candidate.gap <= COUPLE_MERGE_DISTANCE);
+  assert.ok(candidate.gap <= PAIR_MERGE_DISTANCE);
 });
 
 test("nearby but non-overlapping tokens do not create a merge candidate", () => {

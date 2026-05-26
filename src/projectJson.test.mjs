@@ -19,5 +19,5 @@ test("creates a plain json save file from the current project", async () => {
 test("uses a fallback filename when the project has no title", () => {
   const download = createProjectJsonDownload({ title: "   " });
 
-  assert.equal(download.filename, "choreo-project.json");
+  assert.equal(download.filename, "movemap-project.json");
 });
