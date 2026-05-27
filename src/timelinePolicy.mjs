@@ -173,18 +173,28 @@ export function formationTimelinePixels(section, index, pixelsPerSecond) {
 }
 
 export function layoutFormationBlocks(sections = [], pixelsPerSecond, options = {}) {
+  const markerWidthPx = Math.max(0, Number(options.markerWidthPx) || 68);
+  const markerGapPx = Math.max(0, Number(options.markerGapPx) || 4);
   const minSegmentWidthPx = Math.max(0, Number(options.minSegmentWidthPx) || 0);
+  const timelineStartOffsetPx = sections.length > 1 ? markerWidthPx + markerGapPx : 0;
 
   return sections.map((section, index) => {
     const block = formationTimelinePixels(section, index, pixelsPerSecond);
-    const isTick = block.isMarker || block.widthPx === 0;
-    const hitWidthPx = isTick ? 0 : Math.max(block.widthPx, minSegmentWidthPx);
+    const isTick = !block.isMarker && block.widthPx === 0;
+    const hitWidthPx = block.isMarker
+      ? markerWidthPx
+      : isTick ? 0 : Math.max(block.widthPx, minSegmentWidthPx);
+    const logicalLeftPx = block.leftPx;
+    const leftPx = block.isMarker ? block.leftPx : block.leftPx + timelineStartOffsetPx;
     return {
       ...block,
+      leftPx,
+      logicalLeftPx,
+      arrivalPx: block.isMarker ? block.arrivalPx : block.arrivalPx + timelineStartOffsetPx,
       isTick,
       row: 0,
       hitWidthPx,
-      visualRightPx: block.leftPx + hitWidthPx
+      visualRightPx: leftPx + hitWidthPx
     };
   });
 }

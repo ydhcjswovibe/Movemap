@@ -2992,6 +2992,7 @@ function App() {
                         ].filter(Boolean).join(" ")}
                         style={{
                           "--formation-left": `${block.leftPx}px`,
+                          "--formation-logical-left": `${block.logicalLeftPx}px`,
                           "--formation-width": `${block.widthPx}px`,
                           "--formation-hit-width": `${block.hitWidthPx}px`,
                           "--formation-arrival": `${block.arrivalPx}px`

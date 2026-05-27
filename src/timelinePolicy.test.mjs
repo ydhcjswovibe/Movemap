@@ -482,17 +482,17 @@ test("formation block layout preserves logical x positions in a single lane", ()
   const blocks = layoutFormationBlocks(sections, 10);
 
   assert.deepEqual(
-    blocks.map((block) => ({ id: block.sectionId, left: block.leftPx, width: block.widthPx, hit: block.hitWidthPx, row: block.row })),
+    blocks.map((block) => ({ id: block.sectionId, left: block.leftPx, logicalLeft: block.logicalLeftPx, width: block.widthPx, hit: block.hitWidthPx, row: block.row })),
     [
-      { id: "a", left: 0, width: 0, hit: 0, row: 0 },
-      { id: "b", left: 0, width: 80, hit: 80, row: 0 },
-      { id: "c", left: 60, width: 40, hit: 40, row: 0 },
-      { id: "d", left: 180, width: 20, hit: 20, row: 0 }
+      { id: "a", left: 0, logicalLeft: 0, width: 0, hit: 68, row: 0 },
+      { id: "b", left: 72, logicalLeft: 0, width: 80, hit: 80, row: 0 },
+      { id: "c", left: 132, logicalLeft: 60, width: 40, hit: 40, row: 0 },
+      { id: "d", left: 252, logicalLeft: 180, width: 20, hit: 20, row: 0 }
     ]
   );
 });
 
-test("formation block layout does not give markers or zero-duration blocks overlap width", () => {
+test("formation block layout shows F1 and offsets later blocks to avoid overlap", () => {
   const blocks = layoutFormationBlocks([
     { id: "a", time: 0, moveDuration: 0 },
     { id: "b", time: 0.2, moveDuration: 0.2 },
@@ -501,12 +501,12 @@ test("formation block layout does not give markers or zero-duration blocks overl
   ], 38);
 
   assert.deepEqual(
-    blocks.map((block) => ({ id: block.sectionId, left: block.leftPx, hit: block.hitWidthPx })),
+    blocks.map((block) => ({ id: block.sectionId, left: block.leftPx, logicalLeft: block.logicalLeftPx, hit: block.hitWidthPx, marker: block.isMarker, tick: block.isTick })),
     [
-      { id: "a", left: 0, hit: 0 },
-      { id: "b", left: 0, hit: 7.6000000000000005 },
-      { id: "c", left: 7.6000000000000005, hit: 7.6000000000000005 },
-      { id: "d", left: 76, hit: 0 }
+      { id: "a", left: 0, logicalLeft: 0, hit: 68, marker: true, tick: false },
+      { id: "b", left: 72, logicalLeft: 0, hit: 7.6000000000000005, marker: false, tick: false },
+      { id: "c", left: 79.6, logicalLeft: 7.6000000000000005, hit: 7.6000000000000005, marker: false, tick: false },
+      { id: "d", left: 148, logicalLeft: 76, hit: 0, marker: false, tick: true }
     ]
   );
 });

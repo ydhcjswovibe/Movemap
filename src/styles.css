@@ -924,6 +924,13 @@ h3 {
 
 .formation-block.marker {
   left: var(--formation-left);
+  width: 68px;
+  max-width: 68px;
+  min-width: 68px;
+}
+
+.formation-block.marker em {
+  display: none;
 }
 
 .formation-block.tick {
@@ -1644,8 +1651,9 @@ h3 {
   }
 
   .formation-block.marker {
-    width: 0;
-    max-width: 0;
+    width: 68px;
+    max-width: 68px;
+    min-width: 68px;
   }
 
   .selected-formation-bar {

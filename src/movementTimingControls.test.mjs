@@ -26,6 +26,7 @@ test("bottom timeline uses formation and audio lanes", () => {
   assert.doesNotMatch(appSource, /visualLeftPx/);
   assert.doesNotMatch(appSource, /visualShiftPx/);
   assert.match(appSource, /"--formation-left": `\$\{block\.leftPx\}px`/);
+  assert.match(appSource, /"--formation-logical-left": `\$\{block\.logicalLeftPx\}px`/);
   assert.doesNotMatch(appSource, /"--formation-top"/);
   assert.match(appSource, /"--formation-width": `\$\{block\.widthPx\}px`/);
   assert.match(appSource, /"--formation-hit-width": `\$\{block\.hitWidthPx\}px`/);
@@ -53,6 +54,7 @@ test("formation blocks use HitCut-style pixel timeline controls", () => {
   assert.match(formationBlockRule, /left:\s*var\(--formation-left\);/);
   assert.match(formationBlockRule, /box-sizing:\s*border-box;/);
   assert.match(formationBlockRule, /width:\s*var\(--formation-hit-width, var\(--formation-width\)\);/);
+  assert.match(formationMarkerRule, /width:\s*68px;/);
   assert.match(styleSource, /\.formation-block\.tick \{[\s\S]*?width:\s*0;/);
   assert.match(styleSource, /\.formation-block\.tick::before \{/);
   assert.doesNotMatch(formationMarkerRule, /transform:\s*translateX\(-50%\);/);
