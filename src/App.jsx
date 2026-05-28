@@ -820,21 +820,22 @@ function App() {
       sectionId: timelineReorderPreview.sectionId,
       toIndex: timelineReorderPreview.toIndex
     });
-    const projectedBlocks = layoutFormationBlocks(projectedSections, timelinePixelsPerSecond);
     const projectedIndex = projectedSections.findIndex((section) => section.id === timelineReorderPreview.sectionId);
     if (projectedIndex <= 0) return null;
     const previousSection = projectedSections[projectedIndex - 1];
-    const previousBlock = projectedBlocks[projectedIndex - 1];
+    const previousCurrentIndex = sortedSections.findIndex((section) => section.id === previousSection.id);
+    const previousCurrentBlock = timelineFormationBlocks[previousCurrentIndex];
+    if (!previousCurrentBlock) return null;
     const nextSection = projectedSections[projectedIndex + 1];
     const slotLabel = nextSection
       ? `${previousSection.name} 뒤, ${nextSection.name} 앞`
       : `${previousSection.name} 뒤`;
     return {
-      leftPx: previousBlock.visualRightPx,
+      leftPx: previousCurrentBlock.visualRightPx,
       isEndSlot: !nextSection,
       slotLabel
     };
-  }, [sortedSections, timelinePixelsPerSecond, timelineReorderPreview]);
+  }, [sortedSections, timelineFormationBlocks, timelineReorderPreview]);
   const timelineContentWidth = Math.max(
     620,
     timelineViewportWidth,
