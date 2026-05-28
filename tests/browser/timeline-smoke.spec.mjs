@@ -51,16 +51,21 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await expect(formationBlocks.nth(1)).toContainText("0:04.0 - 0:10.0");
   await expect(formationBlocks.nth(2)).toContainText("0:10.0 - 0:14.0");
 
-  const f2BodyBox = await f2.boundingBox();
-  expect(f2BodyBox).not.toBeNull();
-  await page.mouse.move(f2BodyBox.x + f2BodyBox.width / 2, f2BodyBox.y + f2BodyBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(f2BodyBox.x + f2BodyBox.width / 2 - 24, f2BodyBox.y + f2BodyBox.height / 2, { steps: 5 });
-  await page.mouse.up();
-
   const finalTexts = (await formationTexts(page)).map(compactFormationText);
   expect(finalTexts[0]).toContain("F1 | Intro | 0:00.0 - 0:04.0");
   expect(finalTexts[1]).toContain("F2 | 대형 0:08.0 | 0:04.0 - 0:10.0");
   expect(finalTexts[2]).toContain("F3 | 대형 0:12.0 | 0:10.0 - 0:14.0");
+
+  const f1BodyBox = await formationBlocks.nth(0).boundingBox();
+  expect(f1BodyBox).not.toBeNull();
+  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2, f1BodyBox.y + f1BodyBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2 + 260, f1BodyBox.y + f1BodyBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  const reorderedTexts = (await formationTexts(page)).map(compactFormationText);
+  expect(reorderedTexts[0]).toContain("F1 | 대형 0:08.0 | 0:00.0 - 0:06.0");
+  expect(reorderedTexts[1]).toContain("F2 | Intro | 0:06.0 - 0:10.0");
+  expect(reorderedTexts[2]).toContain("F3 | 대형 0:12.0 | 0:10.0 - 0:14.0");
   expect(browserIssues).toEqual([]);
 });

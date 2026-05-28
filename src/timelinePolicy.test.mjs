@@ -363,19 +363,51 @@ test("applyFormationTimelineEdit body drag reports reorder preview across neighb
   assert.deepEqual(compactTiming(result.sections), compactTiming(sections));
 });
 
-test("applyFormationTimelineEdit blocks intro left trim and reorder", () => {
+test("applyFormationTimelineEdit first block body drag is reorder-only", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const smallDrag = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 1, timelineMax: 16 });
+  const reorderPreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
+
+  assert.equal(smallDrag.statusKind, "blocked");
+  assert.deepEqual(compactTiming(smallDrag.sections), compactTiming(sections));
+  assert.equal(reorderPreview.statusKind, "reorder-preview");
+  assert.equal(reorderPreview.toIndex, 1);
+  assert.deepEqual(compactTiming(reorderPreview.sections), compactTiming(sections));
+});
+
+test("applyFormationTimelineEdit first block can reorder and hands start role to the next block", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const result = applyFormationTimelineEdit({ sections, action: "reorder", sectionId: "intro", toIndex: 1 });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "b", start: 0, end: 4, time: 4, moveDuration: 4 },
+    { id: "intro", start: 4, end: 8, time: 8, moveDuration: 4 },
+    { id: "c", start: 8, end: 12, time: 12, moveDuration: 4 }
+  ]);
+  assertSequentialTiming(result.sections);
+});
+
+test("applyFormationTimelineEdit still blocks first block left trim", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 }
   ];
 
   const leftTrim = applyFormationTimelineEdit({ sections, action: "trim-left", sectionId: "intro", time: 2 });
-  const reorder = applyFormationTimelineEdit({ sections, action: "reorder", sectionId: "intro", toIndex: 1 });
 
   assert.equal(leftTrim.statusKind, "blocked");
-  assert.equal(reorder.statusKind, "blocked");
   assert.deepEqual(compactTiming(leftTrim.sections), compactTiming(sections));
-  assert.deepEqual(compactTiming(reorder.sections), compactTiming(sections));
 });
 
 test("compat trimFormationSegment delegates right trim expansion through the dispatcher", () => {
@@ -530,7 +562,7 @@ test("compat trimFormationSegment delegates intro right trim for contiguous next
   assert.equal(trimmed[1].moveDuration, 4);
 });
 
-test("compat reorder wrappers keep intro anchored and preserve compact movement durations", () => {
+test("compat reorder wrappers preserve compact movement durations while the first slot changes role", () => {
   const sections = [
     { id: "a", time: 4, moveDuration: 4 },
     { id: "b", time: 8, moveDuration: 3 },
@@ -548,11 +580,20 @@ test("compat reorder wrappers keep intro anchored and preserve compact movement 
 
   const introMoved = reorderFormationSegments({ sections, sectionId: "a", toIndex: 2 });
 
-  assert.deepEqual(introMoved.map((section) => section.id), ["a", "b", "c", "d"]);
-  assert.equal(resolveFormationReorderIndex({ sections, sectionId: "a", time: 12 }), 0);
-  assert.equal(
-    resolveFormationBodyDrag({ sections, sectionId: "a", deltaTime: 8, timelineMax: 20 }).action,
-    "blocked"
+  assert.deepEqual(introMoved.map((section) => section.id), ["b", "c", "a", "d"]);
+  assert.deepEqual(introMoved.map((section) => section.moveDuration), [3, 2, 4, 5]);
+  assert.deepEqual(introMoved.map((section) => [section.start, section.end]), [[0, 3], [3, 5], [5, 9], [9, 14]]);
+  assert.equal(resolveFormationReorderIndex({ sections, sectionId: "a", time: 12 }), 1);
+  assert.deepEqual(
+    resolveFormationBodyDrag({ sections, sectionId: "a", deltaTime: 8, timelineMax: 20 }),
+    {
+      action: "reorder-preview",
+      index: 0,
+      start: 1,
+      end: 5,
+      duration: 4,
+      toIndex: 1
+    }
   );
 });
 

@@ -91,7 +91,7 @@ function bodyDragBounds(current, previousSection, nextSection, timelineMax) {
 }
 
 function bodyDragReorderPreview(normalized, sectionId, index, rawStart, rawEnd, previousSection, nextSection, thresholdRatio, dragBounds) {
-  if (rawStart < dragBounds.minStart && previousSection && index > 1) {
+  if (rawStart < dragBounds.minStart && previousSection && index > 0) {
     const previousStart = quantizeTimelineTime(pointMoveStart(previousSection));
     const previousDuration = quantizeTimelineDelta(pointMoveDuration(previousSection));
     const threshold = quantizeTimelineTime(previousStart + previousDuration * (1 - thresholdRatio));
@@ -109,8 +109,6 @@ function bodyDragReorderPreview(normalized, sectionId, index, rawStart, rawEnd, 
 }
 
 function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, timelineMax = 0, reorderThresholdRatio = 2 / 3 } = {}) {
-  if (index === 0) return blockedFormationEdit(normalized, sectionId);
-
   const current = normalized[index];
   const previousSection = normalized[index - 1] || null;
   const nextSection = normalized[index + 1] || null;
@@ -143,17 +141,13 @@ function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, ti
 }
 
 function reorderFormationEdit(normalized, sectionId, index, toIndex) {
-  if (index === 0) return blockedFormationEdit(normalized, sectionId);
-
   const movable = [...normalized];
   const [moving] = movable.splice(index, 1);
-  const targetIndex = clampValue(Number(toIndex) || 0, 1, movable.length);
+  const targetIndex = clampValue(Number(toIndex) || 0, 0, movable.length);
   movable.splice(targetIndex, 0, moving);
   let cursor = 0;
   const nextSections = movable.map((item, itemIndex) => {
-    const duration = itemIndex === 0
-      ? quantizeTimelineDelta(pointTime(item))
-      : quantizeTimelineDelta(pointMoveDuration(item));
+    const duration = quantizeTimelineDelta(pointMoveDuration(item));
     const startTime = itemIndex === 0 ? 0 : cursor;
     const endTime = quantizeTimelineTime(startTime + duration);
     cursor = endTime;
@@ -212,7 +206,6 @@ export function resolveFormationReorderIndex({ sections = [], sectionId, time })
   const sortedSections = [...sections].sort((a, b) => pointTime(a) - pointTime(b));
   const currentIndex = sortedSections.findIndex((section) => section.id === sectionId);
   if (currentIndex < 0) return currentIndex;
-  if (currentIndex === 0) return 0;
 
   const movable = sortedSections.filter((section) => section.id !== sectionId);
   const targetTime = Math.max(0, Number(time) || 0);
