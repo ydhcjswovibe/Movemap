@@ -1,10 +1,10 @@
-# Movemap Product Vision And Platform Direction
+# Movemap Platform Strategy Notes
 
 ## Purpose
 
-This is a product vision document, not an implementation plan.
+This is a strategy notes document, not the canonical product spec or an implementation plan.
 
-It turns the Sway-based competitive analysis and the follow-up product decisions into the platform direction Movemap should grow toward. Concrete implementation slices should be planned separately.
+It captures the Sway-based competitive analysis follow-up decisions that should inform `SPEC.md`. Stable product decisions should be promoted into `SPEC.md`; concrete implementation slices should be planned separately in `MVP.md` or dated implementation plans.
 
 The source comparison document is:
 

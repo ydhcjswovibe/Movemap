@@ -2,21 +2,31 @@
 
 ## Purpose
 
-This document tracks the MVP against the current repo state.
+`SPEC.md` is the canonical product contract for Movemap. This file tracks implementation state, the active build queue, and a SPEC-aligned backlog.
 
-The MVP goal is to prove one workflow:
+`MVP.md` is not a second SPEC. It answers:
 
-Load music, add formations at the right moments, revise them quickly, and share a clear review link with team members.
+- what exists now
+- what is incomplete
+- what the next implementation slices are
+- what is planned later
+- what is explicitly out
 
-`SPEC.md` defines the product direction. This file is the implementation status board and work queue.
+The current MVP should prove this practical loop:
+
+> Sign in, create a real project, load music, create and revise formations at the right moments, understand transitions, and share a clear review link.
+
+Guest mode is demo-only. Durable creation, save, upload, share, and AI require login according to `SPEC.md`.
 
 ## Status Legend
 
 - `Done`: Implemented and usable in the current app.
-- `Needs tests`: Implemented, but the behavior should be locked with targeted tests before related changes.
+- `Needs tests`: Implemented, but targeted tests should lock behavior before related changes.
 - `Partial`: Some behavior exists, but the MVP experience is incomplete.
 - `Not started`: No meaningful implementation yet.
-- `Future`: Keep out of the editing MVP.
+- `Backlog`: SPEC-aligned, but not in the active queue.
+- `Future`: Platform direction, not current MVP work.
+- `Out`: Explicitly excluded by SPEC.
 
 ## Current Implementation Status
 
@@ -34,8 +44,8 @@ Current evidence:
 
 Remaining work:
 
-- Add behavior tests so this does not regress during timeline work.
-- Document the duplicate-timestamp rule. Current behavior allows adding at the captured time and sorts sections by arrival time.
+- Add behavior tests so music-timed formation creation does not regress during timeline work.
+- Document or test the duplicate-timestamp rule. Current behavior allows adding at the captured time and sorts sections by arrival time.
 
 ### Formation Timing Controls
 
@@ -83,8 +93,9 @@ Current evidence:
 Remaining work:
 
 - Multi-select performer movement is not implemented.
-- Role/part group selection is not implemented as an MVP editing accelerator.
-- Alignment/distribution tools are not implemented.
+- Role/part group selection is not implemented.
+- Alignment tools are not implemented.
+- Touch-native mobile stage editing is not implemented.
 
 ### Transition Path Readability
 
@@ -92,9 +103,10 @@ Status: `Partial`
 
 Current evidence:
 
-- Live stage rendering shows ghost positions from the previous formation.
-- Live stage rendering draws movement arrows from the previous formation to the active formation.
-- Export/read-only SVG rendering also includes previous-position ghosts and arrows.
+- `movementKeyframes.mjs` provides transition keyframe helpers.
+- `svgPathForPerformer()` exists.
+- Stage rendering shows previous-position ghosts and arrows.
+- Export/review SVG rendering also includes previous-position ghosts and arrows.
 - Selected performer dimming affects path opacity.
 
 Remaining work:
@@ -103,6 +115,7 @@ Remaining work:
 - Make selected performer path emphasis clearer.
 - Add path clutter handling for larger teams.
 - Reuse the same transition readability model in shared review.
+- Add long-distance movement warnings later.
 
 ### Timeline / Formation Rail
 
@@ -113,18 +126,18 @@ Current evidence:
 - `formation-rail` lists formation chips.
 - Clicking a chip calls `jumpTo(section)`.
 - Transport has play/pause, `대형 추가`, a range input, and time readout.
+- Bottom timeline MVP work has begun in the app and tests.
 
 Remaining work:
 
-- Replace the current rail/range control with a CapCut-style bottom timeline.
-- Add time ruler.
-- Add playback head.
+- Keep the CapCut-style bottom timeline as the main editing surface.
+- Add or strengthen time ruler, playback head, and formation block behavior.
 - Show formation blocks positioned by arrival time.
 - Show audio track or waveform-like strip.
 - Keep `+ Formation` near the timeline.
 - Do not add a large desktop-style menu system.
 
-### Sharing / Read-Only Review
+### Sharing / View And Edit Links
 
 Status: `Partial`
 
@@ -132,32 +145,65 @@ Current evidence:
 
 - Share route is detected from `/share/:id`.
 - `loadCloudProject()` loads shared projects.
-- Read-only mode hides editing actions.
+- Current shared routes behave as review-only views.
+- Editing actions are hidden in the current shared view.
 - Share link creation saves through cloud persistence.
 - JSON, PNG, and print/PDF fallback sharing exist.
 
+SPEC-aligned target:
+
+- View links allow no-login playback/review without editing.
+- Edit links allow no-login editing for recipients.
+- Project creation, project ownership, link creation, and link management require a signed-in owner.
+
 Remaining work:
 
-- Shared review should make current and next formation clearer.
-- Shared mobile review needs a focused playback/timeline experience.
-- Editing controls should remain hidden in read-only views.
+- Rename product language from generic share/read-only to View Link where applicable.
+- Add an Edit Link model and route behavior.
+- Add owner controls for creating/disabling Free links.
+- Keep current review-only behavior honest until edit links are implemented.
+- Improve shared mobile review playback and timeline clarity.
 
-### Account And Plan Model
+### Account, Plan, And Link Model
 
 Status: `Not started`
 
-Target model:
+SPEC target:
 
-- Guest: local editing, JSON import/export, basic PNG/PDF, no cloud projects, no share links.
-- Free Google login: up to 2 cloud projects, share links for saved projects, one audio file per project.
-- Paid candidate: more projects, larger audio storage, share management, templates, version history, team/class workspace.
+- Guest is demo-only.
+- Free login supports real small projects and first share.
+- Free includes 2-3 cloud projects, one audio file per project, one view link, one edit link, mobile full editing, basic 3D preview, basic templates, and limited AI.
+- Pro adds higher limits, more storage, managed links, version snapshots, templates, export, and AI allowance.
+- Team/Studio adds workspace, members, roles, shared libraries, comments, version history, and permissions.
 
 Remaining work:
 
-- Google login is not implemented.
-- Guest/account state is not implemented.
-- Free project limit enforcement is not implemented.
-- Billing is intentionally out of scope for the editing MVP.
+- Login is not implemented.
+- Guest demo state is not implemented.
+- Free project limits are not implemented.
+- View/Edit link limits are not implemented.
+- Billing is out of the current implementation slice.
+
+### Mobile Experience
+
+Status: `Partial`
+
+Current evidence:
+
+- The app is browser-accessible.
+- Shared review routes can be opened on mobile browsers.
+- Current mobile behavior is not yet a first-class editing surface.
+
+SPEC-aligned target:
+
+- Mobile becomes touch-native field editing, not a shrunken desktop UI.
+- Mobile should eventually support stage editing, roster edits, timeline formation selection, timing changes, transition review, 3D preview, AI generation, and sharing.
+
+Remaining work:
+
+- Polish mobile review before full mobile editing.
+- Add mobile stage drag foundation as an active slice.
+- Keep high-density timeline and inspector controls redesigned for touch.
 
 ### App Packaging
 
@@ -167,196 +213,281 @@ Direction:
 
 - Keep the app web-first.
 - Keep shared review links browser-accessible.
-- Isolate file, audio, share, and auth behavior enough to support future app packaging.
-- Do not start a native rewrite in the MVP.
+- Isolate file, audio, share, authentication, and plan behavior behind small interfaces so they can be adapted for an app shell later.
+- Avoid a full native rewrite until the editing model is stable.
 
-## Revised Work Order
+## Current MVP Boundary
 
-### Slice 0: Baseline Tests For Existing Formation Flow
+The current MVP focuses on:
+
+- transition-first formation editing loop
+- bottom timeline clarity
+- formation management polish
+- shared review clarity
+- View/Edit link foundation
+- account/plan model foundation
+- mobile review and mobile stage-editing foundation
+
+The current MVP does not try to complete:
+
+- full mobile editor parity
+- full billing
+- full team workspace
+- AI generation
+- 3D Preview
+- Stage Reference
+- templates
+- advanced exports
+
+Those items can enter the Active Queue later when prerequisite data and interaction models are stable.
+
+## Active Queue
+
+The active queue prioritizes share/review correctness first, then transition clarity, then account/link foundation, then mobile editing. This keeps the first implementation wave tied to visible rehearsal value before expanding into AI, 3D, templates, or team operations.
+
+Queue dependency rule:
+
+- Each slice may introduce only the smallest shared helper needed for its acceptance criteria.
+- Broader plan/account modeling stays in `Slice 4: Account/Plan Foundation`.
+- If a slice discovers that a broader model change is required, pause and split that model work into its own slice before continuing.
+
+Completion update rule:
+
+- When a slice is completed, move its implemented behavior into `Current Implementation Status`.
+- Keep only remaining follow-up work in `Active Queue` or `Planned Backlog`.
+- Do not leave completed slice details in the active queue.
+
+### Slice 1: View/Edit Link Separation
 
 Goal:
 
-- Lock the behavior that already exists so timeline work does not accidentally break it.
+- Align sharing with SPEC by separating review-only View Links from editable Edit Links.
 
-Scope:
+User-visible behavior:
 
-- Test current-time formation creation.
-- Test previous-formation position copy.
-- Test immediate selection of the new formation.
-- Capture the current duplicate-timestamp behavior or define the rule before changing it.
+- A View Link opens playback/review without editing controls.
+- An Edit Link opens an editable project for recipients with the link.
+- Edit-link recipients may edit anonymously.
+- Link creation and management remain owner actions.
 
-Likely files:
+Acceptance criteria:
 
-- `src/App.jsx`
-- `src/sectionPolicy.mjs`
-- `src/sectionPolicy.test.mjs`
-- `src/movementTimingControls.test.mjs`
+- Existing shared routes are clearly treated as View Links.
+- Editing controls remain hidden for View Links.
+- Edit Link state can be represented in the project/link model.
+- Owner-facing copy distinguishes View Link from Edit Link.
+- Current behavior remains backward-compatible for existing share links.
 
-Completion criteria:
+Likely tests:
 
-- Existing `+ Formation` behavior is covered.
-- No visible UI change is required.
-- `npm test` and `npm run build` pass.
-
-### Slice 1: Bottom Timeline MVP
-
-Goal:
-
-- Make the bottom timeline the primary editing control.
-
-Scope:
-
-- Replace or evolve the existing `formation-rail` and transport range into a persistent bottom timeline.
-- Show a time ruler.
-- Show a playback head.
-- Show formation blocks positioned by arrival time.
-- Show an audio track or waveform-like strip.
-- Keep `+ Formation` near the timeline.
-- Selecting a formation block should call the same selection/jump behavior as the current rail.
+- View Link route hides edit actions.
+- Edit Link route exposes edit actions when enabled.
+- Link type is serialized/deserialized with project share metadata.
 
 Out of scope:
 
-- Real waveform analysis.
-- Drag retiming.
-- Multi-track production cues.
-- Large side menu redesign.
+- Billing.
+- Team role permissions.
+- Multiple named links.
+- Link expiration.
 
-Completion criteria:
-
-- Timeline is visible and readable on desktop and mobile widths.
-- Formation blocks reflect sorted section arrival times.
-- Clicking a formation block selects/jumps to that formation.
-- Existing creation, sharing, and export behavior still works.
-- `npm test` and `npm run build` pass.
-
-### Slice 2: Timeline Retiming
+### Slice 2: Mobile Review Polish
 
 Goal:
 
-- Let users adjust formation timing from the editing surface.
+- Make shared review usable on phone-sized screens before mobile full editing begins.
 
-Scope:
+User-visible behavior:
 
-- Edit selected formation arrival time from the timeline or selected formation panel.
-- Keep sections sorted by arrival time.
-- Preserve movement-duration semantics.
-- Keep selected formation stable after retiming.
-- Make timing edits undoable.
+- A performer can open a View Link on mobile and understand current formation, next formation, playback, and transition context.
 
-Decision to make in the detailed spec:
+Acceptance criteria:
 
-- Whether drag-to-retime ships in this slice or remains a later enhancement.
+- Mobile review layout does not expose editing controls.
+- Playback controls remain reachable.
+- Formation identity and timing remain readable.
+- Performer focus or selected-performer emphasis works on small screens.
+- Transition paths remain understandable enough for review.
 
-### Slice 3: Formation Management Polish
+Likely tests:
 
-Goal:
+- Browser smoke test for shared route at mobile viewport.
+- Assertion that edit controls are absent in View Link mode.
 
-- Make duplicate/delete behavior feel safe in repeated editing.
+Out of scope:
 
-Scope:
+- Mobile editing.
+- Edit Link recipient flow.
+- 3D Preview.
 
-- Duplicate selected formation with copied positions and partner data.
-- Delete selected formation.
-- Select nearest previous or next formation after deletion.
-- Keep last-section behavior explicit.
-- Preserve undo/redo.
-
-### Slice 4: Multi-Select Performer Movement
+### Slice 3: Transition View Upgrade
 
 Goal:
 
-- Let users revise changed performers without moving them one by one.
+- Strengthen Movemap's transition-first differentiation in editor and review.
 
-Scope:
+User-visible behavior:
 
-- Select multiple performers.
-- Move selected performers together.
-- Keep existing single-performer and pair movement intact.
-- Clear or preserve selection on formation change using one explicit rule.
+- Users can see how performers move between formations, not only where formations end.
 
-Decision to make in the detailed spec:
+Acceptance criteria:
 
-- First interaction model: shift-click, drag-box, or role/part selection.
+- Previous-to-current and current-to-next movement context is clear.
+- Selected performer path emphasis is stronger.
+- Path clutter can be reduced or toggled.
+- Shared review uses the same transition readability model as the editor.
 
-### Slice 5: Basic Alignment Tools
+Likely tests:
 
-Goal:
+- Unit tests for transition path selection/filtering helpers.
+- Browser smoke coverage for path visibility in editor and shared review.
 
-- Speed up cleanup after copying a previous formation.
+Out of scope:
 
-Scope:
+- AI path optimization.
+- Collision auto-fix.
+- Curved path drawing.
 
-- Align selected performers horizontally.
-- Align selected performers vertically.
-- Distribute selected performers evenly.
-- Center selected performers as a group.
-- Show these controls only when multi-selection exists.
-
-### Slice 6: Transition Readability
+### Slice 4: Account/Plan Foundation
 
 Goal:
 
-- Help users and team members understand movement between formations.
+- Introduce the state model needed for Guest Demo, Free, Pro, and Team behavior without implementing billing.
 
-Scope:
+User-visible behavior:
 
-- Add show/hide movement paths.
-- Emphasize selected performer path.
-- Reduce clutter for many performers.
-- Prepare the path model for read-only shared review.
+- Product copy and state distinguish demo use from signed-in project ownership.
 
-### Slice 7: Shared Review MVP
+Acceptance criteria:
+
+- Guest is represented as demo-only state.
+- Signed-in Free can be represented as owning real cloud projects.
+- Free limits can be centralized for project count, audio, and link count.
+- Pro/Team can be represented as plan states without billing.
+
+Likely tests:
+
+- Plan helper tests for Guest/Free/Pro/Team capability checks.
+- Link capability tests for Free vs Pro owner actions.
+
+Out of scope:
+
+- Payment provider.
+- Team member invitation.
+- Detailed role matrix.
+
+### Slice 5: Mobile Editing Foundation
 
 Goal:
 
-- Make the shared link easier for team members to understand.
+- Start mobile full editing with the smallest field-editing behavior: formation selection and performer drag.
 
-Scope:
+User-visible behavior:
 
-- Preserve view-only share links.
-- Improve shared playback with music.
-- Show current and next formation labels.
-- Keep mobile shared view readable.
-- Hide editing-only controls.
+- On a phone, a signed-in owner or edit-link recipient can select a formation and move a performer.
 
-### Slice 8: Account And Plan Foundation
+Acceptance criteria:
 
-Goal:
+- Touch drag updates performer position.
+- Changes persist through the existing project update path.
+- Undo remains available where the existing editor supports it.
+- Mobile editing uses touch-native controls, not desktop inspector compression.
 
-- Prepare guest, free login, and paid-plan boundaries after the editing MVP is strong.
+Likely tests:
 
-Scope:
+- Browser/mobile viewport smoke for performer drag.
+- Source-level test for route/mode gating if edit links are involved.
 
-- Google login.
-- Guest/account state.
-- Free Google users can save up to 2 cloud projects.
-- Free Google users can create share links for saved projects.
-- Paid plan represented as model/state only; billing can come later.
+Out of scope:
 
-## MVP Exclusions
+- Full mobile timeline editing.
+- Full roster management.
+- AI generation.
+- 3D Preview.
 
-Do not include these in the editing MVP:
+## Planned Backlog
 
-- Full native app rewrite
-- Realtime collaborative editing
-- Full team workspace
-- Comments and feedback
-- Automatic beat analysis
-- Video export
+### Stage Reference
+
+Goal: Add background image and simple reference objects that support spacing and transitions.
+
+Trigger to promote: stage coordinate and selection model is stable after transition/mobile editing slices.
+
+Depends on: canonical stage settings and object selection behavior.
+
+### 3D Preview
+
+Goal: Let users inspect formations and transitions from multiple angles.
+
+Trigger to promote: transition data and playback interpolation are stable.
+
+Depends on: canonical stage coordinate model and performer label rendering.
+
+### Templates
+
+Goal: Let users create common formations quickly from local deterministic templates.
+
+Trigger to promote: roster count and formation creation model are stable.
+
+Depends on: formation creation, roster metadata, and preview/apply behavior.
+
+### AI Single Formation
+
+Goal: Generate one validated formation proposal from prompt, roster, and stage constraints.
+
+Trigger to promote: deterministic templates and formation preview/apply are stable.
+
+Depends on: schema validation, roster ids, stage bounds, and undo checkpoint behavior.
+
+### Advanced Export
+
+Goal: Support polished exports beyond JSON and basic image/PDF.
+
+Trigger to promote: shared review and project presentation stabilize.
+
+Depends on: view rendering and plan-tier capability checks.
+
+## Future Platform
+
+These remain aligned with SPEC but should not drive current MVP execution:
+
+- Team Workspace
+- Comments and Feedback
+- Version History
+- Team Templates
+- Enterprise / School controls
+- SSO
+- branded exports
+- detailed role matrix
+- seat pricing
+
+## Explicitly Out
+
+These are excluded by SPEC unless a future SPEC update reopens them:
+
+- cameras
+- shot lists
+- full production planning
+- production inventory
 - 3D editing
-- Complex desktop-style menu system
-- Full billing implementation
-- Advanced share-link permissions
+- 3D props
+- realistic character models
+- real-time multiplayer editing
+- video motion capture
+- complex permission matrix
+- chat
+- task management
+- general project management
 
 ## Documentation Flow
 
-Use this document as the status board and implementation queue.
+- `SPEC.md` is canonical.
+- `MVP.md` tracks implementation status, Active Queue, and SPEC-aligned backlog.
+- `docs/superpowers/specs/2026-05-28-movemap-competitive-product-design.md` is the Sway/Formi reference research.
+- `docs/superpowers/specs/2026-05-28-movemap-platform-strategy-notes.md` records strategy decisions that informed `SPEC.md`.
 
-For each slice:
+When product direction changes:
 
-1. Create a detailed design document under `docs/superpowers/specs/`.
-2. Define acceptance criteria before editing code.
-3. Create an implementation plan under `docs/superpowers/plans/` if the slice is large enough to need one.
-4. Implement and verify the slice.
-
-The first detailed design is `docs/superpowers/specs/2026-05-26-bottom-timeline-mvp-design.md`.
+1. Update `SPEC.md`.
+2. Update `MVP.md` only where implementation status, boundary, queue, or backlog changes.
+3. Add or update dated strategy notes only when the reasoning needs to be preserved.
