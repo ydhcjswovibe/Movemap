@@ -7,12 +7,12 @@ import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 import { createShareUrl } from "./shareUrl.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
+  applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
   buildTimelineTicks,
   buildWaveformBars,
   calculateAnchoredZoomScrollX,
   calculateTimelineMaxScrollX,
-  clampFormationTiming,
   clampValue,
   formationTimelineLabel,
   layoutFormationBlocks,
@@ -21,12 +21,12 @@ import {
   normalizeWheelDelta,
   normalizeMovementKeyframes,
   pixelsToTime,
+  pointMoveDuration,
+  pointMoveStart,
+  pointTime,
   quantizeTimelineTime,
-  reorderFormationSegments,
-  resolveFormationBodyDrag,
   resolveFormationAddTarget,
-  snapFormationTime,
-  trimFormationSegment
+  snapFormationTime
 } from "./timelinePolicy.mjs";
 
 const STORAGE_KEY = "movemap-project";
@@ -256,20 +256,6 @@ function snapPoint(point, enabled) {
   };
 }
 
-function pointTime(point) {
-  return Number.isFinite(Number(point.time)) ? Number(point.time) : Number(point.end) || 0;
-}
-
-function pointMoveDuration(point) {
-  if (Number.isFinite(Number(point.moveDuration))) return Math.max(0, Number(point.moveDuration));
-  if (point.moveMode === "hold") return 0;
-  return Math.max(0, (Number(point.end) || 0) - (Number(point.start) || 0));
-}
-
-function pointMoveStart(point) {
-  return Math.max(0, pointTime(point) - pointMoveDuration(point));
-}
-
 function sectionsTimingSignature(sections) {
   return sections.map((section) => [
     section.id,
@@ -304,7 +290,6 @@ function normalizePlan(plan) {
 
 function defaultSections(performers) {
   const firstPositions = {};
-  const secondPositions = {};
   const count = Math.max(1, performers.length);
   performers.forEach((performer, index) => {
     const col = index % Math.ceil(count / 2);
@@ -313,37 +298,20 @@ function defaultSections(performers) {
       x: 18 + col * (64 / Math.max(1, Math.ceil(count / 2) - 1 || 1)),
       y: row === 0 ? 70 : 42
     };
-    secondPositions[performer.id] = {
-      x: 22 + ((count - 1 - index) % Math.ceil(count / 2)) * (56 / Math.max(1, Math.ceil(count / 2) - 1 || 1)),
-      y: row === 0 ? 48 : 75
-    };
   });
 
   return [
     {
       id: uid("sec"),
       name: "Intro",
-      time: 0,
-      moveDuration: 0,
+      time: 4,
+      moveDuration: 4,
       start: 0,
-      end: 0,
+      end: 4,
       notes: "첫 대형을 잡고 관객에게 전체 인원을 보여줍니다.",
       moveMode: "hold",
       positions: firstPositions,
       frontFocus: performers.slice(0, Math.min(4, performers.length)).map((p) => p.id),
-      partnerSetId: ""
-    },
-    {
-      id: uid("sec"),
-      name: "Change",
-      time: 20,
-      moveDuration: 6,
-      start: 14,
-      end: 20,
-      notes: "다음 대형으로 이동합니다. 필요한 사람은 중앙을 지나가게 배치하세요.",
-      moveMode: "smooth",
-      positions: secondPositions,
-      frontFocus: performers.slice(-Math.min(4, performers.length)).map((p) => p.id),
       partnerSetId: ""
     }
   ];
@@ -688,7 +656,7 @@ function App() {
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [isBottomSheetExpanded, setIsBottomSheetExpanded] = useState(false);
   const [isStageFocus, setIsStageFocus] = useState(false);
-  const [timelinePixelsPerSecond, setTimelinePixelsPerSecond] = useState(38);
+  const [timelinePixelsPerSecond, setTimelinePixelsPerSecond] = useState(56);
   const [timelineScrollX, setTimelineScrollX] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineSnapTime, setTimelineSnapTime] = useState(null);
@@ -812,14 +780,19 @@ function App() {
     return Math.max(duration || 0, lastSectionEnd || 120);
   }, [duration, sortedSections]);
   const sliderTime = clamp(currentTime, 0, timelineMax);
-  const timelineFormationBlocks = useMemo(() => layoutFormationBlocks(sortedSections, timelinePixelsPerSecond), [sortedSections, timelinePixelsPerSecond]);
+  const timelineFormationBlocks = useMemo(() => layoutFormationBlocks(sortedSections, timelinePixelsPerSecond, {
+    introAsSegment: true,
+    markerWidthPx: 132,
+    markerGapPx: 8
+  }), [sortedSections, timelinePixelsPerSecond]);
   const timelineReorderGuide = useMemo(() => {
     if (!timelineReorderPreview) return null;
-    const projectedSections = reorderFormationSegments({
+    const projectedSections = applyFormationTimelineEdit({
       sections: sortedSections,
+      action: "reorder",
       sectionId: timelineReorderPreview.sectionId,
       toIndex: timelineReorderPreview.toIndex
-    });
+    }).sections;
     const projectedIndex = projectedSections.findIndex((section) => section.id === timelineReorderPreview.sectionId);
     if (projectedIndex <= 0) return null;
     const previousSection = projectedSections[projectedIndex - 1];
@@ -972,13 +945,24 @@ function App() {
   }
 
   function updateSectionTiming(sectionId, time, moveDuration = null, options = {}) {
-    updateSection(sectionId, clampFormationTiming({
+    const firstPass = applyFormationTimelineEdit({
       sections: sortedSections,
+      action: "trim-right",
       sectionId,
       time,
-      moveDuration,
       timelineMax
-    }), options);
+    }).sections;
+    const current = firstPass.find((section) => section.id === sectionId);
+    const nextSections = moveDuration === null || !current
+      ? firstPass
+      : applyFormationTimelineEdit({
+        sections: firstPass,
+        action: "trim-left",
+        sectionId,
+        time: pointTime(current) - moveDuration,
+        timelineMax
+      }).sections;
+    replaceSections(nextSections, options);
   }
 
   function replaceSections(nextSections, options = {}) {
@@ -1135,7 +1119,6 @@ function App() {
 
   function onFormationPointerDown(event, section, index, mode) {
     if (readonly) return;
-    if (mode !== "body" && index === 0) return;
     event.preventDefault();
     event.stopPropagation();
     ignoreNextFormationClickRef.current = true;
@@ -1144,11 +1127,8 @@ function App() {
 
     const startClientX = event.clientX;
     const startArrival = pointTime(section);
-    const startMoveDuration = pointMoveDuration(section);
     const startMoveStart = pointMoveStart(section);
     const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
-    const nextSection = sortedSections[index + 1] || null;
-    const nextMoveStart = nextSection ? pointMoveStart(nextSection) : null;
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasDragged = false;
     let hasEdited = false;
@@ -1164,7 +1144,6 @@ function App() {
     };
 
     const commit = (clientX) => {
-      if (index === 0) return;
       const deltaTime = (clientX - startClientX) / timelinePixelsPerSecond;
       if (Math.abs(clientX - startClientX) >= 4) hasDragged = true;
 
@@ -1172,53 +1151,47 @@ function App() {
         const rawStart = startMoveStart + deltaTime;
         const snap = snapTimelineTime(rawStart, section, previousArrival, startArrival);
         setTimelineSnapTime(snap.snapped ? snap.time : null);
-        const nextSections = trimFormationSegment({
+        const result = applyFormationTimelineEdit({
           sections: sortedSections,
+          action: "trim-left",
           sectionId: section.id,
-          edge: "left",
           time: snap.time,
           timelineMax
         });
-        replaceSectionsIfChanged(nextSections);
+        replaceSectionsIfChanged(result.sections);
         setTimelineBlockedEdge(rawStart < previousArrival ? { sectionId: section.id, edge: "left" } : null);
         return;
       }
 
       if (mode === "right") {
         const rawEnd = startArrival + deltaTime;
-        const rightLimit = nextMoveStart === null ? Math.max(timelineMax, rawEnd) : nextMoveStart;
+        const rightLimit = Math.max(timelineMax, rawEnd);
         const snap = snapTimelineTime(rawEnd, section, startMoveStart, rightLimit);
         setTimelineSnapTime(snap.snapped ? snap.time : null);
-        const nextSections = trimFormationSegment({
+        const result = applyFormationTimelineEdit({
           sections: sortedSections,
+          action: "trim-right",
           sectionId: section.id,
-          edge: "right",
           time: snap.time,
           timelineMax: Math.max(timelineMax, snap.time)
         });
-        replaceSectionsIfChanged(nextSections);
-        setTimelineBlockedEdge(nextMoveStart !== null && rawEnd > nextMoveStart ? { sectionId: section.id, edge: "right" } : null);
+        replaceSectionsIfChanged(result.sections);
+        setTimelineBlockedEdge(null);
         return;
       }
 
-      const dragResult = resolveFormationBodyDrag({
+      const dragResult = applyFormationTimelineEdit({
         sections: sortedSections,
+        action: "move-body",
         sectionId: section.id,
         deltaTime,
         timelineMax
       });
       reorderTargetIndex = dragResult.toIndex;
-      setTimelineReorderPreview(dragResult.action === "reorder-preview" ? { sectionId: section.id, toIndex: dragResult.toIndex } : null);
+      setTimelineReorderPreview(dragResult.statusKind === "reorder-preview" ? { sectionId: section.id, toIndex: dragResult.toIndex } : null);
       setTimelineSnapTime(null);
-      setTimelineBlockedEdge(dragResult.action === "blocked" ? { sectionId: section.id, edge: deltaTime < 0 ? "left" : "right" } : null);
-      if (
-        dragResult.start !== startMoveStart ||
-        dragResult.end !== startArrival ||
-        dragResult.duration !== startMoveDuration
-      ) {
-        hasEdited = true;
-        updateSectionTiming(section.id, dragResult.end, startMoveDuration, { history: false });
-      }
+      setTimelineBlockedEdge(dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: deltaTime < 0 ? "left" : "right" } : null);
+      replaceSectionsIfChanged(dragResult.sections);
     };
     const onPointerMove = (moveEvent) => {
       moveEvent.preventDefault();
@@ -1236,11 +1209,12 @@ function App() {
         return;
       }
       if (mode === "body" && reorderTargetIndex !== null && reorderTargetIndex !== index) {
-        replaceSections(reorderFormationSegments({
+        replaceSections(applyFormationTimelineEdit({
           sections: sortedSections,
+          action: "reorder",
           sectionId: section.id,
           toIndex: reorderTargetIndex
-        }), { history: false });
+        }).sections, { history: false });
         finishInteractiveEdit(true);
         setStatus(`${section.name} 순서를 변경했습니다.`);
         return;
@@ -1655,23 +1629,28 @@ function App() {
     const time = target.time;
     const previous = target.previous;
     const positions = previous?.positions || Object.fromEntries(plan.performers.map((p, index) => [p.id, { x: 18 + index * 8, y: 55 }]));
-    const moveDuration = target.moveDuration;
     const section = {
       id: uid("sec"),
-      name: `대형 ${formatTime(time)}`,
-      time,
-      moveDuration,
-      start: Math.max(0, time - moveDuration),
-      end: time,
+      name: "새 대형",
       notes: "음악을 들으며 현재 시각에 저장한 대형입니다.",
       moveMode: "smooth",
       positions: JSON.parse(JSON.stringify(positions)),
       frontFocus: [],
       partnerSetId: partnerSetIdForAddedSection(previous)
     };
-    updatePlan((current) => ({ ...current, sections: [...current.sections, section] }));
+    const result = applyFormationTimelineEdit({
+      sections: sortedSections,
+      action: "add-after",
+      time,
+      section
+    });
+    const addedSection = result.sections.find((item) => item.id === section.id) || section;
+    const nextSections = result.sections.map((item) => item.id === section.id
+      ? { ...item, name: `대형 ${formatTime(pointTime(addedSection))}` }
+      : item);
+    updatePlan((current) => ({ ...current, sections: nextSections }));
     setSelectedSectionId(section.id);
-    setStatus(`${formatTime(time)}에 대형 지점을 추가했습니다. 이제 무대에서 위치를 수정하세요.`);
+    setStatus(`${formatTime(pointTime(addedSection))}에 대형 지점을 추가했습니다. 이제 무대에서 위치를 수정하세요.`);
   }
 
   function duplicateSection() {
@@ -1680,26 +1659,23 @@ function App() {
       ? plan.partnerSets.find((set) => set.id === selectedSection.partnerSetId)
       : null;
     const copiedPartnerSetId = copiedPartnerSet ? uid("partners") : "";
-    const playbackTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
-    const fallbackTime = pointTime(selectedSection) + 8;
-    const time = playbackTime > 0 && Math.abs(playbackTime - pointTime(selectedSection)) > 0.2 ? playbackTime : fallbackTime;
-    const moveDuration = pointMoveDuration(selectedSection);
     const section = {
       ...JSON.parse(JSON.stringify(selectedSection)),
       id: uid("sec"),
       name: `${selectedSection.name} 복사`,
-      time,
-      moveDuration,
-      start: Math.max(0, time - moveDuration),
-      end: time,
       partnerSetId: copiedPartnerSetId
     };
+    const result = applyFormationTimelineEdit({
+      sections: sortedSections,
+      action: "add-after",
+      section
+    });
     updatePlan((current) => ({
       ...current,
       partnerSets: copiedPartnerSet
         ? [...current.partnerSets, { ...JSON.parse(JSON.stringify(copiedPartnerSet)), id: copiedPartnerSetId, name: `${section.name} 파트너` }]
         : current.partnerSets,
-      sections: [...current.sections, section]
+      sections: result.sections
     }));
     setSelectedSectionId(section.id);
     setSelectedPairKey("");
@@ -2490,16 +2466,14 @@ function App() {
           <>
             <label>지점명<input readOnly={readonly} value={selectedSection.name} onChange={(event) => updateSection(selectedSection.id, { name: event.target.value })} /></label>
             <div className="two-col">
-              <label>도착 시각<input readOnly={readonly} type="number" step="0.1" value={pointTime(selectedSection)} onChange={(event) => {
-                const time = parseNumber(event.target.value, pointTime(selectedSection));
-                const moveDuration = pointMoveDuration(selectedSection);
-                updateSection(selectedSection.id, { time, end: time, start: Math.max(0, time - moveDuration) });
-              }} /></label>
-              <label>이동 시간<input readOnly={readonly} type="number" min="0" step="0.1" value={pointMoveDuration(selectedSection)} onChange={(event) => {
-                const moveDuration = Math.max(0, parseNumber(event.target.value, pointMoveDuration(selectedSection)));
-                const time = pointTime(selectedSection);
-                updateSection(selectedSection.id, { moveDuration, start: Math.max(0, time - moveDuration), end: time });
-              }} /></label>
+              <div className="readonly-field">
+                <span>도착 시각</span>
+                <strong>{formatTime(pointTime(selectedSection))}</strong>
+              </div>
+              <div className="readonly-field">
+                <span>이동 시간</span>
+                <strong>{pointMoveDuration(selectedSection)}초</strong>
+              </div>
             </div>
             <p className="muted">이전 대형에서 이 지점까지 {pointMoveDuration(selectedSection)}초 동안 이동해 {formatTime(pointTime(selectedSection))}에 도착합니다.</p>
             <label>메모<textarea readOnly={readonly} value={selectedSection.notes} onChange={(event) => updateSection(selectedSection.id, { notes: event.target.value })} /></label>
@@ -3028,9 +3002,9 @@ function App() {
                             event.preventDefault();
                           }
                         }}
-                        title={`${section.name} / 도착 ${formatTime(pointTime(section))}`}
+                        title={`${section.name} / ${formatTime(block.displayStartTime)} - ${formatTime(block.displayEndTime)}`}
                       >
-                        {!readonly && !block.isMarker && section.id === selectedSection?.id && (
+                        {!readonly && !block.isMarker && index > 0 && section.id === selectedSection?.id && (
                           <span
                             className="formation-resize-handle left"
                             onPointerDown={(event) => onFormationPointerDown(event, section, index, "left")}
@@ -3039,8 +3013,8 @@ function App() {
                         )}
                         <span className="formation-block-index">{formationTimelineLabel(index)}</span>
                         <strong>{section.name}</strong>
-                        <em>{formatTime(pointMoveStart(section))} - {formatTime(pointTime(section))}</em>
-                        {!block.isMarker && section.id === selectedSection?.id && normalizeMovementKeyframes(section.movementKeyframes).map((keyframe) => (
+                        <em>{formatTime(block.displayStartTime)} - {formatTime(block.displayEndTime)}</em>
+                        {index > 0 && !block.isMarker && section.id === selectedSection?.id && normalizeMovementKeyframes(section.movementKeyframes).map((keyframe) => (
                           <span
                             key={keyframe.id}
                             className={keyframe.id === selectedMovementKeyframeId ? "movement-keyframe-tick selected" : "movement-keyframe-tick"}
@@ -3104,7 +3078,7 @@ function App() {
             </div>
             <audio
               ref={audioRef}
-              src={audioSrc}
+              src={audioSrc || undefined}
               onLoadedMetadata={syncAudioTime}
               onDurationChange={syncAudioTime}
               onTimeUpdate={syncAudioTime}

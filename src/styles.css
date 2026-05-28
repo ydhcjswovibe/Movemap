@@ -851,7 +851,7 @@ h3 {
 
 .timeline-lane {
   position: relative;
-  min-height: 50px;
+  min-height: 70px;
   margin-bottom: 6px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 8px;
@@ -899,18 +899,18 @@ h3 {
 .formation-block {
   --formation-handle-width: 9px;
   position: absolute;
-  top: 7px;
+  top: 8px;
   left: var(--formation-left);
   z-index: 2;
   box-sizing: border-box;
   width: var(--formation-hit-width, var(--formation-width));
   max-width: calc(100% - var(--formation-left));
-  min-height: 36px;
+  min-height: 52px;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px;
-  padding: 7px 9px;
+  padding: 9px 12px;
   border: 1px solid rgba(129, 140, 248, 0.55);
   border-radius: 7px;
   color: #eef2ff;
@@ -924,13 +924,9 @@ h3 {
 
 .formation-block.marker {
   left: var(--formation-left);
-  width: 68px;
-  max-width: 68px;
-  min-width: 68px;
-}
-
-.formation-block.marker em {
-  display: none;
+  width: var(--formation-hit-width, 132px);
+  max-width: var(--formation-hit-width, 132px);
+  min-width: var(--formation-hit-width, 132px);
 }
 
 .formation-block.tick {
@@ -1058,8 +1054,8 @@ h3 {
 
 .timeline-reorder-slot {
   position: absolute;
-  top: 4px;
-  height: 42px;
+  top: 5px;
+  height: 58px;
   z-index: 4;
   box-sizing: border-box;
   width: 5px;
@@ -1095,14 +1091,14 @@ h3 {
 .formation-block strong {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .formation-block em {
   grid-column: 1 / -1;
   overflow: hidden;
   color: #bfdbfe;
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -1263,6 +1259,27 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.readonly-field {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.readonly-field span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.readonly-field strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .partner-box {

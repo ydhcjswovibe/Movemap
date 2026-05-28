@@ -10,10 +10,23 @@ const selectedFormationBar = selectedFormationStart === -1
   ? ""
   : appSource.slice(selectedFormationStart, selectedFormationEnd === -1 ? undefined : selectedFormationEnd);
 const selectedFormationTools = appSource.match(/<div className="selected-formation-tools">[\s\S]*?<\/div>\s*\)\}/)?.[0] || "";
+const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
   assert.match(appSource, />대형 추가<\/button>/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
+});
+
+test("new projects start with a single four-second intro formation", () => {
+  const defaultSectionsSource = appSource.match(/function defaultSections\(performers\) \{[\s\S]*?\n\}/)?.[0] || "";
+
+  assert.match(defaultSectionsSource, /name: "Intro"/);
+  assert.match(defaultSectionsSource, /time: 4/);
+  assert.match(defaultSectionsSource, /moveDuration: 4/);
+  assert.match(defaultSectionsSource, /start: 0/);
+  assert.match(defaultSectionsSource, /end: 4/);
+  assert.match(defaultSectionsSource, /moveMode: "hold"/);
+  assert.doesNotMatch(defaultSectionsSource, /name: "Change"/);
 });
 
 test("bottom timeline uses formation and audio lanes", () => {
@@ -21,7 +34,8 @@ test("bottom timeline uses formation and audio lanes", () => {
   assert.match(appSource, /<span className="timeline-row-label">Forms<\/span>/);
   assert.match(appSource, /<span className="timeline-row-label">Audio<\/span>/);
   assert.match(appSource, /formationTimelineLabel\(index\)/);
-  assert.match(appSource, /layoutFormationBlocks\(sortedSections, timelinePixelsPerSecond\)/);
+  assert.match(appSource, /layoutFormationBlocks\(sortedSections, timelinePixelsPerSecond, \{/);
+  assert.match(appSource, /introAsSegment: true/);
   assert.match(appSource, /timelineFormationBlocks/);
   assert.doesNotMatch(appSource, /visualLeftPx/);
   assert.doesNotMatch(appSource, /visualShiftPx/);
@@ -31,6 +45,8 @@ test("bottom timeline uses formation and audio lanes", () => {
   assert.match(appSource, /"--formation-width": `\$\{block\.widthPx\}px`/);
   assert.match(appSource, /"--formation-hit-width": `\$\{block\.hitWidthPx\}px`/);
   assert.match(appSource, /"--formation-arrival": `\$\{block\.arrivalPx\}px`/);
+  assert.match(appSource, /formatTime\(block\.displayStartTime\)/);
+  assert.match(appSource, /formatTime\(block\.displayEndTime\)/);
   assert.match(appSource, /className="timeline-viewport timeline-ruler-viewport"/);
   assert.match(appSource, /onWheel=\{onTimelineWheel\}/);
   assert.match(appSource, /\{!readonly && <button className="secondary capture-button" onClick=\{addSection\}>대형 추가<\/button>\}/);
@@ -50,11 +66,12 @@ test("formation blocks use HitCut-style pixel timeline controls", () => {
   const viewportRule = styleSource.match(/\.timeline-viewport \{[\s\S]*?\}/)?.[0] || "";
 
   assert.doesNotMatch(formationBlockRule, /--formation-marker-half/);
-  assert.match(formationBlockRule, /top:\s*7px;/);
+  assert.match(formationBlockRule, /top:\s*8px;/);
   assert.match(formationBlockRule, /left:\s*var\(--formation-left\);/);
   assert.match(formationBlockRule, /box-sizing:\s*border-box;/);
   assert.match(formationBlockRule, /width:\s*var\(--formation-hit-width, var\(--formation-width\)\);/);
-  assert.match(formationMarkerRule, /width:\s*68px;/);
+  assert.match(formationBlockRule, /min-height:\s*52px;/);
+  assert.match(formationMarkerRule, /width:\s*var\(--formation-hit-width, 132px\);/);
   assert.match(styleSource, /\.formation-block\.tick \{[\s\S]*?width:\s*0;/);
   assert.match(styleSource, /\.formation-block\.tick::before \{/);
   assert.doesNotMatch(formationMarkerRule, /transform:\s*translateX\(-50%\);/);
@@ -83,6 +100,11 @@ test("selected formation timing is read-only because trim handles own timing edi
   assert.doesNotMatch(selectedFormationBar, /setSelectedMoveDuration/);
   assert.doesNotMatch(selectedFormationBar, /arrival-nudges/);
   assert.doesNotMatch(selectedFormationBar, /duration-chips/);
+  assert.doesNotMatch(formationPanel, /type="number" step="0\.1" value=\{pointTime\(selectedSection\)\}/);
+  assert.doesNotMatch(formationPanel, /type="number" min="0" step="0\.1" value=\{pointMoveDuration\(selectedSection\)\}/);
+  assert.doesNotMatch(formationPanel, /updateSection\(selectedSection\.id, \{ time,/);
+  assert.doesNotMatch(formationPanel, /updateSection\(selectedSection\.id, \{ moveDuration,/);
+  assert.match(formationPanel, /className="readonly-field"/);
 });
 
 test("selected formation bar separates arrival and movement start timing", () => {
@@ -109,10 +131,11 @@ test("selected formation bar keeps structural actions in tools", () => {
 test("movement timing cannot overlap adjacent formations", () => {
   const updateTiming = appSource.match(/function updateSectionTiming\(sectionId, time, moveDuration = null, options = \{\}\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
-  assert.match(updateTiming, /clampFormationTiming\(\{/);
+  assert.match(appSource, /applyFormationTimelineEdit/);
+  assert.match(updateTiming, /applyFormationTimelineEdit\(\{/);
+  assert.match(updateTiming, /action: "trim-right"/);
   assert.match(updateTiming, /sections: sortedSections/);
   assert.match(updateTiming, /sectionId,/);
-  assert.match(updateTiming, /timelineMax/);
 });
 
 test("selected formation segment exposes drag and two trim handles", () => {
@@ -126,11 +149,11 @@ test("selected formation segment exposes drag and two trim handles", () => {
   assert.match(appSource, /onFormationPointerDown\(event, section, index, "right"\)/);
   assert.match(appSource, /const rawStart = startMoveStart \+ deltaTime;/);
   assert.match(appSource, /snapTimelineTime\(rawStart, section, previousArrival, startArrival\)/);
-  assert.match(appSource, /trimFormationSegment\(\{/);
-  assert.match(appSource, /edge: "right"/);
-  assert.match(appSource, /resolveFormationBodyDrag\(\{/);
+  assert.match(appSource, /applyFormationTimelineEdit\(\{/);
+  assert.match(appSource, /action: "trim-right"/);
+  assert.match(appSource, /action: "move-body"/);
   assert.match(appSource, /deltaTime,/);
-  assert.match(appSource, /updateSectionTiming\(section\.id, dragResult\.end, startMoveDuration, \{ history: false \}\);/);
+  assert.match(appSource, /replaceSectionsIfChanged\(dragResult\.sections\);/);
   assert.match(leftHandleRule, /left:\s*2px;/);
   assert.match(rightHandleRule, /right:\s*2px;/);
 });
@@ -149,9 +172,9 @@ test("selected movement segments expose keyframe ticks and reorder preview", () 
   assert.match(appSource, /sectionWithPositionPatch\(item, nextPositions, keyframeId/);
   assert.match(appSource, /keyframeId: selectedMovementKeyframe\?\.id \|\| ""/);
   assert.match(appSource, /disabled=\{!canAddMovementKeyframe\}/);
-  assert.match(appSource, /resolveFormationBodyDrag\(\{/);
+  assert.match(appSource, /action: "move-body"/);
   assert.doesNotMatch(appSource, /Math\.abs\(clientX - startClientX\) >= 32/);
-  assert.match(appSource, /reorderFormationSegments\(\{/);
+  assert.match(appSource, /action: "reorder"/);
   assert.match(appSource, /timeline-reorder-preview/);
   assert.match(appSource, /timeline-reorder-slot/);
   assert.doesNotMatch(appSource, /className="timeline-reorder-order"/);
@@ -172,9 +195,9 @@ test("timeline pointer drags batch undo history until pointerup", () => {
   assert.match(appSource, /interactiveEditSnapshotRef/);
   assert.match(appSource, /beginInteractiveEdit\(\);/);
   assert.match(appSource, /finishInteractiveEdit\(hasEdited\);/);
-  assert.match(appSource, /replaceSectionsIfChanged\(nextSections\);/);
-  assert.match(appSource, /const nextSections = trimFormationSegment\(\{/);
-  assert.match(appSource, /\}\), \{ history: false \}\);/);
+  assert.match(appSource, /replaceSectionsIfChanged\(result\.sections\);/);
+  assert.match(appSource, /replaceSectionsIfChanged\(dragResult\.sections\);/);
+  assert.match(appSource, /\{ history: false \}/);
   assert.match(appSource, /updateMovementKeyframes\(section\.id,[\s\S]*?\{ history: false \}\)/);
 });
 
@@ -185,7 +208,9 @@ test("formation add follows sequential append selection policy", () => {
   assert.match(addSection, /if \(target\.action === "select"\)/);
   assert.match(addSection, /setSelectedSectionId\(target\.section\.id\);/);
   assert.match(addSection, /const previous = target\.previous;/);
-  assert.match(addSection, /const moveDuration = target\.moveDuration;/);
+  assert.match(addSection, /action: "add-after"/);
+  assert.match(addSection, /const nextSections = result\.sections\.map/);
+  assert.match(addSection, /sections: nextSections/);
 });
 
 test("top actions expose save share and tools without legacy tabs", () => {
