@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadCloudProject, saveCloudProject } from "./cloudProject.mjs";
+import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 
 const config = {
   url: "https://example.supabase.co",
@@ -29,6 +29,58 @@ test("creates a cloud project when the plan has no cloudProjectId", async () => 
   assert.equal(typeof body.updated_at, "string");
   assert.equal(result.id, "project-1");
   assert.equal(result.plan.cloudProjectId, "project-1");
+});
+
+test("authenticated saves send owner metadata and bearer token", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => [{ id: "project-1" }]
+    };
+  };
+
+  const result = await saveCloudProject(
+    { title: "Owned", sections: [] },
+    config,
+    fetchImpl,
+    { userId: "user-1", accessToken: "access-1", accountPlan: "free" }
+  );
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.equal(calls[0].options.headers.Authorization, "Bearer access-1");
+  assert.equal(body.owner_id, "user-1");
+  assert.equal(body.account_plan, "free");
+  assert.equal(body.view_enabled, false);
+  assert.equal(body.edit_enabled, false);
+  assert.equal(body.plan.owner.userId, "user-1");
+  assert.equal(result.plan.account.plan, "free");
+});
+
+test("share link state is mirrored into database-facing columns", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => [{ id: "project-1" }]
+    };
+  };
+
+  await saveCloudProject({
+    title: "Shared",
+    sections: [],
+    shareLinks: {
+      view: { projectId: "project-1", enabled: true },
+      edit: { projectId: "project-1", token: "edit-token", enabled: true }
+    }
+  }, config, fetchImpl);
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.equal(body.view_enabled, true);
+  assert.equal(body.edit_enabled, true);
+  assert.equal(body.edit_token, "edit-token");
 });
 
 test("updates a cloud project when the plan has a cloudProjectId", async () => {
@@ -104,4 +156,42 @@ test("falls back to the legacy choreo table when a shared project is not in Move
   assert.equal(calls[0].url, "https://example.supabase.co/rest/v1/movemap_projects?id=eq.project-1&select=*");
   assert.equal(calls[1].url, "https://example.supabase.co/rest/v1/choreo_projects?id=eq.project-1&select=*");
   assert.deepEqual(plan, { title: "Legacy Shared" });
+});
+
+test("loads an edit-link project through token-gated RPC", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ plan: { title: "Editable" } })
+    };
+  };
+
+  const plan = await loadCloudProjectByEditToken("project-1", "token-1", config, fetchImpl);
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.equal(calls[0].url, "https://example.supabase.co/rest/v1/rpc/get_project_by_edit_token");
+  assert.deepEqual(body, { p_project_id: "project-1", p_token: "token-1" });
+  assert.deepEqual(plan, { title: "Editable" });
+});
+
+test("saves anonymous edit-link changes through token-gated RPC", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({ id: "project-1", plan: { title: "Updated", cloudProjectId: "project-1" } })
+    };
+  };
+
+  const saved = await saveCloudProjectByEditToken({ title: "Updated", cloudProjectId: "project-1" }, "token-1", config, fetchImpl);
+  const body = JSON.parse(calls[0].options.body);
+
+  assert.equal(calls[0].url, "https://example.supabase.co/rest/v1/rpc/update_project_by_edit_token");
+  assert.equal(body.p_project_id, "project-1");
+  assert.equal(body.p_token, "token-1");
+  assert.equal(body.p_new_plan.title, "Updated");
+  assert.equal(saved.id, "project-1");
 });

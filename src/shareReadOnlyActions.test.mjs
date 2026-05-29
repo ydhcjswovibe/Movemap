@@ -46,7 +46,10 @@ test("share link creation saves through the cloud project path", () => {
   const shareProject = appSource.match(/async function shareProject\(\) \{[\s\S]*?function exportJson/)?.[0] || "";
 
   assert.match(shareProject, /const saved = await persistProjectToCloud\(\);/);
-  assert.match(shareProject, /const nextUrl = shareUrlForProject\(saved\.id\);/);
+  assert.match(shareProject, /const editToken = saved\.plan\.shareLinks\?\.edit\?\.token \|\| createEditLinkToken\(\);/);
+  assert.match(shareProject, /projectWithShareLink\(saved\.plan, \{ linkType: LINK_TYPES\.view, projectId: saved\.id \}\)/);
+  assert.match(shareProject, /setShareUrl\(shareUrlForProject\(linkedSaved\.id\)\);/);
+  assert.match(shareProject, /setEditShareUrl\(editShareUrlForProject\(linkedSaved\.id, linkedSaved\.plan\.shareLinks\?\.edit\?\.token \|\| editToken\)\);/);
 });
 
 test("offers a copy button for generated share links", () => {
@@ -56,6 +59,10 @@ test("offers a copy button for generated share links", () => {
 
   assert.match(copyShareUrl, /navigator\.clipboard\?\.writeText/);
   assert.match(copyShareUrl, /공유 링크를 복사했습니다/);
-  assert.match(shareMenu, /<button onClick=\{copyShareUrl\}>링크 복사<\/button>/);
-  assert.match(sharePanel, /<button onClick=\{copyShareUrl\}>링크 복사<\/button>/);
+  assert.match(shareMenu, /<button onClick=\{copyShareUrl\}>보기 링크 복사<\/button>/);
+  assert.match(shareMenu, /<button onClick=\{copyEditShareUrl\}>편집 링크 복사<\/button>/);
+  assert.match(sharePanel, /보기 링크/);
+  assert.match(sharePanel, /편집 링크/);
+  assert.match(sharePanel, /<button onClick=\{copyShareUrl\}>복사<\/button>/);
+  assert.match(sharePanel, /<button onClick=\{copyEditShareUrl\}>복사<\/button>/);
 });

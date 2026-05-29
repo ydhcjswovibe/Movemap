@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createShareUrl, normalizeShareOrigin } from "./shareUrl.mjs";
+import { createEditShareUrl, createShareUrl, normalizeShareOrigin } from "./shareUrl.mjs";
 
 test("creates share links from the configured public origin", () => {
   assert.equal(
@@ -30,6 +30,16 @@ test("falls back to the current browser origin when no public origin is configur
       currentOrigin: "http://localhost:5173/"
     }),
     "http://localhost:5173/share/project-1"
+  );
+});
+
+test("creates edit links with an explicit edit token", () => {
+  assert.equal(
+    createEditShareUrl("project-1", {
+      publicShareOrigin: "https://stage-map-pi.vercel.app",
+      editToken: "token with space"
+    }),
+    "https://stage-map-pi.vercel.app/edit/project-1?token=token%20with%20space"
   );
 });
 

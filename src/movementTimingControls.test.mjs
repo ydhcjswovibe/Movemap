@@ -124,7 +124,7 @@ test("selected formation bar keeps structural actions in tools", () => {
   assert.match(selectedFormationTools, /<span>선택 대형<\/span>/);
   assert.match(selectedFormationTools, /\{selectedSection\?\.name \|\| "대형 없음"\}/);
   assert.match(selectedFormationTools, /<button onClick=\{duplicateSection\}>복제<\/button>/);
-  assert.match(selectedFormationTools, /<button className="danger-button compact-danger" onClick=\{deleteSection\}>삭제<\/button>/);
+  assert.match(selectedFormationTools, /<button className="danger-button compact-danger" onClick=\{deleteSection\} disabled=\{sortedSections\.length <= 1\}/);
   assert.match(selectedFormationTools, /<button className="danger-button compact-danger" onClick=\{resetSelectedFormation\}>대형 초기화<\/button>/);
 });
 

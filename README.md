@@ -34,17 +34,39 @@ npm run dev
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 VITE_PUBLIC_SHARE_ORIGIN=https://stage-map-pi.vercel.app
 ```
 
 `VITE_PUBLIC_SHARE_ORIGIN`은 외부 공유 링크에 사용할 공개 production origin입니다. 값 끝의 `/`는 앱에서 제거합니다. 이 값을 비워두면 현재 브라우저 origin으로 `/share/:id` 링크를 만듭니다. 도메인을 Movemap 계열로 바꾼 뒤에는 이 값만 새 production origin으로 교체하면 됩니다.
 
-Supabase SQL editor에서 새 Movemap 테이블과 익명 정책을 만듭니다. 외부인이 로그인 없이 공유 링크를 열려면 `movemap_projects`에 anonymous select 정책이 반드시 있어야 합니다.
+Supabase Authentication > Providers에서 Google provider를 켜고, 배포 origin과 로컬 개발 origin을 redirect URL에 추가합니다. `VITE_GOOGLE_CLIENT_ID`가 있으면 앱의 `Google 로그인` 버튼은 Google Identity Services popup에서 ID token을 받은 뒤 Supabase `signInWithIdToken`으로 로그인합니다. 이 방식은 Google 계정 선택 화면의 `supabase.co로 이동` 문구를 피합니다.
+
+`VITE_GOOGLE_CLIENT_ID`는 Google Cloud Console의 Web OAuth Client ID입니다. Supabase Google provider에 넣은 Client ID와 같은 값을 사용할 수 있습니다. 이 값이 비어 있으면 앱은 fallback으로 Supabase OAuth redirect를 사용하며, 로그인 후에는 현재 화면 전체 URL이 아니라 앱 루트(`/`)로 복귀합니다. 로컬 개발 중이라면 Supabase Authentication > URL Configuration > Redirect URLs에 실제 접속 origin을 정확히 추가하세요. 예: `http://127.0.0.1:5174`, `http://localhost:5174`, `http://localhost:5173`.
+
+Google 로그인 팝업을 덜 의심스럽게 보이게 하려면 Google Cloud Console에서 다음 항목도 맞춥니다.
+
+1. `Google Auth Platform` > `브랜딩` > `앱 이름`: `Movemap`
+2. `Google Auth Platform` > `브랜딩` > `앱 로고`: Movemap 로고 업로드
+3. `Google Auth Platform` > `브랜딩` > `홈페이지 URL`: 공개 Movemap 주소
+4. `Google Auth Platform` > `브랜딩` > `승인된 도메인`: 공개 Movemap 도메인
+5. `Google Auth Platform` > `클라이언트` > 해당 OAuth 클라이언트 > `승인된 JavaScript 원본`: 공개 Movemap origin과 로컬 개발 origin
+
+Google Cloud Console의 `승인된 JavaScript 원본`에는 Movemap을 실행하는 origin을 추가해야 합니다. 로컬에서는 앱을 실제로 여는 주소를 그대로 넣습니다. 예: `http://127.0.0.1:5174`, `http://localhost:5174`, `http://localhost:5173`.
+
+로컬 개발 서버는 `npm run dev` 기준 `http://localhost:5174`로 고정합니다. Google Identity Services는 보안상 origin을 `scheme + host + port`까지 정확히 비교하므로, 포트가 바뀌면 Google Cloud Console의 `승인된 JavaScript 원본`도 다시 맞춰야 합니다. `5174`가 이미 사용 중이면 Vite가 다른 포트로 넘어가지 않고 실패하게 두고, 기존 dev server를 종료한 뒤 다시 실행합니다.
+
+Supabase SQL editor에서 새 Movemap 테이블과 owner/RLS 정책을 만듭니다. Stage 1부터 프로젝트 생성, 저장, 링크 관리는 Google 로그인 소유자만 할 수 있고, View/Edit Link는 별도 공개 정책과 RPC로만 열립니다. 실행용 SQL은 `docs/supabase/stage1-auth-ownership.sql`에 있고, Supabase CLI용 migration은 `supabase/migrations/20260529_stage1_auth_ownership.sql`입니다. 적용 후 검증 절차는 `docs/supabase/stage1-verification.md`를 따릅니다.
 
 ```sql
 create table movemap_projects (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  owner_id uuid references auth.users(id),
+  account_plan text not null default 'free',
+  view_enabled boolean not null default false,
+  edit_enabled boolean not null default false,
+  edit_token text,
   plan jsonb not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -52,21 +74,91 @@ create table movemap_projects (
 
 alter table movemap_projects enable row level security;
 
-create policy "allow anonymous insert"
+create policy "owners can insert projects"
 on movemap_projects for insert
-to anon
-with check (true);
+to authenticated
+with check (owner_id = auth.uid());
 
-create policy "allow anonymous read"
+create policy "owners can read projects"
+on movemap_projects for select
+to authenticated
+using (owner_id = auth.uid());
+
+create policy "owners can update projects"
+on movemap_projects for update
+to authenticated
+using (owner_id = auth.uid())
+with check (owner_id = auth.uid());
+
+create policy "enabled view links are public"
 on movemap_projects for select
 to anon
-using (true);
+using (view_enabled = true);
 
-create policy "allow anonymous update"
-on movemap_projects for update
-to anon
-using (true)
-with check (true);
+create or replace function free_cloud_project_limit()
+returns integer
+language sql
+stable
+as $$
+  select 3;
+$$;
+
+create or replace function enforce_free_project_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.account_plan = 'free' and (
+    select count(*)
+    from movemap_projects
+    where owner_id = new.owner_id
+      and account_plan = 'free'
+      and id <> new.id
+  ) >= free_cloud_project_limit() then
+    raise exception 'Free project limit reached';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger movemap_free_project_limit
+before insert on movemap_projects
+for each row execute function enforce_free_project_limit();
+
+create or replace function get_project_by_edit_token(p_project_id uuid, p_token text)
+returns table(id uuid, plan jsonb)
+language sql
+security definer
+set search_path = public
+as $$
+  select p.id, p.plan
+  from movemap_projects p
+  where p.id = p_project_id
+    and p.edit_enabled = true
+    and p.edit_token = p_token;
+$$;
+
+create or replace function update_project_by_edit_token(p_project_id uuid, p_token text, p_new_plan jsonb)
+returns table(id uuid, plan jsonb)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  update movemap_projects p
+  set plan = p_new_plan,
+      title = coalesce(p_new_plan->>'title', p.title),
+      updated_at = now()
+  where p.id = p_project_id
+    and p.edit_enabled = true
+    and p.edit_token = p_token
+  returning p.id, p.plan;
+end;
+$$;
 ```
 
 기존 이름으로 운영하던 `choreo_projects` 테이블은 바로 삭제하지 마세요. 앱은 `/share/:id` 로딩 시 `movemap_projects`를 먼저 찾고, 없으면 기존 `choreo_projects`에서 읽어 예전 공유 링크를 살립니다.
@@ -78,9 +170,9 @@ Supabase Storage에서 public bucket `movemap-audio`를 만듭니다. 음악 파
 Storage object 정책도 필요합니다.
 
 ```sql
-create policy "allow anonymous audio upload"
+create policy "authenticated audio upload"
 on storage.objects for insert
-to anon
+to authenticated
 with check (bucket_id = 'movemap-audio');
 
 create policy "allow anonymous audio read"
@@ -89,7 +181,7 @@ to anon
 using (bucket_id = 'movemap-audio');
 ```
 
-bucket은 public으로 설정하고 anonymous read 정책을 추가해야 공유 링크에서 음악이 바로 재생됩니다. public URL을 아는 사람은 음악에 접근할 수 있으므로 수업/팀 공유용으로만 사용하세요.
+bucket은 public으로 설정하고 anonymous read 정책을 추가해야 공유 링크에서 음악이 바로 재생됩니다. 업로드는 Google 로그인 사용자만 허용합니다. public URL을 아는 사람은 음악에 접근할 수 있으므로 수업/팀 공유용으로만 사용하세요.
 
 음악은 `projects/{localProjectId}/audio/{fingerprint}-{fileName}` 경로에 저장됩니다. 같은 파일을 다시 선택하면 fingerprint로 기존 서버 음악을 다시 연결하므로 불필요한 중복 업로드를 줄입니다. 기존 `choreo-audio` bucket은 이전 프로젝트 재생 fallback용으로 유지하세요.
 

@@ -1,7 +1,83 @@
 import { expect, test } from "@playwright/test";
 
+const SUPABASE_TEST_URL = "https://movemap-test.supabase.co";
+
 function compactFormationText(text) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function seededProject({ viewEnabled = true, editEnabled = true, editToken = "valid", longMove = true } = {}) {
+  const performers = [
+    { id: "a1", label: "A1", name: "A1", role: "groupA", color: "#2457c5" },
+    { id: "a2", label: "A2", name: "A2", role: "groupA", color: "#3478f6" },
+    { id: "b1", label: "B1", name: "B1", role: "groupB", color: "#c0265f" }
+  ];
+  return {
+    title: "Cloud Route Fixture",
+    performanceType: "mixed",
+    performers,
+    partnerSets: [],
+    stage: { width: 100, height: 100 },
+    frontZone: { y: 70 },
+    owner: { sessionId: "owner_fixture", createdAt: "2026-05-29T00:00:00.000Z" },
+    account: { plan: "free" },
+    cloudProjectId: "project-1",
+    shareLinks: {
+      view: { projectId: "project-1", token: "", enabled: viewEnabled },
+      edit: { projectId: "project-1", token: editToken, enabled: editEnabled }
+    },
+    sections: [
+      {
+        id: "s1",
+        name: "Intro",
+        time: 4,
+        moveDuration: 0,
+        start: 4,
+        end: 4,
+        moveMode: "hold",
+        notes: "시작",
+        frontFocus: [],
+        partnerSetId: "",
+        positions: { a1: { x: 15, y: 20 }, a2: { x: 30, y: 20 }, b1: { x: 45, y: 20 } }
+      },
+      {
+        id: "s2",
+        name: "Cross",
+        time: 12,
+        moveDuration: 4,
+        start: 8,
+        end: 12,
+        moveMode: "smooth",
+        notes: "교차",
+        frontFocus: [],
+        partnerSetId: "",
+        positions: { a1: longMove ? { x: 90, y: 80 } : { x: 25, y: 25 }, a2: { x: 35, y: 45 }, b1: { x: 60, y: 40 } }
+      },
+      {
+        id: "s3",
+        name: "Final",
+        time: 20,
+        moveDuration: 4,
+        start: 16,
+        end: 20,
+        moveMode: "smooth",
+        notes: "엔딩",
+        frontFocus: [],
+        partnerSetId: "",
+        positions: { a1: { x: 70, y: 55 }, a2: { x: 40, y: 55 }, b1: { x: 55, y: 70 } }
+      }
+    ],
+    updatedAt: "2026-05-29T00:00:00.000Z"
+  };
+}
+
+async function routeCloudProject(page, plan) {
+  await page.route(`${SUPABASE_TEST_URL}/rest/v1/movemap_projects**`, async (route) => {
+    await route.fulfill({ json: [{ id: "project-1", plan }] });
+  });
+  await page.route(`${SUPABASE_TEST_URL}/rest/v1/choreo_projects**`, async (route) => {
+    await route.fulfill({ json: [] });
+  });
 }
 
 async function formationTexts(page) {
@@ -68,4 +144,92 @@ test("timeline formation editing keeps sequential segments and clean browser out
   expect(reorderedTexts[1]).toContain("F2 | 대형 0:12.0 | 0:06.0 - 0:10.0");
   expect(reorderedTexts[2]).toContain("F3 | Intro | 0:10.0 - 0:14.0");
   expect(browserIssues).toEqual([]);
+});
+
+test("mobile viewport keeps stage performer drag editable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  const token = page.locator(".token").first();
+  await expect(token).toBeVisible();
+
+  const before = await token.locator("circle").nth(1).evaluate((node) => ({
+    x: Number(node.getAttribute("cx")),
+    y: Number(node.getAttribute("cy"))
+  }));
+  const box = await token.boundingBox();
+  expect(box).not.toBeNull();
+
+  const pointer = {
+    pointerId: 17,
+    pointerType: "touch",
+    isPrimary: true,
+    bubbles: true,
+    cancelable: true
+  };
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const end = { x: start.x + 38, y: start.y + 24 };
+  await token.dispatchEvent("pointerdown", { ...pointer, clientX: start.x, clientY: start.y, buttons: 1 });
+  await page.locator(".stage").dispatchEvent("pointermove", { ...pointer, clientX: end.x, clientY: end.y, buttons: 1 });
+  await page.locator(".stage").dispatchEvent("pointerup", { ...pointer, clientX: end.x, clientY: end.y, buttons: 0 });
+
+  const after = await token.locator("circle").nth(1).evaluate((node) => ({
+    x: Number(node.getAttribute("cx")),
+    y: Number(node.getAttribute("cy"))
+  }));
+  expect(Math.abs(after.x - before.x) + Math.abs(after.y - before.y)).toBeGreaterThan(1);
+  await expect(page.getByText(/자동 저장/)).toBeVisible();
+});
+
+test("View Link route opens readonly review with transition warnings", async ({ page }) => {
+  await routeCloudProject(page, seededProject());
+  await page.goto("/share/project-1");
+
+  await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
+  await expect(page.locator(".transition-warning")).toBeVisible();
+  await expect(page.locator(".formation-block")).toHaveCount(3);
+});
+
+test("valid Edit Link route exposes edit controls", async ({ page }) => {
+  await routeCloudProject(page, seededProject());
+  await page.goto("/edit/project-1?token=valid");
+
+  await expect(page.getByRole("button", { name: "저장하기" })).toBeVisible();
+  await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /대형 추가/ })).toBeVisible();
+});
+
+test("invalid or disabled links fall back without edit controls", async ({ page }) => {
+  await routeCloudProject(page, seededProject());
+  await page.goto("/edit/project-1?token=bad");
+  await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
+
+  await routeCloudProject(page, seededProject({ viewEnabled: false }));
+  await page.goto("/share/project-1");
+  await expect(page.getByText(/소유자가 이 보기 링크를 꺼두었습니다/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
+});
+
+test("mobile review and mobile toolbar routes stay usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await routeCloudProject(page, seededProject({ longMove: false }));
+  await page.goto("/share/project-1");
+
+  await expect(page.locator(".stage")).toBeVisible();
+  await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
+
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("/");
+  await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  await expect(page.getByRole("button", { name: "도구" })).toBeVisible();
+  await expect(page.locator(".mobile-action-bar")).toBeVisible();
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "추가" }).click();
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "복제" }).click();
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "삭제" }).click();
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "되돌리기" }).click();
+  await expect(page.locator(".formation-block").first()).toBeVisible();
 });

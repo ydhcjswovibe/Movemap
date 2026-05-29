@@ -186,34 +186,43 @@ label {
 }
 
 .status {
-  margin: 0 0 12px;
-  padding: 10px 14px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #d9e2ec;
   border-radius: 8px;
-  color: #9a3412;
+  color: #263142;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
   display: grid;
   gap: 8px;
+  pointer-events: none;
 }
 
 .status a {
   color: #1d4ed8;
   font-weight: 800;
+  pointer-events: auto;
 }
 
 .status-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  pointer-events: auto;
 }
 
 .status-actions button,
 .status-actions .file-button {
   min-height: 34px;
   padding: 7px 10px;
-  border-color: #fdba74;
+  border-color: #cbd5e1;
   background: #ffffff;
-  color: #9a3412;
+  color: #263142;
 }
 
 .readonly-banner {
@@ -607,6 +616,17 @@ h3 {
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+}
+
+.transition-warning {
+  margin: -2px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .toggle.active {
@@ -1433,6 +1453,10 @@ h3 {
   display: none;
 }
 
+.mobile-action-bar {
+  display: none;
+}
+
 .mobile-share-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1458,26 +1482,64 @@ h3 {
   line-height: 1.45;
 }
 
-.share-link-box {
+.share-link-grid {
   display: grid;
-  gap: 5px;
-  padding: 10px;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  background: #eff6ff;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.share-link-box span {
+.share-link-box {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.share-link-box.edit-link-box {
+  border-color: #f0c77a;
+  background: #fffaf0;
+}
+
+.share-link-box.muted {
+  background: #f8fafc;
+}
+
+.share-link-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.share-link-heading strong {
+  color: #162033;
+  font-size: 14px;
+}
+
+.share-link-heading span {
+  border-radius: 999px;
+  padding: 4px 8px;
   color: #1e3a8a;
+  background: #dbeafe;
   font-size: 12px;
   font-weight: 900;
+}
+
+.share-link-box p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .share-link-box a {
   color: #1d4ed8;
   font-size: 13px;
   font-weight: 800;
-  word-break: break-all;
+  text-decoration: none;
 }
 
 .share-link-row {
@@ -1486,9 +1548,16 @@ h3 {
   gap: 8px;
 }
 
-.share-link-row a {
+.share-link-row a,
+.share-link-row span {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .share-link-row button {
@@ -1732,6 +1801,7 @@ h3 {
   }
 
   .share-hero,
+  .share-link-grid,
   .share-actions,
   .backup-actions {
     grid-template-columns: 1fr;
@@ -1739,6 +1809,28 @@ h3 {
 
   .mobile-editor {
     display: block;
+  }
+
+  .mobile-action-bar {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 7;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid #dbe3ee;
+    border-radius: 8px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  }
+
+  .mobile-action-bar button {
+    min-width: 0;
+    padding: 9px 4px;
+    font-size: 12px;
   }
 
   .mobile-bottom-sheet {

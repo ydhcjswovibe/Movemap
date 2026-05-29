@@ -15,7 +15,7 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: "env -u NO_COLOR vite --host 127.0.0.1 --port 5179 --strictPort",
+    command: "env -u NO_COLOR VITE_SUPABASE_URL=https://movemap-test.supabase.co VITE_SUPABASE_ANON_KEY=test-anon vite --host 127.0.0.1 --port 5179 --strictPort",
     url: "http://127.0.0.1:5179/",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000

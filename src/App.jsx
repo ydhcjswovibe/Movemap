@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
-import { loadCloudProject, saveCloudProject } from "./cloudProject.mjs";
+import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
+import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
 import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
-import { createShareUrl } from "./shareUrl.mjs";
+import { canCreateLink, canOwnCloudProject, planCapabilities } from "./planCapabilities.mjs";
+import { createEditShareUrl, createShareUrl } from "./shareUrl.mjs";
+import { LINK_TYPES, authorizeShareRoute, createEditLinkToken, linkModeFromLocation, projectWithShareLink, projectWithShareLinkEnabled } from "./shareLinks.mjs";
+import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarget, moveSelectedPerformers, performerIdsForRole, togglePerformerSelection } from "./formationTools.mjs";
+import { buildTransitionPaths, longDistanceWarnings, transitionPathStyle } from "./transitionView.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
   applyFormationTimelineEdit,
@@ -284,6 +289,12 @@ function normalizePlan(plan) {
   return {
     ...plan,
     localProjectId: plan.localProjectId || uid("project"),
+    owner: plan.owner || { sessionId: "", createdAt: "" },
+    account: { plan: plan.account?.plan || "guest" },
+    shareLinks: {
+      view: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.view || {}) },
+      edit: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.edit || {}) }
+    },
     sections: plan.sections.map(normalizeSection).sort((a, b) => pointTime(a) - pointTime(b))
   };
 }
@@ -347,6 +358,12 @@ function createProject({ title, performanceType, groupACount, groupBCount, names
     stage: { width: 100, height: 100 },
     frontZone: { y: 70 },
     localProjectId: uid("project"),
+    owner: { sessionId: "", createdAt: "" },
+    account: { plan: "guest" },
+    shareLinks: {
+      view: { projectId: "", token: "", enabled: true },
+      edit: { projectId: "", token: "", enabled: true }
+    },
     updatedAt: new Date().toISOString()
   };
 }
@@ -488,6 +505,10 @@ function supabaseConfig() {
   };
 }
 
+function googleClientId() {
+  return import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+}
+
 function shareUrlForProject(projectId) {
   return createShareUrl(projectId, {
     publicShareOrigin: import.meta.env.VITE_PUBLIC_SHARE_ORIGIN,
@@ -495,15 +516,24 @@ function shareUrlForProject(projectId) {
   });
 }
 
-async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFingerprint(file)) {
+function editShareUrlForProject(projectId, editToken = "") {
+  return createEditShareUrl(projectId, {
+    publicShareOrigin: import.meta.env.VITE_PUBLIC_SHARE_ORIGIN,
+    currentOrigin: window.location.origin,
+    editToken
+  });
+}
+
+async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFingerprint(file), auth = {}) {
   const { url, key } = supabaseConfig();
   if (!url || !key) throw new Error("Supabase 환경변수가 없습니다.");
+  if (!auth.accessToken) throw new Error("음악 업로드는 Google 로그인 후 사용할 수 있습니다.");
   const path = `projects/${safeStorageSegment(projectKey || "local", "project")}/audio/${audioStorageName(file, fingerprint)}`;
   const response = await fetch(`${url}/storage/v1/object/${MOVEMAP_AUDIO_BUCKET}/${path}`, {
     method: "POST",
     headers: {
       apikey: key,
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${auth.accessToken}`,
       "Content-Type": file.type || "application/octet-stream"
     },
     body: file
@@ -525,6 +555,11 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
   const selectedId = options.selectedId || "";
   const readonly = Boolean(options.readonly);
   const pairs = plan.partnerSets.find((set) => set.id === section?.partnerSetId)?.pairs || [];
+  const warnings = longDistanceWarnings(buildTransitionPaths({
+    performers: plan.performers,
+    previousSection: prev,
+    currentSection: section
+  }), plan.performers);
   const token = (performer, pos, ghost = false) => {
     const dim = selectedId && selectedId !== performer.id;
     const performerPair = ghost ? null : pairForPerformerId(pairs, performer.id);
@@ -580,7 +615,8 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
       ${pairLines}
       ${plan.performers.map((performer) => positions[performer.id] ? token(performer, positions[performer.id]) : "").join("")}
       <text x="4" y="7" font-size="4" fill="#0f172a" font-family="Arial" font-weight="700">${escapeSvgText(section?.name || "")} ${section ? `도착 ${formatTime(pointTime(section))} / 이동 ${pointMoveDuration(section)}초` : ""}</text>
-      ${readonly ? `<text x="4" y="12" font-size="2.8" fill="#475569" font-family="Arial">${escapeSvgText(section?.notes || "")}</text>` : ""}
+      ${warnings.length ? `<text x="4" y="13" font-size="2.8" fill="#92400e" font-family="Arial" font-weight="700">먼 이동 주의: ${escapeSvgText(warnings.map((warning) => warning.name).join(", "))}</text>` : ""}
+      ${readonly ? `<text x="4" y="${warnings.length ? 17 : 12}" font-size="2.8" fill="#475569" font-family="Arial">${escapeSvgText(section?.notes || "")}</text>` : ""}
     </svg>`;
 }
 
@@ -631,17 +667,33 @@ function Wizard({ onCreate }) {
 }
 
 function App() {
-  const shareId = window.location.pathname.startsWith("/share/") ? window.location.pathname.split("/share/")[1] : "";
-  const readonly = Boolean(shareId);
+  const linkMode = linkModeFromLocation(window.location);
+  const shareId = linkMode.projectId;
+  const linkType = linkMode.linkType;
+  const isEditLinkRoute = linkType === LINK_TYPES.edit;
+  const supabaseClient = useMemo(() => {
+    try {
+      return createMovemapSupabaseClient(supabaseConfig());
+    } catch {
+      return null;
+    }
+  }, []);
+  const [authSession, setAuthSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(Boolean(supabaseClient));
+  const [editLinkAuthorized, setEditLinkAuthorized] = useState(false);
+  const readonly = linkMode.readonly && !editLinkAuthorized;
   const [plan, setPlan] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedPerformerId, setSelectedPerformerId] = useState("");
+  const [selectedPerformerIds, setSelectedPerformerIds] = useState([]);
+  const [shareRouteBlocked, setShareRouteBlocked] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioSrc, setAudioSrc] = useState("");
   const [audioUploadStatus, setAudioUploadStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState("");
+  const [editShareUrl, setEditShareUrl] = useState("");
   const [status, setStatus] = useState("");
   const [statusRecovery, setStatusRecovery] = useState("");
   const [localSavedAt, setLocalSavedAt] = useState("");
@@ -663,6 +715,7 @@ function App() {
   const [timelineReorderPreview, setTimelineReorderPreview] = useState(null);
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
+  const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const audioRef = useRef(null);
@@ -675,6 +728,69 @@ function App() {
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!supabaseClient) {
+      setAuthLoading(false);
+      return;
+    }
+    let mounted = true;
+    getAuthSession(supabaseClient)
+      .then((session) => {
+        if (mounted) setAuthSession(session);
+      })
+      .finally(() => {
+        if (mounted) setAuthLoading(false);
+      });
+    const unsubscribe = onAuthStateChange(supabaseClient, (session) => {
+      setAuthSession(session);
+      setAuthLoading(false);
+      if (session) {
+        setStatus(`로그인되었습니다: ${session.user?.email || "Google 계정"}`);
+        window.setTimeout(() => {
+          setStatus((current) => current.startsWith("로그인되었습니다:") ? "" : current);
+        }, 2400);
+      }
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [supabaseClient]);
+
+  function currentAuthRequest() {
+    return authRequest(authSession);
+  }
+
+  async function signInOwner() {
+    if (!supabaseClient) {
+      setStatus("Supabase Auth 환경변수를 먼저 설정해 주세요.");
+      return;
+    }
+    const directGoogleClientId = googleClientId();
+    setStatus(directGoogleClientId ? "Movemap Google 로그인 창을 엽니다..." : "Movemap Google 로그인으로 이동합니다...");
+    const { error } = directGoogleClientId
+      ? await signInWithGoogleIdentity(supabaseClient, { clientId: directGoogleClientId })
+      : await signInWithGoogle(supabaseClient, { redirectTo: authRedirectTo(window.location, "/") });
+    if (error) {
+      setStatus(`로그인 시작 실패: ${error.message}`);
+      return;
+    }
+    if (directGoogleClientId) {
+      setStatus("Google 로그인 확인 중...");
+    }
+  }
+
+  async function signOutOwner() {
+    if (!supabaseClient) return;
+    const { error } = await signOut(supabaseClient);
+    if (error) {
+      setStatus(`로그아웃 실패: ${error.message}`);
+      return;
+    }
+    setAuthSession(null);
+    setStatus("로그아웃했습니다. 로컬 데모 편집은 계속할 수 있습니다.");
+  }
 
   function restoreAudioFromPlan(nextPlan, options = {}) {
     const restoredAudioUrl = resolveAudioUrl(nextPlan?.audio);
@@ -696,12 +812,34 @@ function App() {
   }
 
   useEffect(() => {
-    if (readonly) {
-      loadCloudProject(shareId, supabaseConfig())
+    if (shareId) {
+      const loadShared = isEditLinkRoute && linkMode.editToken
+        ? loadCloudProjectByEditToken(shareId, linkMode.editToken, supabaseConfig())
+            .catch(() => loadCloudProject(shareId, supabaseConfig()))
+        : loadCloudProject(shareId, supabaseConfig());
+      loadShared
         .then((loaded) => {
           const normalized = normalizePlan(loaded);
+          const routeAuth = authorizeShareRoute({
+            shareLinks: normalized.shareLinks,
+            linkType,
+            token: linkMode.editToken,
+            projectId: shareId
+          });
+          const editAuthorized = isEditLinkRoute && routeAuth.editable;
+          setEditLinkAuthorized(editAuthorized);
+          setShareRouteBlocked(routeAuth.reason);
+          if (routeAuth.reason === "disabled-view-link") {
+            setStatus("소유자가 이 보기 링크를 꺼두었습니다.");
+            return;
+          }
           setPlan(normalized);
           setSelectedSectionId(normalized.sections[0]?.id || "");
+          setShareUrl(shareUrlForProject(normalized.shareLinks?.view?.projectId || shareId));
+          setEditShareUrl(editShareUrlForProject(normalized.shareLinks?.edit?.projectId || shareId, normalized.shareLinks?.edit?.token || ""));
+          if (isEditLinkRoute && !editAuthorized) {
+            setStatus("편집 링크 토큰이 맞지 않아 보기 링크로 열었습니다.");
+          }
           restoreAudioFromPlan(normalized, { clearWhenMissing: true });
         })
         .catch((error) => setStatus(error.message));
@@ -728,15 +866,15 @@ function App() {
         continue;
       }
     }
-  }, [readonly, shareId]);
+  }, [shareId, isEditLinkRoute, linkMode.editToken, linkType]);
 
   useEffect(() => {
-    if (!plan || readonly) return;
+    if (!plan || readonly || shareId) return;
     const updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...plan, updatedAt }));
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     setLocalSavedAt(updatedAt);
-  }, [plan, readonly]);
+  }, [plan, readonly, shareId]);
 
   useEffect(() => () => {
     if (localAudioUrlRef.current) URL.revokeObjectURL(localAudioUrlRef.current);
@@ -884,6 +1022,7 @@ function App() {
     if (!sections.length) {
       setSelectedSectionId("");
       setSelectedPerformerId("");
+      setSelectedPerformerIds([]);
       setSelectedPairKey("");
       return;
     }
@@ -893,6 +1032,7 @@ function App() {
     if (selectedPerformerId && !nextPlan.performers?.some((performer) => performer.id === selectedPerformerId)) {
       setSelectedPerformerId("");
     }
+    setSelectedPerformerIds((ids) => ids.filter((id) => nextPlan.performers?.some((performer) => performer.id === id)));
     const hasSelectedPair = nextPlan.partnerSets?.some((set) => set.pairs?.some((pair) => pairKey(pair) === selectedPairKey));
     if (selectedPairKey && !hasSelectedPair) {
       setSelectedPairKey("");
@@ -1312,18 +1452,21 @@ function App() {
 
   function clearSelection() {
     setSelectedPerformerId("");
+    setSelectedPerformerIds([]);
     setSelectedPairKey("");
     setTapMoveArmed(false);
   }
 
   function selectPerformer(performerId) {
     setSelectedPerformerId(performerId);
+    setSelectedPerformerIds(performerId ? [performerId] : []);
     setSelectedPairKey("");
     setTapMoveArmed(Boolean(performerId));
   }
 
   function selectPair(nextPairKey, performerId = "") {
     setSelectedPerformerId(performerId);
+    setSelectedPerformerIds(performerId ? [performerId] : []);
     setSelectedPairKey(nextPairKey);
     setTapMoveArmed(Boolean(nextPairKey));
   }
@@ -1677,15 +1820,22 @@ function App() {
         : current.partnerSets,
       sections: result.sections
     }));
-    setSelectedSectionId(section.id);
+    setSelectedSectionId(duplicateSelectionTarget(result.sections, section.id));
     setSelectedPairKey("");
+    setSelectedPerformerIds([]);
   }
 
   function deleteSection() {
-    if (!selectedSection || sortedSections.length <= 1) return;
+    if (!selectedSection) return;
+    const target = deleteSelectionTarget(sortedSections, selectedSection.id);
+    if (target.disabled) {
+      setStatus("마지막 대형은 삭제할 수 없습니다.");
+      return;
+    }
     const nextSections = sortedSections.filter((section) => section.id !== selectedSection.id);
     updatePlan((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== selectedSection.id) }));
-    setSelectedSectionId(nextSections[0]?.id || "");
+    setSelectedSectionId(target.nextSectionId || nextSections[0]?.id || "");
+    setSelectedPerformerIds([]);
   }
 
   function resetSelectedFormation() {
@@ -1722,6 +1872,15 @@ function App() {
     if (readonly || !selectedSection) return;
     event.preventDefault();
     ignoreNextStageTapRef.current = false;
+    if (event.shiftKey || event.metaKey) {
+      const nextSelection = togglePerformerSelection(selectedPerformerIds, performerId, true);
+      setSelectedPerformerIds(nextSelection);
+      setSelectedPerformerId(performerId);
+      setSelectedPairKey("");
+      setTapMoveArmed(false);
+      setStatus(`${nextSelection.length}명을 선택했습니다.`);
+      return;
+    }
     captureStagePointer(event);
     setIsBottomSheetExpanded(false);
     const pointer = clientToStagePoint(event);
@@ -1786,6 +1945,7 @@ function App() {
     dragStateRef.current = {
       mode: "token-move",
       performerId,
+      performerIds: selectedPerformerIds.includes(performerId) && selectedPerformerIds.length > 1 ? selectedPerformerIds : [performerId],
       sectionId: selectedSection.id,
       keyframeId: editKeyframeId,
       pointerId: event.pointerId,
@@ -1862,17 +2022,25 @@ function App() {
     const partnerSet = getPartnerSetForSection(selectedSection);
     const pairs = partnerSet?.pairs || [];
     const editPositions = sectionEditPositions(selectedSection, drag.keyframeId);
-    const nextPositions = { ...editPositions, [performerId]: nextPosition };
+    const groupIds = Array.isArray(drag.performerIds) ? drag.performerIds.filter((id) => editPositions[id]) : [performerId];
+    const groupDelta = {
+      x: nextPosition.x - (editPositions[performerId]?.x || nextPosition.x),
+      y: nextPosition.y - (editPositions[performerId]?.y || nextPosition.y)
+    };
+    const movedGroupPositions = groupIds.length > 1
+      ? Object.fromEntries(groupIds.map((id) => [id, moveSelectedPerformers(editPositions, [id], groupDelta)[id]]))
+      : { [performerId]: nextPosition };
+    const nextPositions = { ...editPositions, ...movedGroupPositions };
     const swapCandidate = drag.individual && drag.sourcePair
       ? findSameRoleSwapCandidate(performerId, nextPosition, nextPositions, pairs)
       : null;
-    const candidateId = swapCandidate
+    const candidateId = groupIds.length > 1 || swapCandidate
       ? ""
       : findIndependentMagnetCandidate(performerId, rawPosition, nextPositions, pairs, drag.sourcePair);
     drag.candidateId = candidateId;
     drag.swapCandidate = swapCandidate;
     drag.pointer = pointer;
-    drag.finalPositions = { [performerId]: nextPosition };
+    drag.finalPositions = movedGroupPositions;
     setDragHint(swapCandidate
       ? `놓으면 ${(performerById(swapCandidate.targetId)?.name || performerById(swapCandidate.targetId)?.label || "대상")}와 교체`
       : drag.individual
@@ -2111,7 +2279,7 @@ function App() {
     setStatus(replacingAudio ? "새 음악으로 교체하는 중..." : "음악을 선택했습니다. 서버에 업로드하는 중...");
     setStatusRecovery("");
     try {
-      const audio = await uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint);
+      const audio = await uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint, currentAuthRequest());
       updatePlan((current) => ({ ...current, audio }));
       rejectedAudioUrlsRef.current = new Set();
       setAudioSrc(resolveAudioUrl(audio));
@@ -2193,8 +2361,28 @@ function App() {
     window.location.href = "/";
   }
 
-  async function persistProjectToCloud() {
-    const saved = await saveCloudProject(plan, supabaseConfig());
+  async function persistProjectToCloud(planToSave = plan) {
+    if (editLinkAuthorized && linkMode.editToken) {
+      const saved = await saveCloudProjectByEditToken(normalizePlan(planToSave), linkMode.editToken, supabaseConfig());
+      const normalized = normalizePlan(saved.plan);
+      setPlan(normalized);
+      setLocalSavedAt(saved.savedAt);
+      return { ...saved, plan: normalized };
+    }
+    const auth = currentAuthRequest();
+    if (!auth.userId || !auth.accessToken) {
+      throw new Error("Google 로그인 후 클라우드 저장과 공유 링크를 사용할 수 있습니다.");
+    }
+    const ownerPlan = normalizePlan({
+      ...planToSave,
+      owner: { ...planToSave.owner, userId: auth.userId },
+      account: { plan: auth.accountPlan || planToSave.account?.plan || "free" }
+    });
+    const capabilities = planCapabilities(ownerPlan.account?.plan || "free");
+    if (!canOwnCloudProject(capabilities)) {
+      throw new Error("현재 계정 플랜에서는 클라우드 저장을 사용할 수 없습니다.");
+    }
+    const saved = await saveCloudProject(ownerPlan, supabaseConfig(), fetch, auth);
     const normalized = normalizePlan(saved.plan);
     setPlan(normalized);
     setLocalSavedAt(saved.savedAt);
@@ -2207,8 +2395,11 @@ function App() {
       setStatus("클라우드에 저장하는 중...");
       setStatusRecovery("");
       const saved = await persistProjectToCloud();
-      setShareUrl(shareUrlForProject(saved.id));
-      setStatus(`클라우드에 저장됨 · ${formatClockTime(saved.savedAt)}`);
+      const viewReadyPlan = projectWithShareLink(saved.plan, { linkType: LINK_TYPES.view, projectId: saved.id });
+      const linkedSaved = await persistProjectToCloud(viewReadyPlan);
+      setShareUrl(shareUrlForProject(linkedSaved.id));
+      setEditShareUrl(editShareUrlForProject(linkedSaved.plan.shareLinks?.edit?.projectId || linkedSaved.id, linkedSaved.plan.shareLinks?.edit?.token || ""));
+      setStatus(`클라우드에 저장됨 · View Link 사용 가능 · ${formatClockTime(linkedSaved.savedAt)}`);
     } catch (error) {
       setStatusRecovery("share");
       setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
@@ -2217,15 +2408,39 @@ function App() {
 
   async function shareProject() {
     try {
-      setStatus("공유 링크를 만드는 중...");
+      setStatus("View Link와 Edit Link를 만드는 중...");
       setStatusRecovery("");
       const saved = await persistProjectToCloud();
-      const nextUrl = shareUrlForProject(saved.id);
-      setShareUrl(nextUrl);
-      setStatus("공유 링크가 생성되었습니다.");
+      const editToken = saved.plan.shareLinks?.edit?.token || createEditLinkToken();
+      const linkedPlan = projectWithShareLink(
+        projectWithShareLink(saved.plan, { linkType: LINK_TYPES.view, projectId: saved.id }),
+        { linkType: LINK_TYPES.edit, projectId: saved.id, token: editToken }
+      );
+      const linkedSaved = await persistProjectToCloud(linkedPlan);
+      setShareUrl(shareUrlForProject(linkedSaved.id));
+      setEditShareUrl(editShareUrlForProject(linkedSaved.id, linkedSaved.plan.shareLinks?.edit?.token || editToken));
+      setStatus("View Link와 Edit Link가 생성되었습니다.");
     } catch (error) {
       setStatusRecovery("share");
       setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
+    }
+  }
+
+  async function setShareLinkEnabled(linkTypeToUpdate, enabled) {
+    const auth = currentAuthRequest();
+    if (!plan || !auth.userId || plan.owner?.userId !== auth.userId) {
+      setStatus("링크 관리는 이 프로젝트를 만든 Google 로그인 계정에서만 가능합니다.");
+      return;
+    }
+    try {
+      const nextPlan = projectWithShareLinkEnabled(plan, linkTypeToUpdate, enabled);
+      const saved = await persistProjectToCloud(nextPlan);
+      setShareUrl(shareUrlForProject(saved.plan.shareLinks?.view?.projectId || saved.id));
+      setEditShareUrl(editShareUrlForProject(saved.plan.shareLinks?.edit?.projectId || saved.id, saved.plan.shareLinks?.edit?.token || ""));
+      setStatus(`${linkTypeToUpdate === LINK_TYPES.edit ? "Edit Link" : "View Link"}를 ${enabled ? "활성화" : "비활성화"}했습니다.`);
+    } catch (error) {
+      setStatusRecovery("share");
+      setStatus(`링크 상태 저장 실패: ${error.message}`);
     }
   }
 
@@ -2238,6 +2453,18 @@ function App() {
     } catch (error) {
       setStatusRecovery("");
       setStatus("공유 링크 복사 실패: 브라우저 주소 표시줄에서 직접 복사해 주세요.");
+    }
+  }
+
+  async function copyEditShareUrl() {
+    if (!editShareUrl) return;
+    try {
+      await navigator.clipboard?.writeText(editShareUrl);
+      setStatusRecovery("");
+      setStatus("편집 링크를 복사했습니다.");
+    } catch (error) {
+      setStatusRecovery("");
+      setStatus("편집 링크 복사 실패: 브라우저 주소 표시줄에서 직접 복사해 주세요.");
     }
   }
 
@@ -2371,16 +2598,32 @@ function App() {
     ? audioUrlSaved || hasUsableAudio ? "교체 중..." : "업로드 중..."
     : audioLoadFailed ? "다시 연결" : audioUrlSaved || hasUsableAudio ? "교체" : "음악 업로드";
   const musicTitle = plan.audio?.fileName || (hasUsableAudio ? "선택한 음악" : "");
+  const currentAuth = currentAuthRequest();
+  const signedInOwner = Boolean(currentAuth.userId && plan.owner?.userId === currentAuth.userId);
+  const authLabel = authSession?.user?.email || (currentAuth.userId ? "Google 로그인됨" : "게스트 데모");
+  const currentPlanCapabilities = planCapabilities(currentAuth.userId ? plan.account?.plan || currentAuth.accountPlan || "free" : "guest");
+  const canCreateViewLink = canCreateLink(currentPlanCapabilities, LINK_TYPES.view, plan.shareLinks?.view?.projectId ? 1 : 0);
+  const canCreateEditLink = canCreateLink(currentPlanCapabilities, LINK_TYPES.edit, plan.shareLinks?.edit?.projectId ? 1 : 0);
+  const canManageLinks = Boolean(!readonly && plan.shareLinks?.view?.projectId && signedInOwner);
+  const viewLinkState = plan.shareLinks?.view?.enabled === false ? "꺼짐" : shareUrl ? "켜짐" : "없음";
+  const editLinkState = plan.shareLinks?.edit?.enabled === false ? "꺼짐" : editShareUrl ? "켜짐" : "없음";
+  const activeTransitionWarnings = longDistanceWarnings(buildTransitionPaths({
+    performers: plan.performers,
+    previousSection: sortedSections[selectedSectionIndex - 1],
+    currentSection: selectedSection,
+    nextSection: sortedSections[selectedSectionIndex + 1],
+    selectedPerformerId,
+    reduceClutter: !showAllTransitionPaths
+  }), plan.performers);
 
   function renderShareMenu() {
     return (
       <div className="top-action-menu share-action-menu">
-        {!readonly && <button onClick={shareProject}>공유 링크 만들기</button>}
-        {shareUrl && (
-          <>
-            <a href={shareUrl}>보기 전용 링크 열기</a>
-            <button onClick={copyShareUrl}>링크 복사</button>
-          </>
+        {!readonly && <button className="primary" onClick={shareProject} disabled={!canCreateViewLink && !plan.shareLinks?.view?.projectId}>편집 링크 만들기</button>}
+        {shareUrl && <button onClick={copyShareUrl}>보기 링크 복사</button>}
+        {editShareUrl && !readonly && <button onClick={copyEditShareUrl}>편집 링크 복사</button>}
+        {canManageLinks && (
+          <button onClick={() => setIsToolDrawerOpen(true)}>링크 관리 열기</button>
         )}
         <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "프로젝트 파일 공유"}</button>
         <button onClick={() => exportPng()}>현재 PNG</button>
@@ -2458,7 +2701,7 @@ function App() {
         {!readonly && (
           <div className="row-actions">
             <button onClick={duplicateSection}>복제</button>
-            <button onClick={deleteSection}>삭제</button>
+            <button onClick={deleteSection} disabled={sortedSections.length <= 1} title={sortedSections.length <= 1 ? "마지막 대형은 삭제할 수 없습니다." : "선택 대형 삭제"}>삭제</button>
           </div>
         )}
 
@@ -2495,10 +2738,29 @@ function App() {
     const selectionTitle = dragHint || (
       selectedPair
         ? `${selectedPairNames.join(" - ")} 페어`
-        : selectedPerformer
+        : selectedPerformerIds.length > 1
+          ? `${selectedPerformerIds.length}명 선택`
+          : selectedPerformer
           ? `${selectedPerformer.name || selectedPerformer.label} 토큰`
           : "선택 없음"
     );
+    const alignSelection = (axis) => {
+      if (!selectedSection || selectedPerformerIds.length < 2) return;
+      const editKeyframeId = selectedMovementKeyframe?.id || "";
+      updatePlan((current) => ({
+        ...current,
+        sections: current.sections.map((section) => section.id === selectedSection.id
+          ? sectionWithPositionPatch(section, alignSelectedPerformers(sectionEditPositions(section, editKeyframeId), selectedPerformerIds, axis), editKeyframeId)
+          : section)
+      }));
+    };
+    const selectRole = (role) => {
+      const ids = performerIdsForRole(plan.performers, role);
+      setSelectedPerformerIds(ids);
+      setSelectedPerformerId(ids[0] || "");
+      setSelectedPairKey("");
+      setStatus(`${ids.length}명을 선택했습니다.`);
+    };
     return (
       <div className="form-stack">
         <div className="panel-head">
@@ -2510,6 +2772,14 @@ function App() {
         <div className="tool-card">
           <strong>현재 선택</strong>
           <span>{selectionTitle}</span>
+          {!readonly && (
+            <div className="selection-actions">
+              <button onClick={() => selectRole("groupA")}>A 선택</button>
+              <button onClick={() => selectRole("groupB")}>B 선택</button>
+              <button onClick={() => alignSelection("x")} disabled={selectedPerformerIds.length < 2}>세로 정렬</button>
+              <button onClick={() => alignSelection("y")} disabled={selectedPerformerIds.length < 2}>가로 정렬</button>
+            </div>
+          )}
           {selectedPair ? (
             <div className="selection-actions">
               <em>빈 무대 클릭: 1회 이동 / 다시 클릭: 선택 해제</em>
@@ -2568,7 +2838,7 @@ function App() {
             {selectedSectionIndex > 0 && <button onClick={addMovementKeyframeAtCurrentTime} disabled={!canAddMovementKeyframe}>키프레임</button>}
             {selectedMovementKeyframeId && <button onClick={() => setSelectedMovementKeyframeId("")}>도착 대형 편집</button>}
             {selectedMovementKeyframeId && <button onClick={deleteSelectedMovementKeyframe}>키프레임 삭제</button>}
-            <button className="danger-button compact-danger" onClick={deleteSection}>삭제</button>
+            <button className="danger-button compact-danger" onClick={deleteSection} disabled={sortedSections.length <= 1} title={sortedSections.length <= 1 ? "마지막 대형은 삭제할 수 없습니다." : "선택 대형 삭제"}>삭제</button>
             <button className="danger-button compact-danger" onClick={resetSelectedFormation}>대형 초기화</button>
           </div>
         )}
@@ -2619,20 +2889,39 @@ function App() {
         <div className="share-hero">
           <div>
             <h2>공유 / 출력</h2>
-            <p>팀원에게 보낼 링크와 수업용 백업 파일을 여기서 준비합니다.</p>
+            <p>보기 링크는 리뷰 전용입니다. 편집 링크는 링크를 받은 사람이 수정하고 다시 저장할 수 있습니다.</p>
           </div>
-          {!readonly && <button className="primary" onClick={shareProject}>공유 링크 만들기</button>}
+          {!readonly && <button className="primary" onClick={shareProject} disabled={!canCreateViewLink && !plan.shareLinks?.view?.projectId}>편집 링크 만들기</button>}
         </div>
 
-        {shareUrl && (
-          <div className="share-link-box">
-            <span>보기 전용 링크</span>
+        <div className="share-link-grid">
+          <div className={shareUrl ? "share-link-box" : "share-link-box muted"}>
+            <div className="share-link-heading">
+              <strong>보기 링크</strong>
+              <span>{viewLinkState}</span>
+            </div>
+            <p>리뷰와 재생만 허용합니다. 대형, 음악, 출력 상태를 확인하는 용도입니다.</p>
             <div className="share-link-row">
-              <a href={shareUrl}>{shareUrl}</a>
-              <button onClick={copyShareUrl}>링크 복사</button>
+              {shareUrl ? <a href={shareUrl}>열기</a> : <span>저장하면 자동 생성됩니다.</span>}
+              {shareUrl && <button onClick={copyShareUrl}>복사</button>}
+              {canManageLinks && shareUrl && <button onClick={() => setShareLinkEnabled(LINK_TYPES.view, !plan.shareLinks?.view?.enabled)}>{plan.shareLinks?.view?.enabled === false ? "켜기" : "끄기"}</button>}
             </div>
           </div>
-        )}
+          {!readonly && (
+            <div className={editShareUrl ? "share-link-box edit-link-box" : "share-link-box muted"}>
+              <div className="share-link-heading">
+                <strong>편집 링크</strong>
+                <span>{editLinkState}</span>
+              </div>
+              <p>받은 사람이 편집 화면으로 들어와 수정하고 저장할 수 있습니다. 신뢰하는 사람에게만 보냅니다.</p>
+              <div className="share-link-row">
+                {editShareUrl ? <a href={editShareUrl}>열기</a> : <span>편집 링크 만들기로 생성합니다.</span>}
+                {editShareUrl && <button onClick={copyEditShareUrl}>복사</button>}
+                {canManageLinks && editShareUrl && <button onClick={() => setShareLinkEnabled(LINK_TYPES.edit, !plan.shareLinks?.edit?.enabled)}>{plan.shareLinks?.edit?.enabled === false ? "켜기" : "끄기"}</button>}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="share-checklist">
           <strong>공유 전 확인</strong>
@@ -2643,7 +2932,11 @@ function App() {
             이름 미입력 {unnamedPerformers.length ? `${unnamedPerformers.length}명` : "없음"}
           </span>
           <span className={plan.cloudProjectId ? "check ok" : "check neutral"}>클라우드 저장 {plan.cloudProjectId ? "완료" : "미저장"}</span>
-          <span className={shareUrl ? "check ok" : "check neutral"}>공유 링크 {shareUrl ? "생성됨" : "미생성"}</span>
+          <span className={shareUrl ? "check ok" : "check neutral"}>View Link {shareUrl ? "생성됨" : "미생성"}</span>
+          <span className={editShareUrl ? "check ok" : "check neutral"}>Edit Link {editShareUrl ? "생성됨" : canCreateEditLink ? "생성 가능" : "한도 확인 필요"}</span>
+          <span className={signedInOwner ? "check ok" : currentAuth.userId ? "check neutral" : "check warn"}>
+            계정 소유권 {signedInOwner ? "연결됨" : currentAuth.userId ? "저장 시 연결" : "로그인 필요"}
+          </span>
           <span className={audioLoadFailed ? "check warn" : audioUrlSaved ? "check ok" : audioUploadStatus === "failed" ? "check warn" : "check neutral"}>
             {audioLoadFailed ? "음악 로드 실패" : audioUrlSaved ? "음악 URL 저장됨" : audioUploadStatus === "failed" ? "음악 업로드 실패" : "음악 미포함"}
           </span>
@@ -2685,11 +2978,13 @@ function App() {
   }
 
   const selectedPerformer = plan.performers.find((performer) => performer.id === selectedPerformerId);
-  const localSaveLabel = readonly
-    ? "보기 전용"
-    : localSavedAt
-      ? `이 기기에 자동 저장됨 · ${formatClockTime(localSavedAt)}`
-      : "이 기기에 자동 저장 준비됨";
+  const localSaveLabel = shareId && !readonly
+    ? "편집 링크 프로젝트 · 저장하기로 클라우드 반영"
+    : readonly
+      ? isEditLinkRoute ? "편집 링크 인증 필요" : "보기 전용"
+      : localSavedAt
+        ? `이 기기에 자동 저장됨 · ${formatClockTime(localSavedAt)}`
+        : "이 기기에 자동 저장 준비됨";
   const selectedStateText = selectedPairKey
     ? "페어 선택됨"
     : selectedPerformer
@@ -2723,7 +3018,7 @@ function App() {
   return (
     <div className={isStageFocus ? "app stage-focus" : "app"}>
       {status && (
-        <div className="status">
+        <div className="status" role="status" aria-live="polite">
           <span>{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</span>
           {renderStatusActions()}
         </div>
@@ -2731,8 +3026,8 @@ function App() {
       {readonly && (
         <div className="readonly-banner">
           <div>
-            <strong>보기 전용 링크</strong>
-            <span>공유된 Movemap 프로젝트를 확인 중입니다. 수정하려면 이 기기에 사본을 만드세요.</span>
+            <strong>{shareRouteBlocked === "disabled-view-link" ? "비활성화된 View Link" : "보기 링크 · View Link"}</strong>
+            <span>{shareRouteBlocked === "disabled-view-link" ? "소유자가 이 보기 링크를 꺼두었습니다. 편집 기능은 열리지 않습니다." : "공유된 Movemap 프로젝트를 리뷰 중입니다. 수정하려면 이 기기에 사본을 만드세요."}</span>
           </div>
           <div className="readonly-actions">
             <button onClick={saveEditableCopy}>사본으로 편집</button>
@@ -2769,6 +3064,13 @@ function App() {
               </div>
             </div>
             <div className="stage-toolbar-actions">
+              {!readonly && (
+                currentAuth.userId ? (
+                  <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
+                ) : (
+                  <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
+                )
+              )}
               {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
               {!readonly && (
                 <div className="top-action-group">
@@ -2786,6 +3088,11 @@ function App() {
             </div>
           </div>
           {!readonly && <p className="stage-hint">{hasUsableAudio ? "음악을 재생하고 원하는 순간에 대형을 만드세요." : "음악 없이도 대형을 만들고 배치를 시작할 수 있습니다."}</p>}
+          {activeTransitionWarnings.length > 0 && (
+            <div className="transition-warning" role="status">
+              먼 이동 주의: {activeTransitionWarnings.map((warning) => `${warning.name} ${warning.distance}`).join(", ")}
+            </div>
+          )}
           <div className="stage-frame">
             <div className="stage-corner-tools" aria-label="무대 도구">
               {!readonly && (
@@ -2826,6 +3133,14 @@ function App() {
               >
                 {isStageFocus ? "↙" : "⛶"}
               </button>
+              <button
+                className={showAllTransitionPaths ? "icon-tool active" : "icon-tool"}
+                onClick={() => setShowAllTransitionPaths((value) => !value)}
+                title={showAllTransitionPaths ? "선택 경로 중심으로 보기" : "모든 이동 경로 보기"}
+                aria-label={showAllTransitionPaths ? "선택 경로 중심으로 보기" : "모든 이동 경로 보기"}
+              >
+                경로
+              </button>
             </div>
             <svg
               ref={svgRef}
@@ -2859,12 +3174,18 @@ function App() {
                 if (!pos) return null;
                 return <circle key={`ghost-${performer.id}`} cx={pos.x} cy={pos.y} r="2.5" fill="#475569" opacity="0.2" />;
               })}
-              {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
-                const from = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
-                const to = activeSection?.positions?.[performer.id];
-                if (!from || !to || (Math.abs(from.x - to.x) < 1 && Math.abs(from.y - to.y) < 1)) return null;
-                const dim = selectedPerformerId && selectedPerformerId !== performer.id;
-                return <line key={`arrow-${performer.id}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={performer.color} strokeWidth="0.8" opacity={dim ? 0.12 : 0.65} markerEnd="url(#arrow-live)" />;
+              {buildTransitionPaths({
+                performers: plan.performers,
+                previousSection: sortedSections[activeSectionIndex - 1],
+                currentSection: activeSection,
+                nextSection: sortedSections[activeSectionIndex + 1],
+                selectedPerformerId,
+                reduceClutter: !showAllTransitionPaths
+              }).map((path) => {
+                const performer = plan.performers.find((item) => item.id === path.performerId);
+                const style = transitionPathStyle({ performer, selectedPerformerId });
+                const dash = path.context === "next" ? "1.6 1.2" : "";
+                return <line key={`arrow-${path.context}-${path.performerId}`} x1={path.from.x} y1={path.from.y} x2={path.to.x} y2={path.to.y} stroke={style.stroke} strokeWidth={style.strokeWidth} opacity={style.opacity} strokeDasharray={dash} markerEnd="url(#arrow-live)" />;
               })}
               {(plan.partnerSets.find((set) => set.id === activeSection?.partnerSetId)?.pairs || []).map(([a, b], index) => {
                 const from = visiblePositions[a];
@@ -2904,7 +3225,8 @@ function App() {
               {plan.performers.map((performer) => {
                 const pos = visiblePositions[performer.id] || selectedSection?.positions?.[performer.id];
                 if (!pos) return null;
-                const dim = selectedPerformerId && selectedPerformerId !== performer.id && magnetCandidateId !== performer.id;
+                const isMultiSelected = selectedPerformerIds.includes(performer.id);
+                const dim = selectedPerformerId && selectedPerformerId !== performer.id && !isMultiSelected && magnetCandidateId !== performer.id;
                 const isCandidate = magnetCandidateId === performer.id;
                 const performerPair = pairForPerformer(partnerSet?.pairs || [], performer.id);
                 const isSelectedPairMember = performerPair && selectedPairKey === pairKey(performerPair);
@@ -2918,14 +3240,17 @@ function App() {
                     className={readonly ? "token readonly" : "token"}
                     opacity={dim ? 0.35 : 1}
                     onPointerDown={(event) => onStagePointerDown(event, performer.id)}
-                    onClick={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (readonly) setSelectedPerformerId(performer.id);
+                    }}
                   >
                     <title>{fullName}</title>
                     <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
-                    {(selectedPerformerId === performer.id || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
+                    {(selectedPerformerId === performer.id || isMultiSelected || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
                     {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_PAIR_RING_RADIUS : PAIR_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.78" : "0.62"} pointerEvents="none" />}
                     {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
-                    {selectedPerformerId === performer.id && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
+                    {(selectedPerformerId === performer.id || isMultiSelected) && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
                     <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
                     <text x={pos.x} y={pos.y + fontSize * 0.34} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="800" pointerEvents="none">{shortName}</text>
                   </g>
@@ -3152,6 +3477,16 @@ function App() {
       </main>
 
       <section className="mobile-editor">
+        {!readonly && (
+          <div className="mobile-action-bar" aria-label="모바일 편집 도구">
+            <button onClick={() => setIsToolDrawerOpen((value) => !value)}>선택</button>
+            <button onClick={addSection}>추가</button>
+            <button onClick={duplicateSection} disabled={!selectedSection}>복제</button>
+            <button onClick={deleteSection} disabled={sortedSections.length <= 1}>삭제</button>
+            <button onClick={undoPlan} disabled={!undoStack.length}>되돌리기</button>
+            <button onClick={shareProject}>공유</button>
+          </div>
+        )}
         {isToolDrawerOpen && (
           <div className={isBottomSheetExpanded ? "mobile-bottom-sheet expanded" : "mobile-bottom-sheet"}>
             <div className="bottom-sheet-head">

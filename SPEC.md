@@ -4,7 +4,7 @@
 
 `SPEC.md` is the canonical product contract for Movemap.
 
-It defines the stable product direction, feature boundaries, data model expectations, account and sharing policy, and success criteria. Dated design documents under `docs/superpowers/specs/` are supporting research and strategy notes. `MVP.md` defines current implementation status and near-term slices.
+It defines the stable product direction, feature boundaries, data model expectations, account and sharing policy, and success criteria. Dated design documents under `docs/superpowers/specs/` are supporting research and strategy notes. `MVP.md` translates this SPEC into staged implementation plan, current implementation state, and next executable slices.
 
 If `SPEC.md` conflicts with a dated strategy or research document, `SPEC.md` wins unless this file explicitly delegates that topic.
 
