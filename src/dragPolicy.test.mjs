@@ -267,7 +267,13 @@ test("formation changes clear performer and pair selection", () => {
   const appSource = readFileSync(new URL("./App.jsx", import.meta.url), "utf8");
   const jumpTo = appSource.match(/function jumpTo\(section\) \{[\s\S]*?\n  \}/)?.[0] || "";
   const playbackSectionSync = appSource.match(/useEffect\(\(\) => \{[\s\S]*?activeSection\?\.id[\s\S]*?\}, \[isPlaying, activeSection\?\.id\]\);/)?.[0] || "";
+  const duplicateSection = appSource.match(/function duplicateSection\(\) \{[\s\S]*?function deleteSection/)?.[0] || "";
+  const deleteSection = appSource.match(/function deleteSection\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
   assert.match(jumpTo, /clearSelection\(\);/);
   assert.match(playbackSectionSync, /clearSelection\(\);/);
+  assert.match(duplicateSection, /copiedPartnerSet/);
+  assert.match(duplicateSection, /id: copiedPartnerSetId/);
+  assert.match(duplicateSection, /setSelectedPairKey\(""\);/);
+  assert.match(deleteSection, /setSelectedPairKey\(""\);/);
 });

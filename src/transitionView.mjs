@@ -1,5 +1,6 @@
 const MIN_MOVEMENT_DISTANCE = 1;
 const LONG_MOVEMENT_DISTANCE = 42;
+const OVERLAP_WARNING_DISTANCE = 5;
 
 function movedEnough(from, to) {
   if (!from || !to) return false;
@@ -30,11 +31,18 @@ export function buildTransitionPaths({
   currentSection = null,
   nextSection = null,
   selectedPerformerId = "",
+  selectedPair = [],
+  role = "",
+  filter = "",
   reduceClutter = false
 } = {}) {
-  const visiblePerformers = reduceClutter && selectedPerformerId
-    ? performers.filter((performer) => performer.id === selectedPerformerId)
-    : performers;
+  const visiblePerformers = filterTransitionPerformers({
+    performers,
+    selectedPerformerId,
+    selectedPair,
+    role,
+    filter: filter || (reduceClutter && selectedPerformerId ? "selected-performer" : "all")
+  });
   const paths = [];
 
   for (const performer of visiblePerformers) {
@@ -56,9 +64,31 @@ export function buildTransitionPaths({
   return paths;
 }
 
-export function transitionPathStyle({ performer, selectedPerformerId = "" } = {}) {
-  const selected = selectedPerformerId && performer?.id === selectedPerformerId;
-  const dimmed = selectedPerformerId && !selected;
+export function filterTransitionPerformers({
+  performers = [],
+  selectedPerformerId = "",
+  selectedPair = [],
+  role = "",
+  filter = "all"
+} = {}) {
+  if (filter === "selected-performer" && selectedPerformerId) {
+    return performers.filter((performer) => performer.id === selectedPerformerId);
+  }
+  if (filter === "selected-pair" && selectedPair.length) {
+    const pairIds = new Set(selectedPair);
+    return performers.filter((performer) => pairIds.has(performer.id));
+  }
+  if (filter === "role" && role) {
+    return performers.filter((performer) => performer.role === role || performer.group === role);
+  }
+  return performers;
+}
+
+export function transitionPathStyle({ performer, selectedPerformerId = "", focusedPerformerIds = [] } = {}) {
+  const focusedIds = new Set(focusedPerformerIds.filter(Boolean));
+  const hasFocus = Boolean(selectedPerformerId || focusedIds.size);
+  const selected = (selectedPerformerId && performer?.id === selectedPerformerId) || focusedIds.has(performer?.id);
+  const dimmed = hasFocus && !selected;
   return {
     stroke: performer?.color || "#334155",
     strokeWidth: selected ? 1.35 : 0.8,
@@ -76,4 +106,28 @@ export function longDistanceWarnings(paths = [], performers = []) {
       context: path.context,
       distance: Math.round(path.distance)
     }));
+}
+
+export function overlapWarnings(currentSection = null, performers = [], threshold = OVERLAP_WARNING_DISTANCE) {
+  const names = new Map(performers.map((performer) => [performer.id, performer.name || performer.label || performer.id]));
+  const positions = currentSection?.positions || {};
+  const ids = performers.map((performer) => performer.id).filter((id) => positions[id]);
+  const warnings = [];
+
+  for (let leftIndex = 0; leftIndex < ids.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < ids.length; rightIndex += 1) {
+      const leftId = ids[leftIndex];
+      const rightId = ids[rightIndex];
+      const distance = movementDistance(positions[leftId], positions[rightId]);
+      if (distance < threshold) {
+        warnings.push({
+          performerIds: [leftId, rightId],
+          names: [names.get(leftId) || leftId, names.get(rightId) || rightId],
+          distance: Math.round(distance * 10) / 10
+        });
+      }
+    }
+  }
+
+  return warnings;
 }

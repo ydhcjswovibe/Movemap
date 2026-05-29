@@ -276,6 +276,67 @@ test("applyFormationTimelineEdit adds a four-second formation after the intro", 
   assertSequentialTiming(result.sections);
 });
 
+test("applyFormationTimelineEdit preserves formation payloads through add, trim, move, and reorder", () => {
+  const sections = [
+    {
+      id: "intro",
+      time: 4,
+      start: 0,
+      end: 4,
+      moveDuration: 4,
+      positions: { a: { x: 10, y: 10 }, b: { x: 20, y: 20 } },
+      partnerSetId: "pair_intro",
+      notes: "start"
+    },
+    {
+      id: "b",
+      time: 8,
+      start: 4,
+      end: 8,
+      moveDuration: 4,
+      positions: { a: { x: 30, y: 30 }, b: { x: 40, y: 40 } },
+      partnerSetId: "pair_b",
+      moveMode: "smooth"
+    },
+    {
+      id: "c",
+      time: 12,
+      start: 8,
+      end: 12,
+      moveDuration: 4,
+      positions: { a: { x: 50, y: 50 }, b: { x: 60, y: 60 } },
+      partnerSetId: "pair_c"
+    }
+  ];
+
+  const added = applyFormationTimelineEdit({
+    sections,
+    action: "add-after",
+    section: {
+      id: "d",
+      positions: { a: { x: 70, y: 70 }, b: { x: 80, y: 80 } },
+      partnerSetId: "pair_d"
+    }
+  });
+  assert.deepEqual(added.sections.find((section) => section.id === "d").positions, { a: { x: 70, y: 70 }, b: { x: 80, y: 80 } });
+  assert.equal(added.sections.find((section) => section.id === "d").partnerSetId, "pair_d");
+  assert.equal(added.sections.find((section) => section.id === "d").moveDuration, 4);
+
+  const trimmed = applyFormationTimelineEdit({ sections, action: "trim-right", sectionId: "b", time: 10 });
+  assert.deepEqual(trimmed.sections.find((section) => section.id === "b").positions, sections[1].positions);
+  assert.equal(trimmed.sections.find((section) => section.id === "b").partnerSetId, "pair_b");
+  assert.equal(trimmed.sections.find((section) => section.id === "b").moveMode, "smooth");
+
+  const moved = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "b", deltaTime: 1, timelineMax: 20 });
+  assert.deepEqual(moved.sections.find((section) => section.id === "b").positions, sections[1].positions);
+  assert.equal(moved.sections.find((section) => section.id === "b").partnerSetId, "pair_b");
+
+  const reordered = applyFormationTimelineEdit({ sections, action: "reorder", sectionId: "c", toIndex: 0 });
+  assert.deepEqual(reordered.sections.find((section) => section.id === "c").positions, sections[2].positions);
+  assert.equal(reordered.sections.find((section) => section.id === "c").partnerSetId, "pair_c");
+  assertSequentialTiming(reordered.sections);
+});
+
 test("applyFormationTimelineEdit uses a later requested arrival while keeping a four-second new segment", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },

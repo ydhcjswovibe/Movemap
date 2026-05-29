@@ -9,7 +9,7 @@ import { canCreateLink, canOwnCloudProject, planCapabilities } from "./planCapab
 import { createEditShareUrl, createShareUrl } from "./shareUrl.mjs";
 import { LINK_TYPES, authorizeShareRoute, createEditLinkToken, linkModeFromLocation, projectWithShareLink, projectWithShareLinkEnabled } from "./shareLinks.mjs";
 import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarget, moveSelectedPerformers, performerIdsForRole, togglePerformerSelection } from "./formationTools.mjs";
-import { buildTransitionPaths, longDistanceWarnings, transitionPathStyle } from "./transitionView.mjs";
+import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transitionPathStyle } from "./transitionView.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
   applyFormationTimelineEdit,
@@ -560,6 +560,7 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
     previousSection: prev,
     currentSection: section
   }), plan.performers);
+  const overlaps = overlapWarnings(section, plan.performers);
   const token = (performer, pos, ghost = false) => {
     const dim = selectedId && selectedId !== performer.id;
     const performerPair = ghost ? null : pairForPerformerId(pairs, performer.id);
@@ -616,7 +617,8 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
       ${plan.performers.map((performer) => positions[performer.id] ? token(performer, positions[performer.id]) : "").join("")}
       <text x="4" y="7" font-size="4" fill="#0f172a" font-family="Arial" font-weight="700">${escapeSvgText(section?.name || "")} ${section ? `도착 ${formatTime(pointTime(section))} / 이동 ${pointMoveDuration(section)}초` : ""}</text>
       ${warnings.length ? `<text x="4" y="13" font-size="2.8" fill="#92400e" font-family="Arial" font-weight="700">먼 이동 주의: ${escapeSvgText(warnings.map((warning) => warning.name).join(", "))}</text>` : ""}
-      ${readonly ? `<text x="4" y="${warnings.length ? 17 : 12}" font-size="2.8" fill="#475569" font-family="Arial">${escapeSvgText(section?.notes || "")}</text>` : ""}
+      ${overlaps.length ? `<text x="4" y="${warnings.length ? 17 : 13}" font-size="2.8" fill="#92400e" font-family="Arial" font-weight="700">겹침 주의: ${escapeSvgText(overlaps.map((warning) => warning.names.join(" / ")).join(", "))}</text>` : ""}
+      ${readonly ? `<text x="4" y="${warnings.length || overlaps.length ? 21 : 12}" font-size="2.8" fill="#475569" font-family="Arial">${escapeSvgText(section?.notes || "")}</text>` : ""}
     </svg>`;
 }
 
@@ -716,6 +718,7 @@ function App() {
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
+  const [transitionPathFilter, setTransitionPathFilter] = useState("auto");
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const audioRef = useRef(null);
@@ -1835,6 +1838,7 @@ function App() {
     const nextSections = sortedSections.filter((section) => section.id !== selectedSection.id);
     updatePlan((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== selectedSection.id) }));
     setSelectedSectionId(target.nextSectionId || nextSections[0]?.id || "");
+    setSelectedPairKey("");
     setSelectedPerformerIds([]);
   }
 
@@ -2588,6 +2592,7 @@ function App() {
   }
 
   const partnerSet = plan.partnerSets.find((set) => set.id === selectedSection?.partnerSetId);
+  const selectedPair = (partnerSet?.pairs || []).find((pair) => pairKey(pair) === selectedPairKey) || null;
   const frontZeroPerformers = plan.performers.filter((performer) => (counts[performer.id] || 0) === 0);
   const unnamedPerformers = plan.performers.filter((performer) => !String(performer.name || "").trim());
   const hasPngBackup = false;
@@ -2607,14 +2612,39 @@ function App() {
   const canManageLinks = Boolean(!readonly && plan.shareLinks?.view?.projectId && signedInOwner);
   const viewLinkState = plan.shareLinks?.view?.enabled === false ? "꺼짐" : shareUrl ? "켜짐" : "없음";
   const editLinkState = plan.shareLinks?.edit?.enabled === false ? "꺼짐" : editShareUrl ? "켜짐" : "없음";
-  const activeTransitionWarnings = longDistanceWarnings(buildTransitionPaths({
+  const activeTransitionFilter = (() => {
+    if (showAllTransitionPaths) return { filter: "all", role: "", label: "전체" };
+    if (transitionPathFilter === "groupA") return { filter: "role", role: "groupA", label: "A 그룹" };
+    if (transitionPathFilter === "groupB") return { filter: "role", role: "groupB", label: "B 그룹" };
+    if (transitionPathFilter === "selected-pair" && selectedPair) return { filter: "selected-pair", role: "", label: "선택 페어" };
+    if (transitionPathFilter === "selected-performer" && selectedPerformerId) return { filter: "selected-performer", role: "", label: "선택 토큰" };
+    if (selectedPair) return { filter: "selected-pair", role: "", label: "선택 페어" };
+    if (selectedPerformerId) return { filter: "selected-performer", role: "", label: "선택 토큰" };
+    return { filter: "all", role: "", label: "전체" };
+  })();
+  const activeTransitionPaths = buildTransitionPaths({
     performers: plan.performers,
     previousSection: sortedSections[selectedSectionIndex - 1],
     currentSection: selectedSection,
     nextSection: sortedSections[selectedSectionIndex + 1],
     selectedPerformerId,
-    reduceClutter: !showAllTransitionPaths
-  }), plan.performers);
+    selectedPair: selectedPair || [],
+    filter: activeTransitionFilter.filter,
+    role: activeTransitionFilter.role
+  });
+  const activeFocusedPerformerIds = activeTransitionFilter.filter === "selected-pair"
+    ? selectedPair || []
+    : activeTransitionFilter.filter === "selected-performer"
+      ? [selectedPerformerId]
+      : [];
+  const activeTransitionWarnings = longDistanceWarnings(activeTransitionPaths, plan.performers);
+  const activeOverlapWarnings = overlapWarnings(selectedSection, plan.performers);
+  const transitionFilterButtons = [
+    ["auto", selectedPair || selectedPerformerId ? "선택" : "자동"],
+    ["all", "전체"],
+    ["groupA", "A"],
+    ["groupB", "B"]
+  ];
 
   function renderShareMenu() {
     return (
@@ -3093,6 +3123,44 @@ function App() {
               먼 이동 주의: {activeTransitionWarnings.map((warning) => `${warning.name} ${warning.distance}`).join(", ")}
             </div>
           )}
+          {activeOverlapWarnings.length > 0 && (
+            <div className="transition-warning" role="status">
+              겹침 주의(현재 대형 전체): {activeOverlapWarnings.map((warning) => `${warning.names.join(" / ")} ${warning.distance}`).join(", ")}
+            </div>
+          )}
+          <div className="transition-review" aria-label="전환 리뷰">
+            <div className="transition-review-head">
+              <div>
+                <strong>{sortedSections[selectedSectionIndex - 1]?.name || "시작"} → {selectedSection?.name || "대형"} → {sortedSections[selectedSectionIndex + 1]?.name || "끝"}</strong>
+                <span>{selectedSection?.name || ""} · 도착 {selectedSection ? formatTime(pointTime(selectedSection)) : "0:00.0"} · 이동 {selectedSection ? pointMoveDuration(selectedSection) : 0}초</span>
+              </div>
+              <div className="segmented-control" aria-label="경로 필터">
+                {transitionFilterButtons.map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={(value === "all" && showAllTransitionPaths) || (!showAllTransitionPaths && transitionPathFilter === value) ? "active" : ""}
+                    onClick={() => {
+                      if (value === "all") {
+                        setShowAllTransitionPaths(true);
+                        setTransitionPathFilter("auto");
+                        return;
+                      }
+                      setShowAllTransitionPaths(false);
+                      setTransitionPathFilter(value);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="transition-review-meta">
+              <span>필터 {activeTransitionFilter.label}</span>
+              <span>경로 {activeTransitionPaths.length}</span>
+              <span>먼 이동 {activeTransitionWarnings.length}</span>
+              <span>전체 겹침 {activeOverlapWarnings.length}</span>
+            </div>
+          </div>
           <div className="stage-frame">
             <div className="stage-corner-tools" aria-label="무대 도구">
               {!readonly && (
@@ -3180,10 +3248,12 @@ function App() {
                 currentSection: activeSection,
                 nextSection: sortedSections[activeSectionIndex + 1],
                 selectedPerformerId,
-                reduceClutter: !showAllTransitionPaths
+                selectedPair: selectedPair || [],
+                filter: activeTransitionFilter.filter,
+                role: activeTransitionFilter.role
               }).map((path) => {
                 const performer = plan.performers.find((item) => item.id === path.performerId);
-                const style = transitionPathStyle({ performer, selectedPerformerId });
+                const style = transitionPathStyle({ performer, selectedPerformerId, focusedPerformerIds: activeFocusedPerformerIds });
                 const dash = path.context === "next" ? "1.6 1.2" : "";
                 return <line key={`arrow-${path.context}-${path.performerId}`} x1={path.from.x} y1={path.from.y} x2={path.to.x} y2={path.to.y} stroke={style.stroke} strokeWidth={style.strokeWidth} opacity={style.opacity} strokeDasharray={dash} markerEnd="url(#arrow-live)" />;
               })}

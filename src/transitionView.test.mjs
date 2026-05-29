@@ -3,15 +3,17 @@ import test from "node:test";
 
 import {
   buildTransitionPaths,
+  filterTransitionPerformers,
   longDistanceWarnings,
   movementDistance,
+  overlapWarnings,
   transitionPathStyle
 } from "./transitionView.mjs";
 
 const performers = [
-  { id: "a", name: "Ari", color: "#111" },
-  { id: "b", color: "#222" },
-  { id: "c", color: "#333" }
+  { id: "a", name: "Ari", color: "#111", role: "lead" },
+  { id: "b", color: "#222", role: "lead" },
+  { id: "c", color: "#333", role: "back" }
 ];
 
 const previous = {
@@ -65,6 +67,41 @@ test("buildTransitionPaths can reduce clutter to the selected performer", () => 
   assert.deepEqual(paths.map((path) => `${path.context}:${path.performerId}`), ["previous:a", "next:a"]);
 });
 
+test("buildTransitionPaths can filter to a selected pair", () => {
+  const paths = buildTransitionPaths({
+    performers,
+    previousSection: previous,
+    currentSection: current,
+    nextSection: next,
+    filter: "selected-pair",
+    selectedPair: ["a", "b"]
+  });
+
+  assert.deepEqual(paths.map((path) => `${path.context}:${path.performerId}`), [
+    "previous:a",
+    "next:a",
+    "next:b"
+  ]);
+});
+
+test("buildTransitionPaths can filter by performer role or group", () => {
+  assert.deepEqual(
+    filterTransitionPerformers({ performers, filter: "role", role: "lead" }).map((performer) => performer.id),
+    ["a", "b"]
+  );
+
+  const paths = buildTransitionPaths({
+    performers,
+    previousSection: previous,
+    currentSection: current,
+    nextSection: next,
+    filter: "role",
+    role: "back"
+  });
+
+  assert.deepEqual(paths.map((path) => `${path.context}:${path.performerId}`), ["previous:c"]);
+});
+
 test("transitionPathStyle strongly emphasizes selected performers", () => {
   assert.deepEqual(transitionPathStyle({ performer: performers[0], selectedPerformerId: "a" }), {
     stroke: "#111",
@@ -72,6 +109,7 @@ test("transitionPathStyle strongly emphasizes selected performers", () => {
     opacity: 0.92
   });
   assert.equal(transitionPathStyle({ performer: performers[1], selectedPerformerId: "a" }).opacity, 0.1);
+  assert.equal(transitionPathStyle({ performer: performers[1], focusedPerformerIds: ["a", "b"] }).opacity, 0.92);
 });
 
 test("longDistanceWarnings flags large transition moves", () => {
@@ -85,4 +123,17 @@ test("longDistanceWarnings flags large transition moves", () => {
   assert.deepEqual(longDistanceWarnings(paths, performers), [
     { performerId: "a", name: "Ari", context: "previous", distance: 80 }
   ]);
+});
+
+test("overlapWarnings flags endpoints closer than five stage units", () => {
+  assert.deepEqual(overlapWarnings(current, performers), [
+    { performerIds: ["a", "b"], names: ["Ari", "b"], distance: 0.3 }
+  ]);
+
+  assert.deepEqual(overlapWarnings({
+    positions: {
+      a: { x: 10, y: 10 },
+      b: { x: 15, y: 10 }
+    }
+  }, performers), []);
 });

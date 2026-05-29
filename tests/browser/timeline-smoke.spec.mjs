@@ -38,7 +38,7 @@ function seededProject({ viewEnabled = true, editEnabled = true, editToken = "va
         notes: "시작",
         frontFocus: [],
         partnerSetId: "",
-        positions: { a1: { x: 15, y: 20 }, a2: { x: 30, y: 20 }, b1: { x: 45, y: 20 } }
+        positions: { a1: { x: 15, y: 20 }, a2: { x: 18, y: 20 }, b1: { x: 45, y: 20 } }
       },
       {
         id: "s2",
@@ -189,7 +189,10 @@ test("View Link route opens readonly review with transition warnings", async ({ 
 
   await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
   await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
-  await expect(page.locator(".transition-warning")).toBeVisible();
+  await expect(page.locator(".transition-warning").filter({ hasText: /먼 이동 주의/ })).toBeVisible();
+  await expect(page.locator(".transition-warning").filter({ hasText: /겹침 주의\(현재 대형 전체\)/ })).toBeVisible();
+  await expect(page.getByLabel("전환 리뷰")).toBeVisible();
+  await expect(page.getByText(/전체 겹침 1/)).toBeVisible();
   await expect(page.locator(".formation-block")).toHaveCount(3);
 });
 
@@ -200,6 +203,7 @@ test("valid Edit Link route exposes edit controls", async ({ page }) => {
   await expect(page.getByRole("button", { name: "저장하기" })).toBeVisible();
   await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /대형 추가/ })).toBeVisible();
+  await expect(page.getByLabel("전환 리뷰")).toBeVisible();
 });
 
 test("invalid or disabled links fall back without edit controls", async ({ page }) => {
