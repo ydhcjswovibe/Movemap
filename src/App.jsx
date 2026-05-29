@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -13,6 +14,7 @@ import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transition
 import { defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
 import { FORMATION_TEMPLATES, applyTemplatePositionsToSection, buildFormationTemplatePreview } from "./formationTemplates.mjs";
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
+import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
   applyFormationTimelineEdit,
@@ -679,6 +681,86 @@ function Wizard({ onCreate }) {
   );
 }
 
+function Stage3dPreview({ projection }) {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return undefined;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#f8fafc");
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+    camera.position.set(0, 92, 112);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(mount.clientWidth || 320, mount.clientHeight || 220);
+    mount.replaceChildren(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight("#ffffff", "#cbd5e1", 2.6));
+    const directional = new THREE.DirectionalLight("#ffffff", 1.5);
+    directional.position.set(30, 80, 40);
+    scene.add(directional);
+
+    const grid = new THREE.GridHelper(100, 10, "#94a3b8", "#cbd5e1");
+    grid.position.y = -0.02;
+    scene.add(grid);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.MeshStandardMaterial({ color: "#eef2ff", roughness: 0.9, metalness: 0 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.08;
+    scene.add(floor);
+
+    const front = new THREE.Mesh(
+      new THREE.BoxGeometry(100, 0.35, 1.2),
+      new THREE.MeshStandardMaterial({ color: "#b91c1c" })
+    );
+    front.position.set(0, 0.25, -20);
+    scene.add(front);
+
+    projection.paths.forEach((path) => {
+      const material = new THREE.LineBasicMaterial({ color: path.context === "next" ? "#64748b" : "#334155", transparent: true, opacity: 0.46 });
+      const points = [
+        new THREE.Vector3(path.from.x, 0.45, path.from.z),
+        new THREE.Vector3(path.to.x, 0.45, path.to.z)
+      ];
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
+    });
+
+    projection.tokens.forEach((token) => {
+      const material = new THREE.MeshStandardMaterial({ color: token.color, roughness: 0.58, metalness: 0.05 });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(token.focused ? 2.6 : 2.1, 24, 16), material);
+      mesh.position.set(token.point.x, token.focused ? 2.7 : 2.2, token.point.z);
+      scene.add(mesh);
+    });
+
+    const handleResize = () => {
+      const width = mount.clientWidth || 320;
+      const height = mount.clientHeight || 220;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+      renderer.render(scene, camera);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    renderer.render(scene, camera);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      renderer.dispose();
+      mount.replaceChildren();
+    };
+  }, [projection]);
+
+  return <div className="stage-3d-preview" ref={mountRef} aria-label="3D 대형 미리보기" />;
+}
+
 function App() {
   const linkMode = linkModeFromLocation(window.location);
   const shareId = linkMode.projectId;
@@ -731,6 +813,7 @@ function App() {
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
   const [showStageReferenceLabels, setShowStageReferenceLabels] = useState(true);
+  const [stageViewMode, setStageViewMode] = useState("2d");
   const [selectedTemplateId, setSelectedTemplateId] = useState("line");
   const [formationPreview, setFormationPreview] = useState(null);
   const [transitionPathFilter, setTransitionPathFilter] = useState("auto");
@@ -1019,6 +1102,18 @@ function App() {
       : base;
     return dragPositions ? { ...editBase, ...dragPositions } : editBase;
   }, [plan, sortedSections, activeSectionIndex, currentTime, isPlaying, dragPositions, selectedSection, selectedMovementKeyframe]);
+  const stage3dProjection = useMemo(() => buildStage3dProjection({
+    performers: plan?.performers || [],
+    positions: visiblePositions,
+    transitionPaths: plan ? buildTransitionPaths({
+      performers: plan.performers,
+      previousSection: sortedSections[activeSectionIndex - 1],
+      currentSection: activeSection,
+      nextSection: sortedSections[activeSectionIndex + 1],
+      selectedPerformerId
+    }) : [],
+    selectedPerformerId
+  }), [plan, visiblePositions, sortedSections, activeSectionIndex, activeSection, selectedPerformerId]);
 
   useEffect(() => {
     if (isPlaying && activeSection?.id) {
@@ -3361,6 +3456,13 @@ function App() {
                 이름
               </button>
             </div>
+            <div className="stage-view-toggle segmented-control" aria-label="무대 보기 방식">
+              <button className={stageViewMode === "2d" ? "active" : ""} onClick={() => setStageViewMode("2d")}>2D</button>
+              <button className={stageViewMode === "3d" ? "active" : ""} onClick={() => setStageViewMode("3d")}>3D</button>
+            </div>
+            {stageViewMode === "3d" ? (
+              <Stage3dPreview projection={stage3dProjection} />
+            ) : (
             <svg
               ref={svgRef}
               className="stage"
@@ -3509,6 +3611,7 @@ function App() {
                 );
               })}
             </svg>
+            )}
           </div>
           <div className="timeline-editor" aria-label="대형 타임라인">
             <div className="timeline-controls">
