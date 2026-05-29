@@ -1,19 +1,23 @@
 {
-  "name": "choreo-stage-planner",
+  "name": "movemap",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "vite --host 0.0.0.0 --port 5174 --strictPort",
     "build": "vite build",
     "test": "node --test src/*.test.mjs",
-    "preview": "vite --host 0.0.0.0"
+    "preview": "vite --host 0.0.0.0",
+    "test:browser": "env -u NO_COLOR playwright test"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
     "@vitejs/plugin-react": "^5.1.1",
-    "vite": "^7.2.7",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "vite": "^7.2.7"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
 }
