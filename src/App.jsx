@@ -2653,7 +2653,10 @@ function App() {
         {shareUrl && <button onClick={copyShareUrl}>보기 링크 복사</button>}
         {editShareUrl && !readonly && <button onClick={copyEditShareUrl}>편집 링크 복사</button>}
         {canManageLinks && (
-          <button onClick={() => setIsToolDrawerOpen(true)}>링크 관리 열기</button>
+          <>
+            {shareUrl && <button onClick={() => setShareLinkEnabled(LINK_TYPES.view, !plan.shareLinks?.view?.enabled)}>View Link {plan.shareLinks?.view?.enabled === false ? "켜기" : "끄기"}</button>}
+            {editShareUrl && !readonly && <button onClick={() => setShareLinkEnabled(LINK_TYPES.edit, !plan.shareLinks?.edit?.enabled)}>Edit Link {plan.shareLinks?.edit?.enabled === false ? "켜기" : "끄기"}</button>}
+          </>
         )}
         <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "프로젝트 파일 공유"}</button>
         <button onClick={() => exportPng()}>현재 PNG</button>

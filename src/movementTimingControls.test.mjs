@@ -219,6 +219,9 @@ test("top actions expose save share and tools without legacy tabs", () => {
   assert.match(appSource, /<button onClick=\{returnToProjectPicker\}>프로젝트 선택으로 돌아가기<\/button>/);
   assert.match(appSource, /localStorage\.removeItem\(STORAGE_KEY\);/);
   assert.match(appSource, /<button onClick=\{\(\) => setIsShareMenuOpen\(\(value\) => !value\)\}>공유<\/button>/);
+  assert.match(appSource, /setShareLinkEnabled\(LINK_TYPES\.view/);
+  assert.match(appSource, /setShareLinkEnabled\(LINK_TYPES\.edit/);
+  assert.doesNotMatch(appSource, /링크 관리 열기/);
   assert.match(appSource, /\{isToolDrawerOpen \? "도구 닫기" : "도구"\}/);
   assert.doesNotMatch(appSource, /const MOBILE_TABS/);
   assert.doesNotMatch(appSource, /renderMobileTabs/);
