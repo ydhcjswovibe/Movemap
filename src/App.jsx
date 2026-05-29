@@ -387,7 +387,15 @@ function createSampleProject() {
     }
   });
 
-  const [a, b] = project.sections;
+  const [a] = project.sections;
+  const bPositions = Object.fromEntries(project.performers.map((performer, index) => {
+    const groupOffset = performer.role === "groupB" ? 0 : 1;
+    return [performer.id, {
+      x: 22 + (index % 4) * 18,
+      y: groupOffset ? 42 : 66
+    }];
+  }));
+  const b = { ...a, positions: bPositions };
   const pause = {
     ...b,
     id: uid("sec"),
@@ -671,6 +679,19 @@ function Wizard({ onCreate }) {
 
 function Stage3dPreview({ projection }) {
   const mountRef = useRef(null);
+  const sceneRef = useRef(null);
+  const cameraRef = useRef(null);
+  const rendererRef = useRef(null);
+  const dynamicGroupRef = useRef(null);
+
+  const disposeObject = (object) => {
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) {
+      object.material.forEach((material) => material.dispose?.());
+    } else {
+      object.material?.dispose?.();
+    }
+  };
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -711,21 +732,12 @@ function Stage3dPreview({ projection }) {
     front.position.set(0, 0.25, -20);
     scene.add(front);
 
-    projection.paths.forEach((path) => {
-      const material = new THREE.LineBasicMaterial({ color: path.context === "next" ? "#64748b" : "#334155", transparent: true, opacity: 0.46 });
-      const points = [
-        new THREE.Vector3(path.from.x, 0.45, path.from.z),
-        new THREE.Vector3(path.to.x, 0.45, path.to.z)
-      ];
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
-    });
-
-    projection.tokens.forEach((token) => {
-      const material = new THREE.MeshStandardMaterial({ color: token.color, roughness: 0.58, metalness: 0.05 });
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(token.focused ? 2.6 : 2.1, 24, 16), material);
-      mesh.position.set(token.point.x, token.focused ? 2.7 : 2.2, token.point.z);
-      scene.add(mesh);
-    });
+    const dynamicGroup = new THREE.Group();
+    scene.add(dynamicGroup);
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+    rendererRef.current = renderer;
+    dynamicGroupRef.current = dynamicGroup;
 
     const handleResize = () => {
       const width = mount.clientWidth || 320;
@@ -741,9 +753,40 @@ function Stage3dPreview({ projection }) {
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      scene.traverse(disposeObject);
       renderer.dispose();
       mount.replaceChildren();
+      sceneRef.current = null;
+      cameraRef.current = null;
+      rendererRef.current = null;
+      dynamicGroupRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const dynamicGroup = dynamicGroupRef.current;
+    if (!scene || !camera || !renderer || !dynamicGroup) return;
+
+    dynamicGroup.children.forEach(disposeObject);
+    dynamicGroup.clear();
+    projection.paths.forEach((path) => {
+      const material = new THREE.LineBasicMaterial({ color: path.context === "next" ? "#64748b" : "#334155", transparent: true, opacity: 0.46 });
+      const points = [
+        new THREE.Vector3(path.from.x, 0.45, path.from.z),
+        new THREE.Vector3(path.to.x, 0.45, path.to.z)
+      ];
+      dynamicGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
+    });
+    projection.tokens.forEach((token) => {
+      const material = new THREE.MeshStandardMaterial({ color: token.color, roughness: 0.58, metalness: 0.05 });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(token.focused ? 2.6 : 2.1, 24, 16), material);
+      mesh.position.set(token.point.x, token.focused ? 2.7 : 2.2, token.point.z);
+      dynamicGroup.add(mesh);
+    });
+    renderer.render(scene, camera);
   }, [projection]);
 
   return <div className="stage-3d-preview" ref={mountRef} aria-label="3D 대형 미리보기" />;
