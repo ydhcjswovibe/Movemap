@@ -11,6 +11,8 @@ import { LINK_TYPES, authorizeShareRoute, createEditLinkToken, linkModeFromLocat
 import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarget, moveSelectedPerformers, performerIdsForRole, togglePerformerSelection } from "./formationTools.mjs";
 import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transitionPathStyle } from "./transitionView.mjs";
 import { defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
+import { FORMATION_TEMPLATES, applyTemplatePositionsToSection, buildFormationTemplatePreview } from "./formationTemplates.mjs";
+import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
   applyFormationTimelineEdit,
@@ -729,6 +731,8 @@ function App() {
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
   const [showStageReferenceLabels, setShowStageReferenceLabels] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("line");
+  const [formationPreview, setFormationPreview] = useState(null);
   const [transitionPathFilter, setTransitionPathFilter] = useState("auto");
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -1000,6 +1004,9 @@ function App() {
     visible: showStageReferences,
     showLabels: showStageReferenceLabels
   }) : [], [plan, showStageReferences, showStageReferenceLabels]);
+  const selectedTemplatePreview = useMemo(() => plan
+    ? buildFormationTemplatePreview(selectedTemplateId, plan.performers)
+    : null, [plan, selectedTemplateId]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -1813,6 +1820,86 @@ function App() {
     updatePlan((current) => ({ ...current, sections: nextSections }));
     setSelectedSectionId(section.id);
     setStatus(`${formatTime(pointTime(addedSection))}에 대형 지점을 추가했습니다. 이제 무대에서 위치를 수정하세요.`);
+  }
+
+  function previewTemplate() {
+    if (!selectedTemplatePreview) return;
+    setFormationPreview({ kind: "template", ...selectedTemplatePreview });
+    setStatus(`${selectedTemplatePreview.label} 템플릿을 미리 봅니다. 적용 전까지 프로젝트는 바뀌지 않습니다.`);
+  }
+
+  function previewLocalProposal() {
+    if (!selectedTemplatePreview || !plan) return;
+    const proposal = {
+      source: `local-${selectedTemplatePreview.templateId}`,
+      positions: selectedTemplatePreview.positions
+    };
+    const validation = validateFormationProposal(proposal, plan.performers, { requireAllPerformers: true });
+    if (!validation.ok) {
+      setFormationPreview(null);
+      setStatus(`AI 후보가 안전 검사를 통과하지 못했습니다: ${validation.errors.map((error) => error.code).join(", ")}`);
+      return;
+    }
+    setFormationPreview({
+      kind: "proposal",
+      label: `${selectedTemplatePreview.label} AI 후보`,
+      proposal,
+      positions: validation.positions
+    });
+    setStatus("AI 후보를 안전 검증했습니다. 적용 전까지 프로젝트는 바뀌지 않습니다.");
+  }
+
+  function applyFormationPreviewToCurrent() {
+    if (!selectedSection || !formationPreview) return;
+    const nextSection = formationPreview.kind === "proposal"
+      ? acceptFormationProposal(selectedSection, formationPreview.proposal, plan.performers, { requireAllPerformers: true }).section
+      : applyTemplatePositionsToSection(selectedSection, formationPreview);
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === selectedSection.id ? nextSection : section)
+    }));
+    setFormationPreview(null);
+    setStatus(`${selectedSection.name}에 ${formationPreview.label} 배치를 적용했습니다.`);
+  }
+
+  function createSectionFromFormationPreview() {
+    if (!formationPreview || !plan) return;
+    const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
+    const target = resolveFormationAddTarget(sortedSections, captureTime);
+    if (target.action === "select") {
+      setSelectedSectionId(target.section.id);
+      jumpTo(target.section);
+      setStatus(`${target.section.name} 대형을 선택했습니다. 선택 지점에 적용하려면 다시 적용하세요.`);
+      return;
+    }
+    const baseSection = {
+      id: uid("sec"),
+      name: `${formationPreview.label} 대형`,
+      notes: "템플릿/AI 후보에서 명시적으로 적용한 대형입니다.",
+      moveMode: "smooth",
+      positions: {},
+      frontFocus: [],
+      partnerSetId: partnerSetIdForAddedSection(target.previous)
+    };
+    const section = formationPreview.kind === "proposal"
+      ? acceptFormationProposal(baseSection, formationPreview.proposal, plan.performers, { requireAllPerformers: true }).section
+      : applyTemplatePositionsToSection(baseSection, formationPreview);
+    const result = applyFormationTimelineEdit({
+      sections: sortedSections,
+      action: "add-after",
+      time: target.time,
+      section
+    });
+    const addedSection = result.sections.find((item) => item.id === section.id) || section;
+    updatePlan((current) => ({
+      ...current,
+      sections: result.sections.map((item) => item.id === section.id
+        ? { ...item, name: `${formationPreview.label} ${formatTime(pointTime(addedSection))}` }
+        : item)
+    }));
+    setSelectedSectionId(section.id);
+    setFormationPreview(null);
+    setStatus(`${formatTime(pointTime(addedSection))}에 ${formationPreview.label} 대형을 추가했습니다.`);
   }
 
   function duplicateSection() {
@@ -2769,6 +2856,34 @@ function App() {
             </div>
             <p className="muted">이전 대형에서 이 지점까지 {pointMoveDuration(selectedSection)}초 동안 이동해 {formatTime(pointTime(selectedSection))}에 도착합니다.</p>
             <label>메모<textarea readOnly={readonly} value={selectedSection.notes} onChange={(event) => updateSection(selectedSection.id, { notes: event.target.value })} /></label>
+            {!readonly && (
+              <div className="tool-card template-tool-card">
+                <strong>템플릿 / AI 후보</strong>
+                <span>미리보기와 안전 검증 후 선택한 대형에 적용합니다.</span>
+                <label>
+                  배치 템플릿
+                  <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
+                    {FORMATION_TEMPLATES.map((template) => (
+                      <option key={template.id} value={template.id}>{template.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="row-actions">
+                  <button onClick={previewTemplate}>미리보기</button>
+                  <button onClick={previewLocalProposal}>AI 후보 검증</button>
+                </div>
+                {formationPreview && (
+                  <div className="template-preview-status">
+                    <span>{formationPreview.label}</span>
+                    <div className="row-actions">
+                      <button onClick={applyFormationPreviewToCurrent}>현재 대형에 적용</button>
+                      <button onClick={createSectionFromFormationPreview}>새 대형으로 추가</button>
+                      <button onClick={() => setFormationPreview(null)}>취소</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         ) : <p className="muted">대형 지점을 선택하세요.</p>}
       </div>
@@ -3290,6 +3405,20 @@ function App() {
                   </g>
                 ))}
               </g>
+              {formationPreview && (
+                <g className="formation-preview-layer" aria-hidden="true">
+                  {plan.performers.map((performer) => {
+                    const pos = formationPreview.positions?.[performer.id];
+                    if (!pos) return null;
+                    return (
+                      <g key={`preview-${performer.id}`}>
+                        <circle cx={pos.x} cy={pos.y} r="3.1" fill="none" stroke={performer.color} strokeWidth="1.05" strokeDasharray="1.6 1.2" opacity="0.86" />
+                        <text x={pos.x} y={pos.y + 1.05} textAnchor="middle" fontSize="2.7" fill={performer.color} fontWeight="700">{tokenShortName(performer)}</text>
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
               {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
                 const pos = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
                 if (!pos) return null;

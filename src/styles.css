@@ -768,6 +768,17 @@ h3 {
   stroke-width: 0.8px;
 }
 
+.formation-preview-layer {
+  pointer-events: none;
+}
+
+.formation-preview-layer text {
+  paint-order: stroke;
+  stroke: #f8fafc;
+  stroke-linejoin: round;
+  stroke-width: 0.9px;
+}
+
 .token:active {
   cursor: grabbing;
 }
@@ -1339,6 +1350,23 @@ h3 {
   color: #b4234f;
   font-size: 13px;
   font-weight: 900;
+}
+
+.template-tool-card {
+  gap: 9px;
+}
+
+.template-preview-status {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  background: #eef2ff;
+}
+
+.template-preview-status > span {
+  color: #3730a3;
 }
 
 .bottom-grid {
