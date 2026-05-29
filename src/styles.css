@@ -757,6 +757,17 @@ h3 {
   opacity: 0.36;
 }
 
+.stage-reference-layer {
+  pointer-events: none;
+}
+
+.stage-reference-layer text {
+  paint-order: stroke;
+  stroke: #f8fafc;
+  stroke-linejoin: round;
+  stroke-width: 0.8px;
+}
+
 .token:active {
   cursor: grabbing;
 }

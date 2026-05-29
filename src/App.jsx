@@ -10,6 +10,7 @@ import { createEditShareUrl, createShareUrl } from "./shareUrl.mjs";
 import { LINK_TYPES, authorizeShareRoute, createEditLinkToken, linkModeFromLocation, projectWithShareLink, projectWithShareLinkEnabled } from "./shareLinks.mjs";
 import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarget, moveSelectedPerformers, performerIdsForRole, togglePerformerSelection } from "./formationTools.mjs";
 import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transitionPathStyle } from "./transitionView.mjs";
+import { defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import {
   applyFormationTimelineEdit,
@@ -295,6 +296,7 @@ function normalizePlan(plan) {
       view: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.view || {}) },
       edit: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.edit || {}) }
     },
+    stageReferences: normalizeStageReferences(plan.stageReferences, plan.frontZone),
     sections: plan.sections.map(normalizeSection).sort((a, b) => pointTime(a) - pointTime(b))
   };
 }
@@ -357,6 +359,7 @@ function createProject({ title, performanceType, groupACount, groupBCount, names
     partnerSets: [],
     stage: { width: 100, height: 100 },
     frontZone: { y: 70 },
+    stageReferences: defaultStageReferences({ y: 70 }),
     localProjectId: uid("project"),
     owner: { sessionId: "", createdAt: "" },
     account: { plan: "guest" },
@@ -555,6 +558,11 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
   const selectedId = options.selectedId || "";
   const readonly = Boolean(options.readonly);
   const pairs = plan.partnerSets.find((set) => set.id === section?.partnerSetId)?.pairs || [];
+  const referenceSvg = renderStageReferenceSvg(plan.stageReferences, {
+    frontZone: plan.frontZone,
+    visible: options.showStageReferences !== false,
+    showLabels: options.showStageReferenceLabels !== false
+  });
   const warnings = longDistanceWarnings(buildTransitionPaths({
     performers: plan.performers,
     previousSection: prev,
@@ -611,6 +619,7 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
         ${GRID_X.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="100" />`).join("")}
         ${GRID_Y.map((y) => `<line x1="0" y1="${y}" x2="100" y2="${y}" />`).join("")}
       </g>
+      <g>${referenceSvg}</g>
       ${plan.performers.map((performer) => prev?.positions?.[performer.id] ? token(performer, prev.positions[performer.id], true) : "").join("")}
       ${arrows}
       ${pairLines}
@@ -718,6 +727,8 @@ function App() {
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
+  const [showStageReferences, setShowStageReferences] = useState(true);
+  const [showStageReferenceLabels, setShowStageReferenceLabels] = useState(true);
   const [transitionPathFilter, setTransitionPathFilter] = useState("auto");
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -984,6 +995,11 @@ function App() {
     ? `중간 keyframe ${formatTime(selectedMovementKeyframeTime)}`
     : "도착 대형";
   const activeSection = sortedSections[activeSectionIndex];
+  const stageReferenceItems = useMemo(() => plan ? stageReferenceRenderItems(plan.stageReferences, {
+    frontZone: plan.frontZone,
+    visible: showStageReferences,
+    showLabels: showStageReferenceLabels
+  }) : [], [plan, showStageReferences, showStageReferenceLabels]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -3212,6 +3228,23 @@ function App() {
               >
                 경로
               </button>
+              <button
+                className={showStageReferences ? "icon-tool active" : "icon-tool"}
+                onClick={() => setShowStageReferences((value) => !value)}
+                title={showStageReferences ? "무대 기준선 숨기기" : "무대 기준선 보기"}
+                aria-label={showStageReferences ? "무대 기준선 숨기기" : "무대 기준선 보기"}
+              >
+                기준
+              </button>
+              <button
+                className={showStageReferenceLabels ? "icon-tool active" : "icon-tool"}
+                onClick={() => setShowStageReferenceLabels((value) => !value)}
+                disabled={!showStageReferences}
+                title={showStageReferenceLabels ? "기준선 이름 숨기기" : "기준선 이름 보기"}
+                aria-label={showStageReferenceLabels ? "기준선 이름 숨기기" : "기준선 이름 보기"}
+              >
+                이름
+              </button>
             </div>
             <svg
               ref={svgRef}
@@ -3239,6 +3272,23 @@ function App() {
                 {GRID_X.flatMap((x) => GRID_Y.map((y) => (
                   <circle key={`${x}-${y}`} cx={x} cy={y} r="0.55" />
                 )))}
+              </g>
+              <g className="stage-reference-layer" aria-hidden="true">
+                {stageReferenceItems.map((reference) => reference.type === "point" ? (
+                  <g key={reference.id}>
+                    <circle cx={reference.x} cy={reference.y} r="1.35" fill={reference.style.fill} opacity="0.52" />
+                    {reference.showLabel && (
+                      <text x={reference.x} y={reference.y - 2.4} textAnchor="middle" fontSize="2.8" fill={reference.style.fill} fontWeight="700">{reference.label}</text>
+                    )}
+                  </g>
+                ) : (
+                  <g key={reference.id}>
+                    <line x1={reference.x1} y1={reference.y1} x2={reference.x2} y2={reference.y2} stroke={reference.style.stroke} strokeWidth="0.42" strokeDasharray={reference.style.dash} opacity="0.54" />
+                    {reference.showLabel && (
+                      <text x={(reference.x1 + reference.x2) / 2} y={Math.max(5, (reference.y1 + reference.y2) / 2 - 1.8)} textAnchor="middle" fontSize="2.6" fill={reference.style.fill} fontWeight="700">{reference.label}</text>
+                    )}
+                  </g>
+                ))}
               </g>
               {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
                 const pos = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
