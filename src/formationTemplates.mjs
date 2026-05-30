@@ -1,3 +1,5 @@
+import { normalizeStageDimensions } from "./stageGeometry.mjs";
+
 export const FORMATION_TEMPLATES = [
   { id: "line", label: "Line" },
   { id: "two-line", label: "Two-line" },
@@ -9,12 +11,12 @@ export const FORMATION_TEMPLATES = [
 
 const TEMPLATE_BY_ID = new Map(FORMATION_TEMPLATES.map((template) => [template.id, template]));
 
-function clampStage(value) {
-  return Math.max(0, Math.min(100, Number(value) || 0));
+function clampStage(value, max = 100) {
+  return Math.max(0, Math.min(max, Number(value) || 0));
 }
 
-function roundStage(value) {
-  return Number(clampStage(value).toFixed(2));
+function roundStage(value, max = 100) {
+  return Number(clampStage(value, max).toFixed(2));
 }
 
 function performerIds(performers = []) {
@@ -26,8 +28,8 @@ function spreadValue(index, count, min, max) {
   return min + ((max - min) * index) / (count - 1);
 }
 
-function point(x, y) {
-  return { x: roundStage(x), y: roundStage(y) };
+function point(x, y, stage) {
+  return { x: roundStage(x, stage.width), y: roundStage(y, stage.height) };
 }
 
 function mapPositions(ids, positionForIndex) {
@@ -37,51 +39,54 @@ function mapPositions(ids, positionForIndex) {
   }), {});
 }
 
-function linePositions(ids) {
-  return mapPositions(ids, (index, count) => point(spreadValue(index, count, 18, 82), 50));
+function linePositions(ids, stage) {
+  return mapPositions(ids, (index, count) => point(spreadValue(index, count, stage.width * 0.18, stage.width * 0.82), stage.height * 0.5, stage));
 }
 
-function twoLinePositions(ids) {
+function twoLinePositions(ids, stage) {
   return mapPositions(ids, (index, count) => {
     const topCount = Math.ceil(count / 2);
     const isTop = index < topCount;
     const rowIndex = isTop ? index : index - topCount;
     const rowCount = isTop ? topCount : count - topCount;
-    return point(spreadValue(rowIndex, rowCount, 22, 78), isTop ? 40 : 60);
+    return point(spreadValue(rowIndex, rowCount, stage.width * 0.22, stage.width * 0.78), isTop ? stage.height * 0.4 : stage.height * 0.6, stage);
   });
 }
 
-function vPositions(ids) {
+function vPositions(ids, stage) {
   return mapPositions(ids, (index, count) => {
-    if (count <= 1) return point(50, 45);
+    if (count <= 1) return point(stage.width * 0.5, stage.height * 0.45, stage);
     const center = (count - 1) / 2;
     const distance = Math.abs(index - center) / center;
-    return point(spreadValue(index, count, 24, 76), 40 + distance * 36);
+    return point(spreadValue(index, count, stage.width * 0.24, stage.width * 0.76), stage.height * (0.4 + distance * 0.36), stage);
   });
 }
 
-function circlePositions(ids) {
+function circlePositions(ids, stage) {
   return mapPositions(ids, (index, count) => {
-    if (count <= 1) return point(50, 50);
+    if (count <= 1) return point(stage.width * 0.5, stage.height * 0.5, stage);
     const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
-    return point(50 + Math.cos(angle) * 32, 50 + Math.sin(angle) * 32);
+    const radiusX = stage.width * 0.32;
+    const radiusY = stage.height * 0.32;
+    return point(stage.width * 0.5 + Math.cos(angle) * radiusX, stage.height * 0.5 + Math.sin(angle) * radiusY, stage);
   });
 }
 
-function diagonalPositions(ids) {
+function diagonalPositions(ids, stage) {
   return mapPositions(ids, (index, count) => point(
-    spreadValue(index, count, 24, 76),
-    spreadValue(index, count, 28, 72)
+    spreadValue(index, count, stage.width * 0.24, stage.width * 0.76),
+    spreadValue(index, count, stage.height * 0.28, stage.height * 0.72),
+    stage
   ));
 }
 
-function blockPositions(ids) {
+function blockPositions(ids, stage) {
   const columns = Math.max(1, Math.ceil(Math.sqrt(ids.length)));
   const rows = Math.max(1, Math.ceil(ids.length / columns));
   return mapPositions(ids, (index) => {
     const column = index % columns;
     const row = Math.floor(index / columns);
-    return point(spreadValue(column, columns, 32, 68), spreadValue(row, rows, 36, 64));
+    return point(spreadValue(column, columns, stage.width * 0.32, stage.width * 0.68), spreadValue(row, rows, stage.height * 0.36, stage.height * 0.64), stage);
   });
 }
 
@@ -94,10 +99,11 @@ const POSITION_BUILDERS = {
   block: blockPositions
 };
 
-export function buildFormationTemplatePreview(templateId, performers = []) {
+export function buildFormationTemplatePreview(templateId, performers = [], stageInput = {}) {
   const template = TEMPLATE_BY_ID.get(templateId) || FORMATION_TEMPLATES[0];
   const ids = performerIds(performers);
-  const positions = POSITION_BUILDERS[template.id](ids);
+  const stage = normalizeStageDimensions(stageInput);
+  const positions = POSITION_BUILDERS[template.id](ids, stage);
 
   return {
     templateId: template.id,
@@ -106,6 +112,7 @@ export function buildFormationTemplatePreview(templateId, performers = []) {
     provenance: {
       kind: "template",
       templateId: template.id,
+      stage,
       performerCount: ids.length
     }
   };

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
+import Stage3dPreview from "./Stage3dPreview.jsx";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -13,9 +13,11 @@ import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarge
 import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transitionPathStyle } from "./transitionView.mjs";
 import { defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
 import { FORMATION_TEMPLATES, applyTemplatePositionsToSection, buildFormationTemplatePreview } from "./formationTemplates.mjs";
+import { createPersonalTemplateFromSection, loadPersonalTemplates, personalTemplateToPreview, savePersonalTemplates } from "./personalTemplates.mjs";
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
+import { STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
 import {
   applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
@@ -291,8 +293,10 @@ function normalizeSection(section) {
 
 function normalizePlan(plan) {
   if (!plan?.sections) return plan;
+  const stage = normalizeStageDimensions(plan.stage);
   return {
     ...plan,
+    stage,
     localProjectId: plan.localProjectId || uid("project"),
     owner: plan.owner || { sessionId: "", createdAt: "" },
     account: { plan: plan.account?.plan || "guest" },
@@ -361,7 +365,7 @@ function createProject({ title, performanceType, groupACount, groupBCount, names
     performers,
     sections: defaultSections(performers),
     partnerSets: [],
-    stage: { width: 100, height: 100 },
+    stage: normalizeStageDimensions(),
     frontZone: { y: 70 },
     stageReferences: defaultStageReferences({ y: 70 }),
     localProjectId: uid("project"),
@@ -552,6 +556,7 @@ async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFinger
 }
 
 function buildStageSvg(plan, sectionIndex, options = {}) {
+  const stage = normalizeStageDimensions(plan.stage);
   const section = plan.sections[sectionIndex];
   const prev = plan.sections[sectionIndex - 1];
   const positions = section?.positions || {};
@@ -605,19 +610,19 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
     })
     .join("");
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="${STAGE_WIDTH}" height="${STAGE_HEIGHT}" role="img" aria-label="무대 대형">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="${stageViewBox(stage)}" width="${STAGE_WIDTH}" height="${STAGE_HEIGHT}" role="img" aria-label="무대 대형">
       <defs>
         <marker id="arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
           <path d="M0,0 L5,2.5 L0,5 Z" fill="#334155" />
         </marker>
       </defs>
-      <rect x="0" y="0" width="100" height="100" fill="#f8fafc" rx="2" />
-      <rect x="0" y="${plan.frontZone.y}" width="100" height="${100 - plan.frontZone.y}" fill="#fee2e2" opacity="0.72" />
-      <text x="50" y="96" text-anchor="middle" font-size="3.5" fill="#991b1b" font-family="Arial" font-weight="700">관객 방향 / 앞줄</text>
-      <path d="M8 92 H92" stroke="#991b1b" stroke-width="0.5" marker-end="url(#arrow)" />
+      <rect x="0" y="0" width="${stage.width}" height="${stage.height}" fill="#f8fafc" rx="2" />
+      <rect x="0" y="${plan.frontZone.y}" width="${stage.width}" height="${Math.max(0, stage.height - plan.frontZone.y)}" fill="#fee2e2" opacity="0.72" />
+      <text x="${stage.width / 2}" y="${Math.max(8, stage.height - 4)}" text-anchor="middle" font-size="3.5" fill="#991b1b" font-family="Arial" font-weight="700">관객 방향 / 앞줄</text>
+      <path d="M8 ${Math.max(8, stage.height - 8)} H${Math.max(8, stage.width - 8)}" stroke="#991b1b" stroke-width="0.5" marker-end="url(#arrow)" />
       <g stroke="#cbd5e1" stroke-width="0.16">
-        ${GRID_X.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="100" />`).join("")}
-        ${GRID_Y.map((y) => `<line x1="0" y1="${y}" x2="100" y2="${y}" />`).join("")}
+        ${GRID_X.filter((x) => x <= stage.width).map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${stage.height}" />`).join("")}
+        ${GRID_Y.filter((y) => y <= stage.height).map((y) => `<line x1="0" y1="${y}" x2="${stage.width}" y2="${y}" />`).join("")}
       </g>
       <g>${referenceSvg}</g>
       ${plan.performers.map((performer) => prev?.positions?.[performer.id] ? token(performer, prev.positions[performer.id], true) : "").join("")}
@@ -677,121 +682,6 @@ function Wizard({ onCreate }) {
   );
 }
 
-function Stage3dPreview({ projection }) {
-  const mountRef = useRef(null);
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
-  const rendererRef = useRef(null);
-  const dynamicGroupRef = useRef(null);
-
-  const disposeObject = (object) => {
-    object.geometry?.dispose?.();
-    if (Array.isArray(object.material)) {
-      object.material.forEach((material) => material.dispose?.());
-    } else {
-      object.material?.dispose?.();
-    }
-  };
-
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return undefined;
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#f8fafc");
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-    camera.position.set(0, 92, 112);
-    camera.lookAt(0, 0, 0);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(mount.clientWidth || 320, mount.clientHeight || 220);
-    mount.replaceChildren(renderer.domElement);
-
-    scene.add(new THREE.HemisphereLight("#ffffff", "#cbd5e1", 2.6));
-    const directional = new THREE.DirectionalLight("#ffffff", 1.5);
-    directional.position.set(30, 80, 40);
-    scene.add(directional);
-
-    const grid = new THREE.GridHelper(100, 10, "#94a3b8", "#cbd5e1");
-    grid.position.y = -0.02;
-    scene.add(grid);
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshStandardMaterial({ color: "#eef2ff", roughness: 0.9, metalness: 0 })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.08;
-    scene.add(floor);
-
-    const front = new THREE.Mesh(
-      new THREE.BoxGeometry(100, 0.35, 1.2),
-      new THREE.MeshStandardMaterial({ color: "#b91c1c" })
-    );
-    front.position.set(0, 0.25, -20);
-    scene.add(front);
-
-    const dynamicGroup = new THREE.Group();
-    scene.add(dynamicGroup);
-    sceneRef.current = scene;
-    cameraRef.current = camera;
-    rendererRef.current = renderer;
-    dynamicGroupRef.current = dynamicGroup;
-
-    const handleResize = () => {
-      const width = mount.clientWidth || 320;
-      const height = mount.clientHeight || 220;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-      renderer.render(scene, camera);
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    renderer.render(scene, camera);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      scene.traverse(disposeObject);
-      renderer.dispose();
-      mount.replaceChildren();
-      sceneRef.current = null;
-      cameraRef.current = null;
-      rendererRef.current = null;
-      dynamicGroupRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    const dynamicGroup = dynamicGroupRef.current;
-    if (!scene || !camera || !renderer || !dynamicGroup) return;
-
-    dynamicGroup.children.forEach(disposeObject);
-    dynamicGroup.clear();
-    projection.paths.forEach((path) => {
-      const material = new THREE.LineBasicMaterial({ color: path.context === "next" ? "#64748b" : "#334155", transparent: true, opacity: 0.46 });
-      const points = [
-        new THREE.Vector3(path.from.x, 0.45, path.from.z),
-        new THREE.Vector3(path.to.x, 0.45, path.to.z)
-      ];
-      dynamicGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material));
-    });
-    projection.tokens.forEach((token) => {
-      const material = new THREE.MeshStandardMaterial({ color: token.color, roughness: 0.58, metalness: 0.05 });
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(token.focused ? 2.6 : 2.1, 24, 16), material);
-      mesh.position.set(token.point.x, token.focused ? 2.7 : 2.2, token.point.z);
-      dynamicGroup.add(mesh);
-    });
-    renderer.render(scene, camera);
-  }, [projection]);
-
-  return <div className="stage-3d-preview" ref={mountRef} aria-label="3D 대형 미리보기" />;
-}
-
 function App() {
   const linkMode = linkModeFromLocation(window.location);
   const shareId = linkMode.projectId;
@@ -847,6 +737,8 @@ function App() {
   const [stageViewMode, setStageViewMode] = useState("2d");
   const [selectedTemplateId, setSelectedTemplateId] = useState("line");
   const [formationPreview, setFormationPreview] = useState(null);
+  const [personalTemplates, setPersonalTemplates] = useState(() => loadPersonalTemplates());
+  const [stageResizeWarning, setStageResizeWarning] = useState("");
   const [transitionPathFilter, setTransitionPathFilter] = useState("auto");
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -1119,8 +1011,11 @@ function App() {
     showLabels: showStageReferenceLabels
   }) : [], [plan, showStageReferences, showStageReferenceLabels]);
   const selectedTemplatePreview = useMemo(() => plan
-    ? buildFormationTemplatePreview(selectedTemplateId, plan.performers)
-    : null, [plan, selectedTemplateId]);
+    ? selectedTemplateId.startsWith("personal:")
+      ? personalTemplateToPreview(personalTemplates.find((template) => `personal:${template.id}` === selectedTemplateId))
+      : buildFormationTemplatePreview(selectedTemplateId, plan.performers, plan.stage)
+    : null, [plan, selectedTemplateId, personalTemplates]);
+  const stageDimensions = useMemo(() => normalizeStageDimensions(plan?.stage), [plan?.stage]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -1560,24 +1455,7 @@ function App() {
   }
 
   function clientToStagePoint(event) {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const screenMatrix = svg.getScreenCTM();
-    if (screenMatrix) {
-      const point = svg.createSVGPoint();
-      point.x = event.clientX;
-      point.y = event.clientY;
-      const svgPoint = point.matrixTransform(screenMatrix.inverse());
-      return {
-        x: clamp(svgPoint.x, 0, 100),
-        y: clamp(svgPoint.y, 0, 100)
-      };
-    }
-    const rect = svg.getBoundingClientRect();
-    return {
-      x: clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100),
-      y: clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100)
-    };
+    return clientPointToStage(svgRef.current, event, stageDimensions);
   }
 
   function captureStagePointer(event) {
@@ -1952,6 +1830,50 @@ function App() {
     if (!selectedTemplatePreview) return;
     setFormationPreview({ kind: "template", ...selectedTemplatePreview });
     setStatus(`${selectedTemplatePreview.label} 템플릿을 미리 봅니다. 적용 전까지 프로젝트는 바뀌지 않습니다.`);
+  }
+
+  function saveCurrentPersonalTemplate() {
+    if (!selectedSection || !plan) return;
+    const template = createPersonalTemplateFromSection(selectedSection, plan);
+    if (!template) {
+      setStatus("저장할 대형 위치가 없습니다.");
+      return;
+    }
+    const nextTemplates = savePersonalTemplates([
+      template,
+      ...personalTemplates.filter((item) => item.id !== template.id)
+    ]);
+    setPersonalTemplates(nextTemplates);
+    setSelectedTemplateId(`personal:${template.id}`);
+    setStatus(`${template.label}을 개인 템플릿으로 저장했습니다.`);
+  }
+
+  function updateStageDimension(axis, nextValue) {
+    if (!plan || readonly) return;
+    const nextStage = {
+      ...stageDimensions,
+      [axis]: nextValue
+    };
+    const resize = canResizeStage(plan, nextStage);
+    if (!resize.ok) {
+      const blocked = resize.blockingItems[0];
+      const label = blocked?.type === "reference"
+        ? blocked.label || "기준선"
+        : blocked?.performerId || "출연자";
+      setStageResizeWarning(`축소할 수 없습니다. ${label} 위치가 새 무대 밖으로 나갑니다.`);
+      setStatus("무대 크기 변경을 막았습니다. 기존 출연자나 기준선이 밖으로 나가지 않게 먼저 이동하세요.");
+      return;
+    }
+    setStageResizeWarning("");
+    updatePlan((current) => ({
+      ...current,
+      stage: resize.stage
+    }));
+  }
+
+  function stepStageDimension(axis, direction) {
+    const current = stageDimensions[axis];
+    updateStageDimension(axis, current + STAGE_DIMENSION_LIMITS.step * direction);
   }
 
   function previewLocalProposal() {
@@ -3000,13 +2922,23 @@ function App() {
                 <label>
                   배치 템플릿
                   <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-                    {FORMATION_TEMPLATES.map((template) => (
-                      <option key={template.id} value={template.id}>{template.label}</option>
-                    ))}
+                    <optgroup label="기본 템플릿">
+                      {FORMATION_TEMPLATES.map((template) => (
+                        <option key={template.id} value={template.id}>{template.label}</option>
+                      ))}
+                    </optgroup>
+                    {personalTemplates.length > 0 && (
+                      <optgroup label="개인 템플릿">
+                        {personalTemplates.map((template) => (
+                          <option key={template.id} value={`personal:${template.id}`}>{template.label}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </label>
                 <div className="row-actions">
                   <button onClick={previewTemplate}>미리보기</button>
+                  <button onClick={saveCurrentPersonalTemplate}>현재 대형 저장</button>
                   <button onClick={previewLocalProposal}>AI 후보 검증</button>
                 </div>
                 {formationPreview && (
@@ -3272,7 +3204,35 @@ function App() {
           <em>{selectedStateText}</em>
           <em>{planLimitText}</em>
         </div>
+        {!readonly && (
+          <div className="tool-card stage-size-card">
+            <strong>무대 크기</strong>
+            <span>{stageDimensions.width} x {stageDimensions.height}</span>
+            <div className="stage-size-grid">
+              {[
+                ["width", "가로"],
+                ["height", "세로"]
+              ].map(([axis, label]) => (
+                <div className="stage-size-control" key={axis}>
+                  <em>{label}</em>
+                  <button type="button" aria-label={`${label} 줄이기`} onClick={() => stepStageDimension(axis, -1)}>-</button>
+                  <input
+                    type="number"
+                    min={STAGE_DIMENSION_LIMITS.min}
+                    max={STAGE_DIMENSION_LIMITS.max}
+                    step={STAGE_DIMENSION_LIMITS.step}
+                    value={stageDimensions[axis]}
+                    onChange={(event) => updateStageDimension(axis, Number(event.target.value))}
+                  />
+                  <button type="button" aria-label={`${label} 늘리기`} onClick={() => stepStageDimension(axis, 1)}>+</button>
+                </div>
+              ))}
+            </div>
+            {stageResizeWarning && <p className="stage-size-warning" role="status">{stageResizeWarning}</p>}
+          </div>
+        )}
         {renderSelectedFormationTools()}
+        {renderFormationPanel()}
         {renderArrangePanel()}
         {renderPerformersPanel()}
       </>
@@ -3509,7 +3469,7 @@ function App() {
             <svg
               ref={svgRef}
               className="stage"
-              viewBox="0 0 100 100"
+              viewBox={stageViewBox(stageDimensions)}
               onPointerMove={onStagePointerMove}
               onPointerUp={finishActiveDrag}
               onPointerCancel={clearDrag}
@@ -3520,16 +3480,16 @@ function App() {
                   <path d="M0,0 L5,2.5 L0,5 Z" fill="#334155" />
                 </marker>
               </defs>
-              <rect x="0" y="0" width="100" height="100" rx="2" fill="#f8fafc" />
-              <rect x="0" y={plan.frontZone.y} width="100" height={100 - plan.frontZone.y} fill="#fee2e2" opacity="0.72" />
-              <text x="50" y="96" textAnchor="middle" fontSize="3.5" fill="#991b1b" fontWeight="700">관객 방향 / 앞줄</text>
-              <path d="M8 92 H92" stroke="#991b1b" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
+              <rect x="0" y="0" width={stageDimensions.width} height={stageDimensions.height} rx="2" fill="#f8fafc" />
+              <rect x="0" y={plan.frontZone.y} width={stageDimensions.width} height={Math.max(0, stageDimensions.height - plan.frontZone.y)} fill="#fee2e2" opacity="0.72" />
+              <text x={stageDimensions.width / 2} y={Math.max(8, stageDimensions.height - 4)} textAnchor="middle" fontSize="3.5" fill="#991b1b" fontWeight="700">관객 방향 / 앞줄</text>
+              <path d={`M8 ${Math.max(8, stageDimensions.height - 8)} H${Math.max(8, stageDimensions.width - 8)}`} stroke="#991b1b" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
               <g stroke="#cbd5e1" strokeWidth="0.16">
-                {GRID_X.map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2="100" />)}
-                {GRID_Y.map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2="100" y2={y} />)}
+                {GRID_X.filter((x) => x <= stageDimensions.width).map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2={stageDimensions.height} />)}
+                {GRID_Y.filter((y) => y <= stageDimensions.height).map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2={stageDimensions.width} y2={y} />)}
               </g>
               <g className="grid-points">
-                {GRID_X.flatMap((x) => GRID_Y.map((y) => (
+                {GRID_X.filter((x) => x <= stageDimensions.width).flatMap((x) => GRID_Y.filter((y) => y <= stageDimensions.height).map((y) => (
                   <circle key={`${x}-${y}`} cx={x} cy={y} r="0.55" />
                 )))}
               </g>

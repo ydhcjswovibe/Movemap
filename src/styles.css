@@ -786,12 +786,24 @@ h3 {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   background: #f8fafc;
+  display: grid;
+  place-items: stretch;
 }
 
 .stage-3d-preview canvas {
   display: block;
   width: 100% !important;
   height: 100% !important;
+}
+
+.stage-3d-fallback {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .formation-preview-layer {
@@ -1380,6 +1392,46 @@ h3 {
 
 .template-tool-card {
   gap: 9px;
+}
+
+.stage-size-card {
+  gap: 10px;
+}
+
+.stage-size-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.stage-size-control {
+  display: grid;
+  grid-template-columns: 34px 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 6px;
+}
+
+.stage-size-control em {
+  color: #475569;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.stage-size-control button {
+  min-height: 32px;
+  padding: 0;
+}
+
+.stage-size-control input {
+  min-width: 0;
+  text-align: center;
+}
+
+.stage-size-warning {
+  margin: 0;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .template-preview-status {

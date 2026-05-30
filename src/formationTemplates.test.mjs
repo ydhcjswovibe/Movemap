@@ -15,10 +15,10 @@ const performers = [
   { id: "wing" }
 ];
 
-function assertBoundedPositions(positions) {
+function assertBoundedPositions(positions, stage = { width: 100, height: 100 }) {
   for (const position of Object.values(positions)) {
-    assert.ok(position.x >= 0 && position.x <= 100, `x ${position.x} is bounded`);
-    assert.ok(position.y >= 0 && position.y <= 100, `y ${position.y} is bounded`);
+    assert.ok(position.x >= 0 && position.x <= stage.width, `x ${position.x} is bounded`);
+    assert.ok(position.y >= 0 && position.y <= stage.height, `y ${position.y} is bounded`);
   }
 }
 
@@ -40,6 +40,7 @@ test("template previews are deterministic and include stable provenance", () => 
   assert.deepEqual(first.provenance, {
     kind: "template",
     templateId: "v",
+    stage: { width: 100, height: 100 },
     performerCount: performers.length
   });
 });
@@ -54,6 +55,15 @@ test("templates adapt to roster counts and keep every point inside the stage", (
     assertBoundedPositions(solo.positions);
     assertBoundedPositions(group.positions);
   }
+});
+
+test("templates scale into custom stage dimensions", () => {
+  const stage = { width: 140, height: 80 };
+  const preview = buildFormationTemplatePreview("circle", performers, stage);
+
+  assertBoundedPositions(preview.positions, stage);
+  assert.deepEqual(preview.provenance.stage, stage);
+  assert.ok(Object.values(preview.positions).some((position) => position.x > 100));
 });
 
 test("template application patches a section without mutating inputs", () => {

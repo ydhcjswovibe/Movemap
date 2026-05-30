@@ -11,8 +11,8 @@ function isPlainObject(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function finiteStageNumber(value) {
-  return Number.isFinite(value) && value >= 0 && value <= 100;
+function finiteStageNumber(value, max = 100) {
+  return Number.isFinite(value) && value >= 0 && value <= max;
 }
 
 export function validateProjectImport(value) {
@@ -32,6 +32,9 @@ export function validateProjectImport(value) {
       }
     });
   }
+  const stage = isPlainObject(value.stage) && Number.isFinite(value.stage.width) && Number.isFinite(value.stage.height)
+    ? value.stage
+    : { width: 100, height: 100 };
   if (!Array.isArray(value.sections) || value.sections.length === 0) {
     errors.push({ code: "invalid-sections", message: "대형 구간이 없습니다." });
   } else {
@@ -48,7 +51,7 @@ export function validateProjectImport(value) {
         errors.push({ code: "invalid-timing", sectionIndex, message: "대형 도착 시간이 올바르지 않습니다." });
       }
       Object.entries(section.positions).forEach(([performerId, position]) => {
-        if (!isPlainObject(position) || !finiteStageNumber(position.x) || !finiteStageNumber(position.y)) {
+        if (!isPlainObject(position) || !finiteStageNumber(position.x, stage.width) || !finiteStageNumber(position.y, stage.height)) {
           errors.push({ code: "invalid-position", sectionIndex, performerId, message: "대형 좌표가 무대 범위를 벗어났습니다." });
         }
       });

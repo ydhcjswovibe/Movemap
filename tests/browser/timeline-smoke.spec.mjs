@@ -86,6 +86,19 @@ async function formationTexts(page) {
   ));
 }
 
+function collectBrowserIssues(page) {
+  const browserIssues = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      browserIssues.push(`${message.type()}: ${message.text()}`);
+    }
+  });
+  page.on("pageerror", (error) => {
+    browserIssues.push(`pageerror: ${error.message}`);
+  });
+  return browserIssues;
+}
+
 test("timeline formation editing keeps sequential segments and clean browser output", async ({ page }) => {
   const browserIssues = [];
   page.on("console", (message) => {
@@ -236,4 +249,48 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await page.locator(".mobile-action-bar").getByRole("button", { name: "삭제" }).click();
   await page.locator(".mobile-action-bar").getByRole("button", { name: "되돌리기" }).click();
   await expect(page.locator(".formation-block").first()).toBeVisible();
+});
+
+test("stage references templates stage size import and 3d smoke stay stable", async ({ page }) => {
+  const browserIssues = collectBrowserIssues(page);
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("/");
+  await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  await page.getByRole("button", { name: "도구" }).click();
+  const drawer = page.getByRole("complementary");
+
+  await expect(page.locator(".stage-reference-layer")).toBeVisible();
+  await drawer.getByRole("button", { name: "미리보기" }).click();
+  await expect(drawer.locator(".template-preview-status")).toContainText("Line");
+  await drawer.getByRole("button", { name: "취소" }).click();
+  await expect(drawer.locator(".template-preview-status")).toHaveCount(0);
+
+  await drawer.getByRole("button", { name: "현재 대형 저장" }).click();
+  await expect(drawer.locator("select").filter({ hasText: /개인 템플릿/ })).toHaveCount(1);
+
+  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("80");
+  await expect(drawer.getByText(/축소할 수 없습니다/)).toBeVisible();
+  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("120");
+  await expect(page.locator(".stage")).toHaveAttribute("viewBox", "0 0 120 100");
+
+  await page.getByRole("button", { name: "프로젝트" }).click();
+  await page.locator("input[type='file'][accept='application/json']").first().setInputFiles({
+    name: "bad-movemap.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ title: "Bad", performers: [], sections: [] }))
+  });
+  await expect(page.getByText(/올바른 Movemap 프로젝트 파일이 아닙니다/)).toBeVisible();
+
+  await page.getByRole("button", { name: "3D" }).click();
+  const canvas = page.locator(".stage-3d-preview canvas");
+  await expect(canvas).toHaveAttribute("data-ready", "true");
+  const hasPixels = await canvas.evaluate((node) => {
+    const gl = node.getContext("webgl2") || node.getContext("webgl");
+    if (!gl) return false;
+    const pixels = new Uint8Array(4);
+    gl.readPixels(Math.floor(node.width / 2), Math.floor(node.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return pixels.some((value) => value !== 0);
+  });
+  expect(hasPixels).toBe(true);
+  expect(browserIssues).toEqual([]);
 });

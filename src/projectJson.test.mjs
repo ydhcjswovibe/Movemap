@@ -50,6 +50,21 @@ test("validates portable project imports with structured errors", () => {
   ]);
 });
 
+test("validates imported positions against custom stage dimensions", () => {
+  const project = {
+    title: "Wide stage",
+    performers: [{ id: "a1" }],
+    stage: { width: 140, height: 80 },
+    sections: [{ id: "f1", positions: { a1: { x: 120, y: 70 } }, time: 0 }]
+  };
+
+  assert.equal(validateProjectImport(project).ok, true);
+  assert.equal(validateProjectImport({
+    ...project,
+    sections: [{ id: "f1", positions: { a1: { x: 141, y: 70 } }, time: 0 }]
+  }).ok, false);
+});
+
 test("adds snapshot metadata without mutating the exported project", () => {
   const plan = {
     title: "Snapshot Demo",
