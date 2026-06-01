@@ -43,6 +43,26 @@ import {
 
 const STORAGE_KEY = "movemap-project";
 const LEGACY_STORAGE_KEY = "choreo-stage-planner-project";
+const WORK_PANEL_TABS = [
+  ["cast", "Cast"],
+  ["formation", "Formation"],
+  ["timeline", "Timeline"],
+  ["stage", "Stage"],
+  ["review-share", "Review & Share"]
+];
+const MOBILE_PANEL_SIZES = Object.freeze({
+  peek: "peek",
+  half: "half",
+  full: "full"
+});
+const MOBILE_PANEL_KINDS = Object.freeze({
+  performer: "performer",
+  formation: "formation",
+  add: "add",
+  more: "more",
+  share: "share",
+  transition: "transition"
+});
 const STAGE_WIDTH = 900;
 const STAGE_HEIGHT = 560;
 const ROLE_COLORS = {
@@ -98,6 +118,10 @@ function parseNumber(value, fallback = 0) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function closedMobilePanel() {
+  return { kind: "", size: MOBILE_PANEL_SIZES.peek };
 }
 
 function clonePlan(plan) {
@@ -720,9 +744,13 @@ function App() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [dragPositions, setDragPositions] = useState(null);
   const [isToolDrawerOpen, setIsToolDrawerOpen] = useState(false);
+  const [activeWorkPanel, setActiveWorkPanel] = useState("cast");
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
-  const [isBottomSheetExpanded, setIsBottomSheetExpanded] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState(() => closedMobilePanel());
+  const [isTransitionOverlayOpen, setIsTransitionOverlayOpen] = useState(false);
+  const [isShareOperationPending, setIsShareOperationPending] = useState(false);
+  const [isExportOperationPending, setIsExportOperationPending] = useState(false);
   const [isStageFocus, setIsStageFocus] = useState(false);
   const [timelinePixelsPerSecond, setTimelinePixelsPerSecond] = useState(56);
   const [timelineScrollX, setTimelineScrollX] = useState(0);
@@ -1064,6 +1092,52 @@ function App() {
     dragStateRef.current = null;
   }
 
+  const mobilePanelAutoCollapseLocked = audioUploadStatus === "uploading"
+    || isShareOperationPending
+    || isExportOperationPending
+    || statusRecovery === "share"
+    || statusRecovery === "audio";
+
+  function openMobilePanel(kind, size = MOBILE_PANEL_SIZES.peek) {
+    setMobilePanel({ kind, size });
+  }
+
+  function closeMobilePanel() {
+    setMobilePanel(closedMobilePanel());
+  }
+
+  function resizeMobilePanel(nextSize) {
+    setMobilePanel((current) => current.kind ? { ...current, size: nextSize } : current);
+  }
+
+  function collapseMobilePanelForStageGesture() {
+    if (mobilePanelAutoCollapseLocked) return;
+    closeMobilePanel();
+  }
+
+  function openSelectedPerformerPanel(performerId) {
+    selectPerformer(performerId);
+    openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
+  }
+
+  function openSelectedFormationPanel(sectionId = selectedSectionId) {
+    if (sectionId) setSelectedSectionId(sectionId);
+    openMobilePanel(MOBILE_PANEL_KINDS.formation, MOBILE_PANEL_SIZES.half);
+  }
+
+  function openAddMobilePanel() {
+    openMobilePanel(MOBILE_PANEL_KINDS.add, MOBILE_PANEL_SIZES.half);
+  }
+
+  function openMoreMobilePanel() {
+    openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full);
+  }
+
+  function toggleMobileTransitionOverlay() {
+    setIsTransitionOverlayOpen((value) => !value);
+    openMobilePanel(MOBILE_PANEL_KINDS.transition, MOBILE_PANEL_SIZES.half);
+  }
+
   function normalizeSelectionForPlan(nextPlan) {
     const sections = nextPlan?.sections || [];
     if (!sections.length) {
@@ -1393,6 +1467,7 @@ function App() {
       if (!hasDragged && mode === "body") {
         finishInteractiveEdit(false);
         jumpTo(section);
+        openSelectedFormationPanel(section.id);
         return;
       }
       if (mode === "body" && reorderTargetIndex !== null && reorderTargetIndex !== index) {
@@ -1826,6 +1901,40 @@ function App() {
     setStatus(`${formatTime(pointTime(addedSection))}에 대형 지점을 추가했습니다. 이제 무대에서 위치를 수정하세요.`);
   }
 
+  function addPerformer() {
+    if (readonly || !plan) return;
+    const index = plan.performers.length;
+    const role = index % 2 === 0 ? "groupA" : "groupB";
+    const palette = ROLE_COLORS[role];
+    const performer = {
+      id: uid("p"),
+      label: `P${index + 1}`,
+      name: `출연자 ${index + 1}`,
+      role,
+      color: palette[index % palette.length]
+    };
+    const position = {
+      x: clamp(18 + (index % 8) * 8, 4, 96),
+      y: clamp(42 + Math.floor(index / 8) * 7, 5, 95)
+    };
+    updatePlan((current) => ({
+      ...current,
+      performers: [...current.performers, performer],
+      sections: current.sections.map((section) => ({
+        ...section,
+        positions: {
+          ...(section.positions || {}),
+          [performer.id]: position
+        }
+      }))
+    }));
+    setSelectedPerformerId(performer.id);
+    setSelectedPerformerIds([performer.id]);
+    setSelectedPairKey("");
+    setStatus(`${performer.name}를 추가했습니다.`);
+    openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
+  }
+
   function previewTemplate() {
     if (!selectedTemplatePreview) return;
     setFormationPreview({ kind: "template", ...selectedTemplatePreview });
@@ -2042,8 +2151,8 @@ function App() {
       setStatus(`${nextSelection.length}명을 선택했습니다.`);
       return;
     }
+    collapseMobilePanelForStageGesture();
     captureStagePointer(event);
-    setIsBottomSheetExpanded(false);
     const pointer = clientToStagePoint(event);
     const editPositions = sectionEditPositions(selectedSection);
     const editKeyframeId = selectedMovementKeyframe?.id || "";
@@ -2063,7 +2172,7 @@ function App() {
       clearLongPressTimer();
       return;
     }
-    selectPerformer(performerId);
+    openSelectedPerformerPanel(performerId);
     if (performerPair) {
       const [firstId, secondId] = performerPair;
       const firstStart = { ...(editPositions[firstId] || { x: pointer.x, y: pointer.y }) };
@@ -2157,6 +2266,7 @@ function App() {
       if (distance(pointer, drag.startPointer || drag.pointer) > 0.8) {
         drag.moved = true;
         clearLongPressTimer();
+        collapseMobilePanelForStageGesture();
       }
       if (shouldPullOutPairMember(drag, pointer)) {
         convertPairDragToMemberPullOut(drag, pointer);
@@ -2170,6 +2280,7 @@ function App() {
     clearLongPressTimer();
     if (distance(pointer, drag.startPointer || drag.pointer) > 0.8) {
       drag.moved = true;
+      collapseMobilePanelForStageGesture();
     }
     const rawPosition = {
       x: clamp(pointer.x + drag.offsetX, 4, 96),
@@ -2285,7 +2396,7 @@ function App() {
     }
     captureStagePointer(event);
     clearLongPressTimer();
-    setIsBottomSheetExpanded(false);
+    collapseMobilePanelForStageGesture();
     const pointer = clientToStagePoint(event);
     const [firstId, secondId] = pair;
     const editPositions = sectionEditPositions(selectedSection);
@@ -2351,6 +2462,7 @@ function App() {
     }
     if (dragStateRef.current) return;
     if (event.target.closest?.(".token, .pair-link")) return;
+    collapseMobilePanelForStageGesture();
     const tapAction = resolveEmptyStageTap({ selectedPerformerId, selectedPairKey, tapMoveArmed });
     if (tapAction.type === "none") {
       if (tapAction.clearSelection) clearSelection();
@@ -2552,6 +2664,7 @@ function App() {
 
   async function saveProjectToCloud() {
     if (!plan) return;
+    setIsShareOperationPending(true);
     try {
       setStatus("클라우드에 저장하는 중...");
       setStatusRecovery("");
@@ -2564,10 +2677,13 @@ function App() {
     } catch (error) {
       setStatusRecovery("share");
       setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
+    } finally {
+      setIsShareOperationPending(false);
     }
   }
 
   async function shareProject() {
+    setIsShareOperationPending(true);
     try {
       setStatus("View Link와 Edit Link를 만드는 중...");
       setStatusRecovery("");
@@ -2584,6 +2700,8 @@ function App() {
     } catch (error) {
       setStatusRecovery("share");
       setStatus(`Supabase 저장 실패: ${error.message}. 파일로 공유하거나 백업할 수 있습니다.`);
+    } finally {
+      setIsShareOperationPending(false);
     }
   }
 
@@ -2593,6 +2711,7 @@ function App() {
       setStatus("링크 관리는 이 프로젝트를 만든 Google 로그인 계정에서만 가능합니다.");
       return;
     }
+    setIsShareOperationPending(true);
     try {
       const nextPlan = projectWithShareLinkEnabled(plan, linkTypeToUpdate, enabled);
       const saved = await persistProjectToCloud(nextPlan);
@@ -2602,6 +2721,8 @@ function App() {
     } catch (error) {
       setStatusRecovery("share");
       setStatus(`링크 상태 저장 실패: ${error.message}`);
+    } finally {
+      setIsShareOperationPending(false);
     }
   }
 
@@ -2630,9 +2751,11 @@ function App() {
   }
 
   function exportJson() {
+    setIsExportOperationPending(true);
     const { blob, filename } = createProjectJsonDownload(withProjectSnapshotMetadata(plan));
     const url = URL.createObjectURL(blob);
     downloadUrl(url, filename);
+    setTimeout(() => setIsExportOperationPending(false), 500);
   }
 
   function importJson(event) {
@@ -2667,6 +2790,7 @@ function App() {
   }
 
   async function exportPng(sectionIndex = selectedSectionIndex) {
+    setIsExportOperationPending(true);
     const svg = buildStageSvg({ ...plan, sections: sortedSections }, sectionIndex, { selectedId: selectedPerformerId, readonly: true });
     const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -2685,17 +2809,21 @@ function App() {
         const order = String(sectionIndex + 1).padStart(2, "0");
         const time = safeFilename(formatTime(pointTime(section || {})));
         downloadUrl(pngUrl, `${safeFilename(plan.title)}-${order}-${time}-${safeFilename(section?.name || "point")}.png`);
+        setIsExportOperationPending(false);
       });
       URL.revokeObjectURL(url);
     };
+    img.onerror = () => setIsExportOperationPending(false);
     img.src = url;
   }
 
   async function exportAllPng() {
+    setIsExportOperationPending(true);
     for (let index = 0; index < sortedSections.length; index += 1) {
       // Small delay keeps browser downloads reliable.
       setTimeout(() => exportPng(index), index * 350);
     }
+    setTimeout(() => setIsExportOperationPending(false), Math.max(500, sortedSections.length * 350 + 500));
   }
 
   function downloadUrl(url, filename) {
@@ -3239,6 +3367,140 @@ function App() {
     );
   }
 
+  function renderWorkPanelContent() {
+    if (activeWorkPanel === "cast") {
+      return renderPerformersPanel();
+    }
+    if (activeWorkPanel === "formation") {
+      return (
+        <>
+          {renderFormationPanel()}
+          {renderSelectedFormationTools()}
+        </>
+      );
+    }
+    if (activeWorkPanel === "timeline") {
+      return (
+        <>
+          {renderSelectedFormationTools()}
+          <div className="tool-card">
+            <strong>타임라인 편집</strong>
+            <span>{selectedSection?.name || activeSection?.name || "대형 없음"}</span>
+            <p className="muted">하단 레일에서 대형 순서, 도착 시각, 이동 시간을 조정합니다.</p>
+          </div>
+        </>
+      );
+    }
+    if (activeWorkPanel === "stage") {
+      return (
+        <>
+          {!readonly && (
+            <div className="tool-card stage-size-card">
+              <strong>무대 크기</strong>
+              <span>{stageDimensions.width} x {stageDimensions.height}</span>
+              <div className="stage-size-grid">
+                {[
+                  ["width", "가로"],
+                  ["height", "세로"]
+                ].map(([axis, label]) => (
+                  <div className="stage-size-control" key={axis}>
+                    <em>{label}</em>
+                    <button type="button" aria-label={`${label} 줄이기`} onClick={() => stepStageDimension(axis, -1)}>-</button>
+                    <input
+                      type="number"
+                      min={STAGE_DIMENSION_LIMITS.min}
+                      max={STAGE_DIMENSION_LIMITS.max}
+                      step={STAGE_DIMENSION_LIMITS.step}
+                      value={stageDimensions[axis]}
+                      onChange={(event) => updateStageDimension(axis, Number(event.target.value))}
+                    />
+                    <button type="button" aria-label={`${label} 늘리기`} onClick={() => stepStageDimension(axis, 1)}>+</button>
+                  </div>
+                ))}
+              </div>
+              {stageResizeWarning && <p className="stage-size-warning" role="status">{stageResizeWarning}</p>}
+            </div>
+          )}
+          {renderArrangePanel()}
+        </>
+      );
+    }
+    return renderSharePanel();
+  }
+
+  function renderTransitionReviewPanel() {
+    return (
+      <>
+        {activeTransitionWarnings.length > 0 && (
+          <div className="transition-warning" role="status">
+            먼 이동 주의: {activeTransitionWarnings.map((warning) => `${warning.name} ${warning.distance}`).join(", ")}
+          </div>
+        )}
+        {activeOverlapWarnings.length > 0 && (
+          <div className="transition-warning" role="status">
+            겹침 주의(현재 대형 전체): {activeOverlapWarnings.map((warning) => `${warning.names.join(" / ")} ${warning.distance}`).join(", ")}
+          </div>
+        )}
+        <div className="transition-review" aria-label="전환 리뷰">
+          <div className="transition-review-head">
+            <div>
+              <strong>{sortedSections[selectedSectionIndex - 1]?.name || "시작"} → {selectedSection?.name || "대형"} → {sortedSections[selectedSectionIndex + 1]?.name || "끝"}</strong>
+              <span>{selectedSection?.name || ""} · 도착 {selectedSection ? formatTime(pointTime(selectedSection)) : "0:00.0"} · 이동 {selectedSection ? pointMoveDuration(selectedSection) : 0}초</span>
+            </div>
+            <div className="segmented-control" aria-label="경로 필터">
+              {transitionFilterButtons.map(([value, label]) => (
+                <button
+                  key={value}
+                  className={(value === "all" && showAllTransitionPaths) || (!showAllTransitionPaths && transitionPathFilter === value) ? "active" : ""}
+                  onClick={() => {
+                    if (value === "all") {
+                      setShowAllTransitionPaths(true);
+                      setTransitionPathFilter("auto");
+                      return;
+                    }
+                    setShowAllTransitionPaths(false);
+                    setTransitionPathFilter(value);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="transition-review-meta">
+            <span>필터 {activeTransitionFilter.label}</span>
+            <span>경로 {activeTransitionPaths.length}</span>
+            <span>먼 이동 {activeTransitionWarnings.length}</span>
+            <span>전체 겹침 {activeOverlapWarnings.length}</span>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  function renderContextSurface() {
+    return (
+      <>
+        <div className="inspector-now">
+          <span>현재 작업</span>
+          <strong>{selectedSection?.name || activeSection?.name || "대형 없음"}</strong>
+          <em>{formatTime(sliderTime)} · 도착 {selectedSection ? formatTime(pointTime(selectedSection)) : "0:00.0"} · 이동 시작 {selectedSection ? formatTime(pointMoveStart(selectedSection)) : "0:00.0"}</em>
+          <em>{selectedStateText}</em>
+          <em>{planLimitText}</em>
+        </div>
+        {renderSelectedFormationTools()}
+        {renderTransitionReviewPanel()}
+        {activeWorkPanel === "review-share" && (
+          <div className="context-share-summary">
+            <strong>공유 상태</strong>
+            <span>View Link {shareUrl ? "생성됨" : "미생성"}</span>
+            <span>Edit Link {editShareUrl ? "생성됨" : canCreateEditLink ? "생성 가능" : "한도 확인 필요"}</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
   const selectedPerformer = plan.performers.find((performer) => performer.id === selectedPerformerId);
   const localSaveLabel = shareId && !readonly
     ? "편집 링크 프로젝트 · 저장하기로 클라우드 반영"
@@ -3252,6 +3514,102 @@ function App() {
     : selectedPerformer
       ? `${selectedPerformer.name || selectedPerformer.label} 선택됨`
       : "선택 없음";
+  const isMobilePanelOpen = Boolean(mobilePanel.kind);
+  const mobilePanelTitle = {
+    [MOBILE_PANEL_KINDS.performer]: "선택",
+    [MOBILE_PANEL_KINDS.formation]: "대형",
+    [MOBILE_PANEL_KINDS.add]: "추가",
+    [MOBILE_PANEL_KINDS.more]: "더보기",
+    [MOBILE_PANEL_KINDS.share]: "공유",
+    [MOBILE_PANEL_KINDS.transition]: "동선"
+  }[mobilePanel.kind] || "도구";
+
+  function renderMobilePanelContent() {
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.performer) {
+      const performerPair = selectedPerformerId
+        ? pairForPerformer(partnerSet?.pairs || [], selectedPerformerId)
+        : null;
+      return (
+        <div className="mobile-panel-stack">
+          <div className="mobile-selection-summary">
+            <span>이름</span>
+            <strong>{selectedPerformer?.name || selectedPerformer?.label || "선택 없음"}</strong>
+          </div>
+          <div className="mobile-selection-grid">
+            <span>그룹</span>
+            <strong>{selectedPerformer?.role === "groupB" ? "B 그룹" : selectedPerformer?.role === "groupA" ? "A 그룹" : "기타"}</strong>
+            <span>페어</span>
+            <strong>{performerPair ? performerPair.map((id) => performerById(id)?.name || performerById(id)?.label || id).join(" - ") : "없음"}</strong>
+          </div>
+          {!readonly && (
+            <button className="danger-button compact-danger" onClick={() => selectedPairKey ? removePairByKey(selectedPairKey) : clearSelection()}>
+              {selectedPairKey ? "페어 해제" : "선택 해제"}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.formation) {
+      return (
+        <div className="mobile-panel-stack">
+          <div className="mobile-selection-summary">
+            <span>대형명</span>
+            <strong>{selectedSection?.name || "대형 없음"}</strong>
+          </div>
+          <div className="mobile-selection-grid">
+            <span>도착 시각</span>
+            <strong>{selectedSection ? formatTime(pointTime(selectedSection)) : "0:00.0"}</strong>
+            <span>이동 시간</span>
+            <strong>{selectedSection ? `${pointMoveDuration(selectedSection)}초` : "0초"}</strong>
+          </div>
+          {!readonly && (
+            <div className="row-actions">
+              <button onClick={duplicateSection} disabled={!selectedSection}>복제</button>
+              <button className="danger-button compact-danger" onClick={deleteSection} disabled={sortedSections.length <= 1}>삭제</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.add) {
+      return (
+        <div className="mobile-command-list">
+          <button onClick={addPerformer}>사람 추가</button>
+          <button onClick={addSection}>대형 만들기</button>
+          <label className="file-button tertiary">음악 추가<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.more) {
+      return (
+        <div className="mobile-command-list">
+          <button onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>출연진 관리</button>
+          <button onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>무대 설정</button>
+          <label className="file-button tertiary">음악<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
+          <button onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)}>공유</button>
+          <button onClick={exportJson}>내보내기</button>
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.share) {
+      return renderSharePanel();
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.transition) {
+      return (
+        <div className="mobile-panel-stack">
+          {renderTransitionReviewPanel()}
+          <button onClick={() => setStageViewMode("3d")}>3D preview</button>
+        </div>
+      );
+    }
+
+    return null;
+  }
 
   function renderStatusActions() {
     if (statusRecovery === "share" && status.includes("Supabase 저장 실패")) {
@@ -3297,103 +3655,86 @@ function App() {
         </div>
       )}
 
-      <main className={isToolDrawerOpen ? "workspace tools-open" : "workspace"}>
-        <section className="stage-area">
-          <div className="stage-toolbar">
-            <div className="stage-title-block">
-              <input
-                className="stage-title-input"
-                value={plan.title}
-                readOnly={readonly}
-                aria-label="프로젝트명"
-                onChange={(event) => updatePlan((current) => ({ ...current, title: event.target.value }))}
-              />
-              <div className="stage-meta">
-                <strong>{activeSection?.name}</strong>
-                <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
-                <span className="save-meta">{localSaveLabel}</span>
-                <span className="music-meta">
-                  {musicTitle && <span className="music-name" title={musicTitle}>{musicTitle}</span>}
-                  {!readonly && audioLoadFailed ? (
-                    <button className="inline-action" onClick={reconnectServerAudio}>{musicActionLabel}</button>
-                  ) : !readonly ? (
-                    <label className="inline-action file-button">
-                      {musicActionLabel}
-                      <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
-                    </label>
-                  ) : null}
-                </span>
-              </div>
+      <main className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}>
+        <header className="global-command-bar" aria-label="전역 명령">
+          <div className="stage-title-block">
+            <input
+              className="stage-title-input"
+              value={plan.title}
+              readOnly={readonly}
+              aria-label="프로젝트명"
+              onChange={(event) => updatePlan((current) => ({ ...current, title: event.target.value }))}
+            />
+            <div className="stage-meta">
+              <strong>{activeSection?.name}</strong>
+              <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
+              <span className="save-meta">{localSaveLabel}</span>
+              <span className="music-meta">
+                {musicTitle && <span className="music-name" title={musicTitle}>{musicTitle}</span>}
+                {!readonly && audioLoadFailed ? (
+                  <button className="inline-action" onClick={reconnectServerAudio}>{musicActionLabel}</button>
+                ) : !readonly ? (
+                  <label className="inline-action file-button">
+                    {musicActionLabel}
+                    <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+                  </label>
+                ) : null}
+              </span>
             </div>
-            <div className="stage-toolbar-actions">
-              {!readonly && (
-                currentAuth.userId ? (
-                  <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
-                ) : (
-                  <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
-                )
-              )}
-              {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
-              {!readonly && (
-                <div className="top-action-group">
-                  <button onClick={() => setIsProjectMenuOpen((value) => !value)}>프로젝트</button>
-                  {isProjectMenuOpen && renderProjectMenu()}
-                </div>
-              )}
+          </div>
+          <div className="stage-toolbar-actions">
+            {!readonly && (
+              currentAuth.userId ? (
+                <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
+              ) : (
+                <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
+              )
+            )}
+            {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
+            {!readonly && (
               <div className="top-action-group">
-                <button onClick={() => setIsShareMenuOpen((value) => !value)}>공유</button>
-                {isShareMenuOpen && renderShareMenu()}
+                <button onClick={() => setIsProjectMenuOpen((value) => !value)}>프로젝트</button>
+                {isProjectMenuOpen && renderProjectMenu()}
               </div>
-              <button onClick={() => setIsToolDrawerOpen((value) => !value)}>
-                {isToolDrawerOpen ? "도구 닫기" : "도구"}
-              </button>
+            )}
+            <div className="top-action-group">
+              <button onClick={() => setIsShareMenuOpen((value) => !value)}>공유</button>
+              {isShareMenuOpen && renderShareMenu()}
             </div>
+            <button className="mobile-tools-toggle" onClick={() => setIsToolDrawerOpen((value) => !value)}>
+              {isToolDrawerOpen ? "도구 닫기" : "도구"}
+            </button>
           </div>
+        </header>
+
+        <div className="editor-body">
+          <aside className="left-work-panel" aria-label="작업 패널">
+            <div className="work-panel-tabs" role="tablist" aria-label="작업 범주">
+              {WORK_PANEL_TABS.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeWorkPanel === id}
+                  className={activeWorkPanel === id ? "active" : ""}
+                  onClick={() => setActiveWorkPanel(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="work-panel-content">
+              {renderWorkPanelContent()}
+            </div>
+          </aside>
+
+          <section className="stage-area">
           {!readonly && <p className="stage-hint">{hasUsableAudio ? "음악을 재생하고 원하는 순간에 대형을 만드세요." : "음악 없이도 대형을 만들고 배치를 시작할 수 있습니다."}</p>}
-          {activeTransitionWarnings.length > 0 && (
-            <div className="transition-warning" role="status">
-              먼 이동 주의: {activeTransitionWarnings.map((warning) => `${warning.name} ${warning.distance}`).join(", ")}
-            </div>
-          )}
-          {activeOverlapWarnings.length > 0 && (
-            <div className="transition-warning" role="status">
-              겹침 주의(현재 대형 전체): {activeOverlapWarnings.map((warning) => `${warning.names.join(" / ")} ${warning.distance}`).join(", ")}
-            </div>
-          )}
-          <div className="transition-review" aria-label="전환 리뷰">
-            <div className="transition-review-head">
-              <div>
-                <strong>{sortedSections[selectedSectionIndex - 1]?.name || "시작"} → {selectedSection?.name || "대형"} → {sortedSections[selectedSectionIndex + 1]?.name || "끝"}</strong>
-                <span>{selectedSection?.name || ""} · 도착 {selectedSection ? formatTime(pointTime(selectedSection)) : "0:00.0"} · 이동 {selectedSection ? pointMoveDuration(selectedSection) : 0}초</span>
-              </div>
-              <div className="segmented-control" aria-label="경로 필터">
-                {transitionFilterButtons.map(([value, label]) => (
-                  <button
-                    key={value}
-                    className={(value === "all" && showAllTransitionPaths) || (!showAllTransitionPaths && transitionPathFilter === value) ? "active" : ""}
-                    onClick={() => {
-                      if (value === "all") {
-                        setShowAllTransitionPaths(true);
-                        setTransitionPathFilter("auto");
-                        return;
-                      }
-                      setShowAllTransitionPaths(false);
-                      setTransitionPathFilter(value);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="transition-review-meta">
-              <span>필터 {activeTransitionFilter.label}</span>
-              <span>경로 {activeTransitionPaths.length}</span>
-              <span>먼 이동 {activeTransitionWarnings.length}</span>
-              <span>전체 겹침 {activeOverlapWarnings.length}</span>
-            </div>
+          <div className="canvas-status-strip">
+            <span>{selectedStateText}</span>
+            <span>경로 {activeTransitionPaths.length}</span>
           </div>
-          <div className="stage-frame">
+          <div className={isTransitionOverlayOpen ? "stage-frame transition-overlay-open" : "stage-frame"}>
             <div className="stage-corner-tools" aria-label="무대 도구">
               {!readonly && (
                 <>
@@ -3542,7 +3883,7 @@ function App() {
                 const performer = plan.performers.find((item) => item.id === path.performerId);
                 const style = transitionPathStyle({ performer, selectedPerformerId, focusedPerformerIds: activeFocusedPerformerIds });
                 const dash = path.context === "next" ? "1.6 1.2" : "";
-                return <line key={`arrow-${path.context}-${path.performerId}`} x1={path.from.x} y1={path.from.y} x2={path.to.x} y2={path.to.y} stroke={style.stroke} strokeWidth={style.strokeWidth} opacity={style.opacity} strokeDasharray={dash} markerEnd="url(#arrow-live)" />;
+                return <line className="transition-path-line" key={`arrow-${path.context}-${path.performerId}`} x1={path.from.x} y1={path.from.y} x2={path.to.x} y2={path.to.y} stroke={style.stroke} strokeWidth={style.strokeWidth} opacity={style.opacity} strokeDasharray={dash} markerEnd="url(#arrow-live)" />;
               })}
               {(plan.partnerSets.find((set) => set.id === activeSection?.partnerSetId)?.pairs || []).map(([a, b], index) => {
                 const from = visiblePositions[a];
@@ -3819,43 +4160,38 @@ function App() {
               </div>
             </div>
           )}
-        </section>
+          </section>
 
-        {isToolDrawerOpen && (
-          <aside className="tool-drawer">
-            <div className="drawer-head">
-              <strong>도구</strong>
-              <button onClick={() => setIsToolDrawerOpen(false)}>닫기</button>
-            </div>
-            <div className="inspector-panel">
-              {renderToolDrawerContent()}
+          <aside className="right-context-surface" aria-label="선택 및 리뷰 정보">
+            <div className="context-surface-content">
+              {renderContextSurface()}
             </div>
           </aside>
-        )}
+        </div>
       </main>
 
       <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
-            <button onClick={() => setIsToolDrawerOpen((value) => !value)}>선택</button>
-            <button onClick={addSection}>추가</button>
-            <button onClick={duplicateSection} disabled={!selectedSection}>복제</button>
-            <button onClick={deleteSection} disabled={sortedSections.length <= 1}>삭제</button>
-            <button onClick={undoPlan} disabled={!undoStack.length}>되돌리기</button>
-            <button onClick={shareProject}>공유</button>
+            <button onClick={() => selectedPerformerId ? openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek) : openSelectedFormationPanel()}>선택</button>
+            <button onClick={openAddMobilePanel}>+</button>
+            <button onClick={toggleMobileTransitionOverlay} className={isTransitionOverlayOpen ? "active" : ""}>동선</button>
+            <button onClick={openMoreMobilePanel}>더보기</button>
           </div>
         )}
-        {isToolDrawerOpen && (
-          <div className={isBottomSheetExpanded ? "mobile-bottom-sheet expanded" : "mobile-bottom-sheet"}>
+        {isMobilePanelOpen && (
+          <div className={`mobile-bottom-sheet ${mobilePanel.size}`}>
             <div className="bottom-sheet-head">
-              <strong>도구</strong>
+              <strong>{mobilePanelTitle}</strong>
               <div className="row-actions">
-                <button onClick={() => setIsBottomSheetExpanded((value) => !value)}>{isBottomSheetExpanded ? "축소" : "확장"}</button>
-                <button onClick={() => setIsToolDrawerOpen(false)}>닫기</button>
+                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.peek)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.peek}>Peek</button>
+                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.half)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.half}>Half</button>
+                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.full)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.full}>Full</button>
+                <button onClick={closeMobilePanel}>닫기</button>
               </div>
             </div>
             <div className="mobile-panel">
-              {renderToolDrawerContent()}
+              {renderMobilePanelContent()}
             </div>
           </div>
         )}

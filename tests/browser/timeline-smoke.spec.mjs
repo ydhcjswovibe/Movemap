@@ -242,12 +242,16 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  await expect(page.getByRole("button", { name: "도구" })).toBeVisible();
+  await expect(page.locator(".timeline-editor")).toBeVisible();
   await expect(page.locator(".mobile-action-bar")).toBeVisible();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "추가" }).click();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "복제" }).click();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "삭제" }).click();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "되돌리기" }).click();
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "+" }).click();
+  await expect(page.locator(".mobile-bottom-sheet.half")).toBeVisible();
+  await expect(page.locator(".mobile-bottom-sheet")).toContainText("사람 추가");
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "동선" }).click();
+  await expect(page.locator(".stage-frame.transition-overlay-open")).toBeVisible();
+  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("동선");
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "더보기" }).click();
+  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("공유");
   await expect(page.locator(".formation-block").first()).toBeVisible();
 });
 
@@ -256,10 +260,10 @@ test("stage references templates stage size import and 3d smoke stay stable", as
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  await page.getByRole("button", { name: "도구" }).click();
-  const drawer = page.getByRole("complementary");
+  const drawer = page.locator(".left-work-panel");
 
   await expect(page.locator(".stage-reference-layer")).toBeVisible();
+  await drawer.getByRole("tab", { name: "Formation" }).click();
   await drawer.getByRole("button", { name: "미리보기" }).click();
   await expect(drawer.locator(".template-preview-status")).toContainText("Line");
   await drawer.getByRole("button", { name: "취소" }).click();
@@ -268,6 +272,7 @@ test("stage references templates stage size import and 3d smoke stay stable", as
   await drawer.getByRole("button", { name: "현재 대형 저장" }).click();
   await expect(drawer.locator("select").filter({ hasText: /개인 템플릿/ })).toHaveCount(1);
 
+  await drawer.getByRole("tab", { name: "Stage" }).click();
   await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("80");
   await expect(drawer.getByText(/축소할 수 없습니다/)).toBeVisible();
   await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("120");

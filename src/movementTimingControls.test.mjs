@@ -232,3 +232,55 @@ test("mobile layout overrides the open tool drawer grid", () => {
 
   assert.match(mobileWorkspace, /\.workspace\.tools-open \{\s*grid-template-columns: 1fr;/);
 });
+
+test("mobile editor uses one temporary bottom sheet with explicit size presets", () => {
+  assert.match(appSource, /const MOBILE_PANEL_SIZES = Object\.freeze\(\{/);
+  assert.match(appSource, /const \[mobilePanel, setMobilePanel\] = useState\(\(\) => closedMobilePanel\(\)\);/);
+  assert.match(appSource, /function openMobilePanel\(kind, size = MOBILE_PANEL_SIZES\.peek\)/);
+  assert.match(appSource, /function closeMobilePanel\(\)/);
+  assert.match(appSource, /function resizeMobilePanel\(nextSize\)/);
+  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.peek/);
+  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.half/);
+  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.full/);
+  assert.doesNotMatch(appSource, /const \[isBottomSheetExpanded, setIsBottomSheetExpanded\]/);
+});
+
+test("mobile triggers replace panels without clearing existing stage selection", () => {
+  assert.match(appSource, /function openSelectedPerformerPanel\(performerId\)/);
+  assert.match(appSource, /selectPerformer\(performerId\);\s*openMobilePanel\(MOBILE_PANEL_KINDS\.performer, MOBILE_PANEL_SIZES\.peek\);/);
+  assert.match(appSource, /function openSelectedFormationPanel\(sectionId = selectedSectionId\)/);
+  assert.match(appSource, /setSelectedSectionId\(sectionId\);\s*openMobilePanel\(MOBILE_PANEL_KINDS\.formation, MOBILE_PANEL_SIZES\.half\);/);
+  assert.match(appSource, /function openAddMobilePanel\(\)/);
+  assert.match(appSource, /openMobilePanel\(MOBILE_PANEL_KINDS\.add, MOBILE_PANEL_SIZES\.half\);/);
+  assert.match(appSource, /function openMoreMobilePanel\(\)/);
+  assert.match(appSource, /openMobilePanel\(MOBILE_PANEL_KINDS\.more, MOBILE_PANEL_SIZES\.full\);/);
+});
+
+test("mobile stage gestures collapse panels unless async work locks them", () => {
+  assert.match(appSource, /const mobilePanelAutoCollapseLocked = /);
+  assert.match(appSource, /function collapseMobilePanelForStageGesture\(\)/);
+  assert.match(appSource, /if \(mobilePanelAutoCollapseLocked\) return;/);
+  assert.match(appSource, /collapseMobilePanelForStageGesture\(\);\s*captureStagePointer\(event\);/);
+  assert.match(appSource, /collapseMobilePanelForStageGesture\(\);\s*const tapAction = resolveEmptyStageTap/);
+  assert.match(appSource, /audioUploadStatus === "uploading"/);
+  assert.match(appSource, /isShareOperationPending/);
+});
+
+test("mobile route overlay is separate from the bottom sheet", () => {
+  assert.match(appSource, /const \[isTransitionOverlayOpen, setIsTransitionOverlayOpen\] = useState\(false\);/);
+  assert.match(appSource, /function toggleMobileTransitionOverlay\(\)/);
+  assert.match(appSource, /setIsTransitionOverlayOpen\(\(value\) => !value\)/);
+  assert.match(appSource, /openMobilePanel\(MOBILE_PANEL_KINDS\.transition, MOBILE_PANEL_SIZES\.half\);/);
+  assert.match(appSource, /className=\{isTransitionOverlayOpen \? "stage-frame transition-overlay-open" : "stage-frame"\}/);
+});
+
+test("portrait mobile keeps the stage and timeline visible under temporary sheets", () => {
+  const portraitMobile = styleSource.match(/@media \(max-width: 840px\) and \(orientation: portrait\)[\s\S]*?@media \(max-width: 920px\) and \(orientation: landscape\)/)?.[0] || "";
+
+  assert.doesNotMatch(portraitMobile, /\.desktop-editor \{\s*display:\s*none;/);
+  assert.match(portraitMobile, /\.desktop-editor \{[\s\S]*?display:\s*grid;/);
+  assert.match(portraitMobile, /\.left-work-panel,\s*\.right-context-surface \{[\s\S]*?display:\s*none;/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*22vh;/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*44vh;/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*calc\(100vh - 88px - env\(safe-area-inset-bottom\)\);/);
+});
