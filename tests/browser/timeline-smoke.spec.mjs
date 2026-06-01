@@ -193,7 +193,7 @@ test("mobile viewport keeps stage performer drag editable", async ({ page }) => 
     y: Number(node.getAttribute("cy"))
   }));
   expect(Math.abs(after.x - before.x) + Math.abs(after.y - before.y)).toBeGreaterThan(1);
-  await expect(page.getByText(/자동 저장/)).toBeVisible();
+  await expect(page.locator(".mobile-status-bar").getByText(/자동 저장/)).toBeVisible();
 });
 
 test("View Link route opens readonly review with transition warnings", async ({ page }) => {
@@ -242,17 +242,55 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  await expect(page.locator(".mobile-status-bar")).toBeVisible();
+  await expect(page.locator(".mobile-status-bar")).toContainText("새 Movemap 프로젝트");
+  await expect(page.getByRole("button", { name: "Google 로그인" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "프로젝트" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "공유" })).toHaveCount(0);
+  await expect(page.locator(".stage")).toBeVisible();
   await expect(page.locator(".timeline-editor")).toBeVisible();
   await expect(page.locator(".mobile-action-bar")).toBeVisible();
+
+  const stageToolBox = await page.locator(".stage-corner-tools").boundingBox();
+  const stageBox = await page.locator(".stage-frame").boundingBox();
+  expect(stageToolBox).not.toBeNull();
+  expect(stageBox).not.toBeNull();
+  expect(stageToolBox.height).toBeLessThan(58);
+  expect(stageToolBox.width).toBeLessThanOrEqual(stageBox.width);
+
   await page.locator(".mobile-action-bar").getByRole("button", { name: "+" }).click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
   await expect(page.locator(".mobile-bottom-sheet.half")).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet")).toContainText("사람 추가");
+  await page.locator(".bottom-sheet-handle").click();
+  await expect(page.locator(".mobile-bottom-sheet.full")).toBeVisible();
+  await page.locator(".bottom-sheet-handle").click();
+  await expect(page.locator(".mobile-bottom-sheet.half")).toBeVisible();
+
   await page.locator(".mobile-action-bar").getByRole("button", { name: "동선" }).click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
   await expect(page.locator(".stage-frame.transition-overlay-open")).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("동선");
+
   await page.locator(".mobile-action-bar").getByRole("button", { name: "더보기" }).click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
   await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("공유");
+  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("계정 / 저장");
+  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("음악");
+  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("내보내기");
+  await page.locator(".bottom-sheet-close").click();
+
   await expect(page.locator(".formation-block").first()).toBeVisible();
+  const actionBarBox = await page.locator(".mobile-action-bar").boundingBox();
+  const formationBlockBox = await page.locator(".formation-block").first().boundingBox();
+  expect(actionBarBox).not.toBeNull();
+  expect(formationBlockBox).not.toBeNull();
+  expect(formationBlockBox.y + formationBlockBox.height).toBeLessThanOrEqual(actionBarBox.y);
+  await page.locator(".selected-formation-bar").scrollIntoViewIfNeeded();
+  const selectedFormationBox = await page.locator(".selected-formation-bar").boundingBox();
+  expect(selectedFormationBox).not.toBeNull();
+  expect(selectedFormationBox.y + selectedFormationBox.height).toBeLessThanOrEqual(actionBarBox.y);
 });
 
 test("stage references templates stage size import and 3d smoke stay stable", async ({ page }) => {

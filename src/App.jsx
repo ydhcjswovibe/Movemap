@@ -1110,6 +1110,15 @@ function App() {
     setMobilePanel((current) => current.kind ? { ...current, size: nextSize } : current);
   }
 
+  function cycleMobilePanelSize() {
+    setMobilePanel((current) => {
+      if (!current.kind) return current;
+      if (current.size === MOBILE_PANEL_SIZES.peek) return { ...current, size: MOBILE_PANEL_SIZES.half };
+      if (current.size === MOBILE_PANEL_SIZES.half) return { ...current, size: MOBILE_PANEL_SIZES.full };
+      return { ...current, size: MOBILE_PANEL_SIZES.half };
+    });
+  }
+
   function collapseMobilePanelForStageGesture() {
     if (mobilePanelAutoCollapseLocked) return;
     closeMobilePanel();
@@ -3585,12 +3594,45 @@ function App() {
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.more) {
       return (
-        <div className="mobile-command-list">
-          <button onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>출연진 관리</button>
-          <button onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>무대 설정</button>
-          <label className="file-button tertiary">음악<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
-          <button onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)}>공유</button>
-          <button onClick={exportJson}>내보내기</button>
+        <div className="mobile-more-panel">
+          <div className="mobile-more-status-grid" aria-label="프로젝트 상태 요약">
+            <div className="mobile-state-card">
+              <span>계정 / 저장</span>
+              <strong>{authLabel}</strong>
+              <em>{localSaveLabel}</em>
+            </div>
+            <div className="mobile-state-card">
+              <span>음악</span>
+              <strong>{musicTitle || "음악 없음"}</strong>
+              <em>{audioLoadFailed ? "다시 연결 필요" : audioUrlSaved || hasUsableAudio ? "연결됨" : "미포함"}</em>
+            </div>
+            <div className="mobile-state-card">
+              <span>공유 링크</span>
+              <strong>View {viewLinkState} · Edit {editLinkState}</strong>
+              <em>{canManageLinks ? "링크 관리 가능" : canCreateViewLink ? "공유 생성 가능" : "한도 확인 필요"}</em>
+            </div>
+            <div className="mobile-state-card">
+              <span>내보내기</span>
+              <strong>{canUseAdvancedExports ? "PNG/PDF 가능" : "JSON 가능"}</strong>
+              <em>{canUseAdvancedExports ? "이미지와 인쇄 출력 지원" : "로그인 후 고급 출력 가능"}</em>
+            </div>
+          </div>
+          <div className="mobile-command-list">
+            {!readonly && (
+              currentAuth.userId ? (
+                <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
+              ) : (
+                <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
+              )
+            )}
+            {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
+            <button onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>출연진 관리</button>
+            <button onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>무대 설정</button>
+            {!readonly && <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>}
+            <label className="file-button tertiary">음악<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
+            <button onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)}>공유</button>
+            <button onClick={exportJson}>내보내기</button>
+          </div>
         </div>
       );
     }
@@ -3656,7 +3698,18 @@ function App() {
       )}
 
       <main className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}>
-        <header className="global-command-bar" aria-label="전역 명령">
+        <header className="mobile-status-bar" aria-label="모바일 프로젝트 상태">
+          <div className="mobile-status-title">
+            <strong className="mobile-project-title">{plan.title}</strong>
+            <span className="save-meta">{localSaveLabel}</span>
+          </div>
+          <div className="mobile-status-meta">
+            <strong>{activeSection?.name || "대형 없음"}</strong>
+            <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
+          </div>
+        </header>
+
+        <header className="global-command-bar desktop-command-bar" aria-label="전역 명령">
           <div className="stage-title-block">
             <input
               className="stage-title-input"
@@ -4182,13 +4235,17 @@ function App() {
         {isMobilePanelOpen && (
           <div className={`mobile-bottom-sheet ${mobilePanel.size}`}>
             <div className="bottom-sheet-head">
+              <button
+                type="button"
+                className="bottom-sheet-handle"
+                onClick={cycleMobilePanelSize}
+                aria-label="패널 크기 전환"
+                title="패널 크기 전환"
+              >
+                <span />
+              </button>
               <strong>{mobilePanelTitle}</strong>
-              <div className="row-actions">
-                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.peek)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.peek}>Peek</button>
-                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.half)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.half}>Half</button>
-                <button onClick={() => resizeMobilePanel(MOBILE_PANEL_SIZES.full)} disabled={mobilePanel.size === MOBILE_PANEL_SIZES.full}>Full</button>
-                <button onClick={closeMobilePanel}>닫기</button>
-              </div>
+              <button className="bottom-sheet-close" onClick={closeMobilePanel}>닫기</button>
             </div>
             <div className="mobile-panel">
               {renderMobilePanelContent()}

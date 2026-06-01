@@ -227,10 +227,25 @@ test("top actions expose save share and tools without legacy tabs", () => {
   assert.doesNotMatch(appSource, /renderMobileTabs/);
 });
 
-test("mobile layout overrides the open tool drawer grid", () => {
-  const mobileWorkspace = styleSource.match(/@media \(max-width: 840px\)[\s\S]*?@media print/)?.[0] || "";
+test("mobile header is status-first and management actions live in more panel", () => {
+  assert.match(appSource, /<header className="mobile-status-bar" aria-label="모바일 프로젝트 상태">/);
+  assert.match(appSource, /<header className="global-command-bar desktop-command-bar" aria-label="전역 명령">/);
+  assert.match(appSource, /<div className="mobile-status-title">/);
+  assert.match(appSource, /<strong className="mobile-project-title">\{plan\.title\}<\/strong>/);
+  assert.match(appSource, /<div className="mobile-status-meta">/);
+  assert.match(appSource, /<div className="mobile-more-status-grid" aria-label="프로젝트 상태 요약">/);
+  assert.match(appSource, /<span>계정 \/ 저장<\/span>/);
+  assert.match(appSource, /<span>음악<\/span>/);
+  assert.match(appSource, /<span>공유 링크<\/span>/);
+  assert.match(appSource, /<span>내보내기<\/span>/);
+  assert.match(styleSource, /\.desktop-command-bar \{\s*display: none;/);
+  assert.match(styleSource, /@media \(max-width: 920px\) and \(orientation: landscape\)[\s\S]*?\.desktop-command-bar \{\s*display: none;/);
+});
 
-  assert.match(mobileWorkspace, /\.workspace\.tools-open \{\s*grid-template-columns: 1fr;/);
+test("mobile layout overrides the open tool drawer grid", () => {
+  const mobileWorkspace = styleSource.match(/@media \(max-width: 840px\) and \(orientation: portrait\)[\s\S]*?@media \(max-width: 920px\) and \(orientation: landscape\)/)?.[0] || "";
+
+  assert.match(mobileWorkspace, /\.workspace\.tools-open \{[\s\S]*?grid-template-columns: 1fr;/);
 });
 
 test("mobile editor uses one temporary bottom sheet with explicit size presets", () => {
@@ -239,9 +254,14 @@ test("mobile editor uses one temporary bottom sheet with explicit size presets",
   assert.match(appSource, /function openMobilePanel\(kind, size = MOBILE_PANEL_SIZES\.peek\)/);
   assert.match(appSource, /function closeMobilePanel\(\)/);
   assert.match(appSource, /function resizeMobilePanel\(nextSize\)/);
-  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.peek/);
-  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.half/);
-  assert.match(appSource, /mobilePanel\.size === MOBILE_PANEL_SIZES\.full/);
+  assert.match(appSource, /function cycleMobilePanelSize\(\)/);
+  assert.match(appSource, /current\.size === MOBILE_PANEL_SIZES\.peek/);
+  assert.match(appSource, /current\.size === MOBILE_PANEL_SIZES\.half/);
+  assert.match(appSource, /mobilePanel\.size/);
+  assert.match(appSource, /className="bottom-sheet-handle"/);
+  assert.doesNotMatch(appSource, />Peek<\/button>/);
+  assert.doesNotMatch(appSource, />Half<\/button>/);
+  assert.doesNotMatch(appSource, />Full<\/button>/);
   assert.doesNotMatch(appSource, /const \[isBottomSheetExpanded, setIsBottomSheetExpanded\]/);
 });
 
@@ -282,5 +302,5 @@ test("portrait mobile keeps the stage and timeline visible under temporary sheet
   assert.match(portraitMobile, /\.left-work-panel,\s*\.right-context-surface \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*22vh;/);
   assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*44vh;/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*calc\(100vh - 88px - env\(safe-area-inset-bottom\)\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*calc\(100vh - 104px - env\(safe-area-inset-bottom\)\);/);
 });
