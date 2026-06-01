@@ -1,5 +1,99 @@
 # Movemap
 
+[![CI](https://github.com/ydhcjswovibe/Movemap/actions/workflows/ci.yml/badge.svg)](https://github.com/ydhcjswovibe/Movemap/actions/workflows/ci.yml)
+
+Movemap is an open-source choreography and rehearsal mapping tool for dance teams,
+performance crews, salsa and partner dance teams, choreographers, and rehearsal
+leaders. It helps teams plan stage formations, performer movement paths,
+music-cue-based timing, and shareable rehearsal maps without depending on
+screenshots, paper diagrams, spreadsheets, or group chat memory.
+
+Movemap exists because stage and rehearsal planning often gets split across
+paper diagrams, screenshots, spreadsheets, and group chat. The goal is to make
+formation planning easier to edit, review, share, and rehearse with timing
+context.
+
+The project is early-stage. It is useful for local experimentation and review,
+but the contributor surface and hosted workflows are still being refined. The
+current public deployment referenced by the project is
+`https://stage-map-pi.vercel.app`, and the app includes a public about page at
+`/about`.
+
+![Movemap editor showing performer tokens, a stage grid, formation controls, and a timeline](docs/assets/movemap-editor.png)
+
+## Who it is for
+
+- Choreographers and rehearsal leaders planning dance formations.
+- Salsa, partner dance, and performance teams coordinating paired movement.
+- Stage managers or performing arts contributors who need a lightweight
+  formation map.
+- Developers interested in open-source tools for choreography, rehearsal, and
+  performing arts workflows.
+
+## Key features
+
+- Create a performance map with role-based performer tokens.
+- Edit formation points on a stage canvas.
+- Set arrival time, movement duration, notes, and pair/partner details.
+- Upload music for local playback and Supabase-backed reuse when configured.
+- Share maps with view/edit links, PNG export, print/PDF, or project file
+  backup.
+- Preview stage movement with the existing React/Vite interface.
+
+## Tech stack
+
+- React 19
+- Vite 7
+- Three.js
+- Supabase for optional auth, project storage, sharing, and audio storage
+- Node.js built-in test runner for unit tests
+- Playwright for browser smoke tests
+
+## Local setup
+
+```bash
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Open `http://localhost:5174` after the dev server starts. The Vite dev server is
+configured with a strict `5174` port; stop any existing process on that port if
+startup fails.
+
+Supabase is optional for basic local UI review, but required for auth, cloud
+project saving, public share links, and audio storage. See the Supabase section
+below for the required environment variables and SQL setup.
+
+## Available commands
+
+```bash
+npm run dev
+npm run build
+npm test
+npm run test:browser
+```
+
+There is no separate lint script at the moment.
+
+## Contributing
+
+Contributions are welcome, especially small improvements that make Movemap
+easier to understand, run, test, or use in real rehearsal planning. Good first
+areas include documentation, onboarding examples, sample choreography templates,
+mobile editing ergonomics, accessibility, timeline/music cue editing, sharing,
+and export workflows.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening an issue or pull
+request.
+
+## Recommended GitHub topics
+
+Suggested repository topics:
+
+`choreography`, `dance`, `stage-management`, `formation`, `rehearsal`,
+`performing-arts`, `react`, `vite`, `supabase`
+
 음악과 큐에 맞춰 공연 대형과 동선을 설계하고, 출연자 토큰을 드래그해 리허설 맵을 편집하는 React/Vite 웹앱입니다.
 
 ## 실행
