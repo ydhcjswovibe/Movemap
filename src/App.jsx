@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Stage3dPreview from "./Stage3dPreview.jsx";
+import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
+import CoolIcon from "./icons/CoolIcon.jsx";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -70,6 +72,18 @@ const ROLE_COLORS = {
   groupB: ["#c0265f", "#e84a7f", "#f9739a", "#fb7185", "#be185d"],
   other: ["#6d5dfc", "#14b8a6", "#f59e0b", "#64748b"]
 };
+const MOBILE_ACTIONS = [
+  { key: "select", icon: "select", label: "선택" },
+  { key: "add", icon: "add", label: "추가" },
+  { key: "route", icon: "path", label: "동선" },
+  { key: "more", icon: "more", label: "메뉴" },
+  { key: "save", icon: "save", label: "저장" },
+  { key: "share", icon: "share", label: "공유" },
+  { key: "music", icon: "note", label: "음악" },
+  { key: "export", icon: "download", label: "내보내기" },
+  { key: "cast", icon: "users", label: "출연진" },
+  { key: "stage", icon: "settings", label: "무대" }
+];
 
 const PERFORMANCE_TYPES = {
   shine: "솔로/그룹",
@@ -773,6 +787,7 @@ function App() {
   const audioRef = useRef(null);
   const svgRef = useRef(null);
   const timelineViewportRef = useRef(null);
+  const timelineGestureRef = useRef({ pointers: new Map(), mode: "" });
   const dragStateRef = useRef(null);
   const interactiveEditSnapshotRef = useRef(null);
   const ignoreNextStageTapRef = useRef(false);
@@ -1006,7 +1021,10 @@ function App() {
     ...timelineFormationBlocks.map((block) => block.visualRightPx + 80),
     timelineReorderGuide ? timelineReorderGuide.leftPx + 160 : 0
   );
-  const timelineMaxScrollX = calculateTimelineMaxScrollX(timelineMax, timelinePixelsPerSecond, timelineViewportWidth);
+  const timelineMaxScrollX = Math.max(
+    calculateTimelineMaxScrollX(timelineMax, timelinePixelsPerSecond, timelineViewportWidth),
+    Math.max(0, timelineContentWidth - timelineViewportWidth)
+  );
   const timelineTicks = useMemo(() => buildTimelineTicks(timelineMax, {
     pixelsPerSecond: timelinePixelsPerSecond,
     scrollX: timelineScrollX,
@@ -1145,6 +1163,45 @@ function App() {
   function toggleMobileTransitionOverlay() {
     setIsTransitionOverlayOpen((value) => !value);
     openMobilePanel(MOBILE_PANEL_KINDS.transition, MOBILE_PANEL_SIZES.half);
+  }
+
+  function handleMobileAction(actionKey) {
+    if (actionKey === "select") {
+      if (selectedPerformerId) {
+        openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
+      } else {
+        openSelectedFormationPanel();
+      }
+      return;
+    }
+    if (actionKey === "add") {
+      openAddMobilePanel();
+      return;
+    }
+    if (actionKey === "route") {
+      toggleMobileTransitionOverlay();
+      return;
+    }
+    if (actionKey === "more") {
+      openMoreMobilePanel();
+      return;
+    }
+    if (actionKey === "save") {
+      saveProjectToCloud();
+      return;
+    }
+    if (actionKey === "share") {
+      openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "export") {
+      exportJson();
+      return;
+    }
+    if (actionKey === "cast" || actionKey === "stage") {
+      setActiveWorkPanel(actionKey);
+      openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.half);
+    }
   }
 
   function normalizeSelectionForPlan(nextPlan) {
@@ -1347,6 +1404,25 @@ function App() {
     });
   }
 
+  function zoomTimelineBy(factor, cursorViewportX = null) {
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    const viewportWidth = rect?.width || timelineViewportWidth;
+    if (!viewportWidth) return;
+    const nextZoom = clampValue(timelinePixelsPerSecond * factor, 14, 160);
+    const anchorX = cursorViewportX ?? viewportWidth / 2;
+    const nextScrollX = calculateAnchoredZoomScrollX({
+      scrollX: timelineScrollX,
+      cursorViewportX: anchorX,
+      currentZoom: timelinePixelsPerSecond,
+      nextZoom,
+      timelineDuration: timelineMax,
+      viewportWidth
+    });
+    setTimelinePixelsPerSecond(nextZoom);
+    setTimelineScrollX(nextScrollX);
+  }
+
   function onTimelineWheel(event) {
     const viewport = timelineViewportRef.current;
     const rect = viewport?.getBoundingClientRect();
@@ -1354,37 +1430,112 @@ function App() {
     event.preventDefault();
     const delta = normalizeWheelDelta(event.deltaY, event.deltaMode);
     if (event.ctrlKey || event.metaKey) {
-      const nextZoom = clampValue(timelinePixelsPerSecond * (delta > 0 ? 0.88 : 1.14), 14, 160);
+      zoomTimelineBy(delta > 0 ? 0.88 : 1.14, event.clientX - rect.left);
+      return;
+    }
+    const maxScrollX = Math.max(
+      calculateTimelineMaxScrollX(timelineMax, timelinePixelsPerSecond, rect.width),
+      Math.max(0, timelineContentWidth - rect.width)
+    );
+    setTimelineScrollX((value) => clampValue(value + delta, 0, maxScrollX));
+  }
+
+  function onTimelinePointerDown(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic browser tests and cancelled gestures may not allow capture.
+    }
+    const current = timelineGestureRef.current || { pointers: new Map(), mode: "" };
+    const pointers = new Map(current.pointers || []);
+    pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const next = { ...current, pointers };
+    if (pointers.size >= 2) {
+      const [first, second] = Array.from(pointers.values());
+      const viewport = timelineViewportRef.current;
+      const rect = viewport?.getBoundingClientRect();
+      const centerX = (first.clientX + second.clientX) / 2;
+      next.mode = "pinch";
+      next.startDistance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY) || 1;
+      next.startZoom = timelinePixelsPerSecond;
+      next.startScrollX = timelineScrollX;
+      next.startCenterViewportX = rect?.width ? centerX - rect.left : timelineViewportWidth / 2;
+    } else {
+      next.mode = "pending";
+      next.startX = event.clientX;
+      next.startY = event.clientY;
+      next.startScrollX = timelineScrollX;
+      next.tapTime = timeFromTimelineClientX(event.clientX);
+      next.hasMoved = false;
+    }
+    timelineGestureRef.current = next;
+  }
+
+  function onTimelinePointerMove(event) {
+    const current = timelineGestureRef.current;
+    if (!current?.pointers?.has(event.pointerId)) return;
+    event.preventDefault();
+    const pointers = new Map(current.pointers);
+    pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    if (!rect?.width) return;
+
+    if (current.mode === "pinch" && pointers.size >= 2) {
+      const [first, second] = Array.from(pointers.values());
+      const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY) || 1;
+      const nextZoom = clampValue(current.startZoom * (distance / current.startDistance), 14, 160);
       const nextScrollX = calculateAnchoredZoomScrollX({
-        scrollX: timelineScrollX,
-        cursorViewportX: event.clientX - rect.left,
-        currentZoom: timelinePixelsPerSecond,
+        scrollX: current.startScrollX,
+        cursorViewportX: current.startCenterViewportX,
+        currentZoom: current.startZoom,
         nextZoom,
         timelineDuration: timelineMax,
         viewportWidth: rect.width
       });
+      timelineGestureRef.current = { ...current, pointers };
       setTimelinePixelsPerSecond(nextZoom);
       setTimelineScrollX(nextScrollX);
       return;
     }
-    setTimelineScrollX((value) => clampValue(value + delta, 0, calculateTimelineMaxScrollX(timelineMax, timelinePixelsPerSecond, rect.width)));
+
+    if (current.mode === "pending" || current.mode === "pan") {
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      const shouldPan = current.mode === "pan" || Math.abs(dx) > 6 || Math.abs(dy) > 6;
+      if (shouldPan) {
+        const nextScrollX = clampValue(
+          current.startScrollX - dx,
+          0,
+          Math.max(
+            calculateTimelineMaxScrollX(timelineMax, timelinePixelsPerSecond, rect.width),
+            Math.max(0, timelineContentWidth - rect.width)
+          )
+        );
+        timelineGestureRef.current = { ...current, pointers, mode: "pan", hasMoved: true };
+        setTimelineScrollX(nextScrollX);
+      } else {
+        timelineGestureRef.current = { ...current, pointers };
+      }
+    }
   }
 
-  function onTimelineScrubPointerDown(event) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const updateFromClientX = (clientX) => seekTimelineToTime(timeFromTimelineClientX(clientX));
-    updateFromClientX(event.clientX);
-    const onPointerMove = (moveEvent) => {
-      moveEvent.preventDefault();
-      updateFromClientX(moveEvent.clientX);
-    };
-    const onPointerUp = () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
+  function onTimelinePointerUp(event) {
+    const current = timelineGestureRef.current;
+    if (!current?.pointers?.has(event.pointerId)) return;
+    try {
+      event.currentTarget?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may already be released after synthetic or cancelled gestures.
+    }
+    const pointers = new Map(current.pointers);
+    pointers.delete(event.pointerId);
+    if (current.mode === "pending" && !current.hasMoved) {
+      seekTimelineToTime(current.tapTime);
+    }
+    timelineGestureRef.current = { pointers, mode: "" };
   }
 
   function onFormationPointerDown(event, section, index, mode) {
@@ -1874,17 +2025,17 @@ function App() {
     setStatus("파트너 연결을 해제했습니다.");
   }
 
-  function addSection() {
+  function addSection({ forceAppend = false } = {}) {
     const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
     const target = resolveFormationAddTarget(sortedSections, captureTime);
-    if (target.action === "select") {
+    if (target.action === "select" && !forceAppend) {
       setSelectedSectionId(target.section.id);
       jumpTo(target.section);
       setStatus(`${target.section.name} 대형을 선택했습니다.`);
       return;
     }
-    const time = target.time;
-    const previous = target.previous;
+    const time = target.action === "select" ? pointTime(sortedSections.at(-1)) : target.time;
+    const previous = target.action === "select" ? sortedSections.at(-1) : target.previous;
     const positions = previous?.positions || Object.fromEntries(plan.performers.map((p, index) => [p.id, { x: 18 + index * 8, y: 55 }]));
     const section = {
       id: uid("sec"),
@@ -3532,6 +3683,36 @@ function App() {
     [MOBILE_PANEL_KINDS.share]: "공유",
     [MOBILE_PANEL_KINDS.transition]: "동선"
   }[mobilePanel.kind] || "도구";
+  const mobileMoreStatusItems = [
+    {
+      key: "account",
+      tone: currentAuth.userId || readonly ? "ok" : "warn",
+      label: "계정",
+      value: authLabel,
+      meta: localSaveLabel
+    },
+    {
+      key: "music",
+      tone: audioLoadFailed ? "warn" : audioUrlSaved || hasUsableAudio ? "ok" : "neutral",
+      label: "음악",
+      value: musicTitle || "없음",
+      meta: audioLoadFailed ? "재연결" : audioUrlSaved || hasUsableAudio ? "연결됨" : "미포함"
+    },
+    {
+      key: "share",
+      tone: shareUrl || editShareUrl ? "ok" : canCreateViewLink ? "neutral" : "warn",
+      label: "공유",
+      value: shareUrl ? "View 있음" : canCreateViewLink ? "생성 가능" : "대기",
+      meta: `Edit ${editLinkState}`
+    },
+    {
+      key: "export",
+      tone: canUseAdvancedExports ? "ok" : "neutral",
+      label: "출력",
+      value: canUseAdvancedExports ? "PNG/PDF" : "JSON",
+      meta: canUseAdvancedExports ? "고급 출력" : "기본 출력"
+    }
+  ];
 
   function renderMobilePanelContent() {
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.performer) {
@@ -3584,10 +3765,12 @@ function App() {
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.add) {
       return (
-        <div className="mobile-command-list">
-          <button onClick={addPerformer}>사람 추가</button>
-          <button onClick={addSection}>대형 만들기</button>
-          <label className="file-button tertiary">음악 추가<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
+        <div className="mobile-command-grid compact">
+          <IconHintButton iconName="users" label="사람 추가" onClick={addPerformer} showLabel />
+          <IconHintButton iconName="timer-add" label="대형 추가" onClick={() => addSection({ forceAppend: true })} showLabel />
+          <IconHintButton as="label" className="file-button tertiary" iconName="note" label="음악 추가" showLabel>
+            <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+          </IconHintButton>
         </div>
       );
     }
@@ -3595,43 +3778,31 @@ function App() {
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.more) {
       return (
         <div className="mobile-more-panel">
-          <div className="mobile-more-status-grid" aria-label="프로젝트 상태 요약">
-            <div className="mobile-state-card">
-              <span>계정 / 저장</span>
-              <strong>{authLabel}</strong>
-              <em>{localSaveLabel}</em>
-            </div>
-            <div className="mobile-state-card">
-              <span>음악</span>
-              <strong>{musicTitle || "음악 없음"}</strong>
-              <em>{audioLoadFailed ? "다시 연결 필요" : audioUrlSaved || hasUsableAudio ? "연결됨" : "미포함"}</em>
-            </div>
-            <div className="mobile-state-card">
-              <span>공유 링크</span>
-              <strong>View {viewLinkState} · Edit {editLinkState}</strong>
-              <em>{canManageLinks ? "링크 관리 가능" : canCreateViewLink ? "공유 생성 가능" : "한도 확인 필요"}</em>
-            </div>
-            <div className="mobile-state-card">
-              <span>내보내기</span>
-              <strong>{canUseAdvancedExports ? "PNG/PDF 가능" : "JSON 가능"}</strong>
-              <em>{canUseAdvancedExports ? "이미지와 인쇄 출력 지원" : "로그인 후 고급 출력 가능"}</em>
-            </div>
+          <div className="mobile-status-strip" aria-label="프로젝트 상태 요약">
+            {mobileMoreStatusItems.map((item) => (
+              <div className={`mobile-status-token ${item.tone}`} key={item.key} title={`${item.label}: ${item.value} · ${item.meta}`}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
           </div>
-          <div className="mobile-command-list">
+          <div className="mobile-command-grid" aria-label="모바일 메뉴 명령">
             {!readonly && (
               currentAuth.userId ? (
-                <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
+                <IconHintButton iconName="users" label="로그아웃" onClick={signOutOwner} showLabel />
               ) : (
-                <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
+                <IconHintButton iconName="users" label="로그인" onClick={signInOwner} disabled={authLoading} showLabel />
               )
             )}
-            {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
-            <button onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>출연진 관리</button>
-            <button onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }}>무대 설정</button>
-            {!readonly && <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>}
-            <label className="file-button tertiary">음악<input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} /></label>
-            <button onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)}>공유</button>
-            <button onClick={exportJson}>내보내기</button>
+            {!readonly && <IconHintButton className="primary" iconName="save" label="저장" onClick={saveProjectToCloud} showLabel />}
+            <IconHintButton iconName="users" label="출연진" onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }} showLabel />
+            <IconHintButton iconName="settings" label="무대" onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }} showLabel />
+            {!readonly && <IconHintButton iconName="home" label="프로젝트" onClick={returnToProjectPicker} showLabel />}
+            <IconHintButton as="label" className="file-button tertiary" iconName="note" label="음악" showLabel>
+              <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+            </IconHintButton>
+            <IconHintButton iconName="share" label="공유" onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)} showLabel />
+            <IconHintButton iconName="download" label="내보내기" onClick={exportJson} showLabel />
           </div>
         </div>
       );
@@ -3791,67 +3962,53 @@ function App() {
             <div className="stage-corner-tools" aria-label="무대 도구">
               {!readonly && (
                 <>
-                  <button
+                  <IconHintButton
                     className="icon-tool"
+                    iconName="undo"
+                    label="되돌리기"
                     onClick={undoPlan}
                     disabled={!undoStack.length}
-                    title="되돌리기"
-                    aria-label="되돌리기"
-                  >
-                    ↶
-                  </button>
-                  <button
+                  />
+                  <IconHintButton
                     className="icon-tool"
+                    iconName="redo"
+                    label="다시 실행"
                     onClick={redoPlan}
                     disabled={!redoStack.length}
-                    title="다시 실행"
-                    aria-label="다시 실행"
-                  >
-                    ↷
-                  </button>
+                  />
                 </>
               )}
-              <button
+              <IconHintButton
                 className={snapEnabled ? "icon-tool active" : "icon-tool"}
+                iconName="grid"
+                label={`격자 맞춤 ${snapEnabled ? "끄기" : "켜기"}`}
                 onClick={() => setSnapEnabled((value) => !value)}
-                title={`격자 맞춤 ${snapEnabled ? "끄기" : "켜기"}`}
-                aria-label={`격자 맞춤 ${snapEnabled ? "끄기" : "켜기"}`}
-              >
-                #
-              </button>
-              <button
+              />
+              <IconHintButton
                 className={isStageFocus ? "icon-tool active" : "icon-tool"}
+                iconName="expand"
+                label={isStageFocus ? "패널 보기" : "무대 크게 보기"}
                 onClick={() => setIsStageFocus((value) => !value)}
-                title={isStageFocus ? "패널 보기" : "무대 크게 보기"}
-                aria-label={isStageFocus ? "패널 보기" : "무대 크게 보기"}
-              >
-                {isStageFocus ? "↙" : "⛶"}
-              </button>
-              <button
+              />
+              <IconHintButton
                 className={showAllTransitionPaths ? "icon-tool active" : "icon-tool"}
+                iconName="path"
+                label={showAllTransitionPaths ? "선택 경로 중심으로 보기" : "모든 이동 경로 보기"}
                 onClick={() => setShowAllTransitionPaths((value) => !value)}
-                title={showAllTransitionPaths ? "선택 경로 중심으로 보기" : "모든 이동 경로 보기"}
-                aria-label={showAllTransitionPaths ? "선택 경로 중심으로 보기" : "모든 이동 경로 보기"}
-              >
-                경로
-              </button>
-              <button
+              />
+              <IconHintButton
                 className={showStageReferences ? "icon-tool active" : "icon-tool"}
+                iconName="layer"
+                label={showStageReferences ? "무대 기준선 숨기기" : "무대 기준선 보기"}
                 onClick={() => setShowStageReferences((value) => !value)}
-                title={showStageReferences ? "무대 기준선 숨기기" : "무대 기준선 보기"}
-                aria-label={showStageReferences ? "무대 기준선 숨기기" : "무대 기준선 보기"}
-              >
-                기준
-              </button>
-              <button
+              />
+              <IconHintButton
                 className={showStageReferenceLabels ? "icon-tool active" : "icon-tool"}
+                iconName="label"
+                label={showStageReferenceLabels ? "기준선 이름 숨기기" : "기준선 이름 보기"}
                 onClick={() => setShowStageReferenceLabels((value) => !value)}
                 disabled={!showStageReferences}
-                title={showStageReferenceLabels ? "기준선 이름 숨기기" : "기준선 이름 보기"}
-                aria-label={showStageReferenceLabels ? "기준선 이름 숨기기" : "기준선 이름 보기"}
-              >
-                이름
-              </button>
+              />
             </div>
             <div className="stage-view-toggle segmented-control" aria-label="무대 보기 방식">
               <button className={stageViewMode === "2d" ? "active" : ""} onClick={() => setStageViewMode("2d")}>2D</button>
@@ -4011,17 +4168,57 @@ function App() {
             )}
           </div>
           <div className="timeline-editor" aria-label="대형 타임라인">
-            <div className="timeline-controls">
-              <button className="primary playback-button" onClick={togglePlayback} disabled={!hasUsableAudio}>
-                {isPlaying ? "정지" : "재생"}
-              </button>
-              {!readonly && <button className="secondary capture-button" onClick={addSection}>대형 추가</button>}
-              <span className="time-readout">{formatTime(sliderTime)} / {formatTime(timelineMax)}</span>
-              <div className="timeline-zoom-controls" aria-label="타임라인 확대">
-                <button type="button" onClick={() => setTimelinePixelsPerSecond((value) => clampValue(value * 0.82, 14, 160))}>-</button>
-                <span>{Math.round(timelinePixelsPerSecond)}px/s</span>
-                <button type="button" onClick={() => setTimelinePixelsPerSecond((value) => clampValue(value * 1.18, 14, 160))}>+</button>
+            <div className="timeline-control-rail">
+              <div className="timeline-transport-controls" aria-label="타임라인 실행">
+                <IconHintButton
+                  className="primary playback-button timeline-icon-button"
+                  iconName={isPlaying ? "pause" : "play"}
+                  label={isPlaying ? "정지" : "재생"}
+                  onClick={togglePlayback}
+                  disabled={!hasUsableAudio}
+                />
+                {!readonly && (
+                  <>
+                    <IconHintButton
+                      className="timeline-icon-button"
+                      iconName="undo"
+                      label="되돌리기"
+                      onClick={undoPlan}
+                      disabled={!undoStack.length}
+                    />
+                    <IconHintButton
+                      className="timeline-icon-button"
+                      iconName="redo"
+                      label="앞으로가기"
+                      onClick={redoPlan}
+                      disabled={!redoStack.length}
+                    />
+                  </>
+                )}
               </div>
+              <span className="timeline-time-readout">{formatTime(sliderTime)} / {formatTime(timelineMax)}</span>
+              <div className="timeline-zoom-controls" aria-label="타임라인 확대/축소">
+                <IconHintButton
+                  className="timeline-icon-button"
+                  iconName="zoom-minus"
+                  label="타임라인 축소"
+                  onClick={() => zoomTimelineBy(0.82)}
+                />
+                <IconHintButton
+                  className="timeline-icon-button"
+                  iconName="zoom-plus"
+                  label="타임라인 확대"
+                  onClick={() => zoomTimelineBy(1.18)}
+                />
+              </div>
+              {!readonly && (
+                <IconHintButton
+                  className="secondary capture-button timeline-icon-button timeline-add-button"
+                  iconName="timer-add"
+                  label="현재 시간에 대형 추가"
+                  onClick={() => addSection({ forceAppend: true })}
+                />
+              )}
             </div>
             <div className="timeline-workbench">
               <div className="timeline-header-spacer" />
@@ -4029,7 +4226,10 @@ function App() {
                 ref={timelineViewportRef}
                 className="timeline-viewport timeline-ruler-viewport"
                 onWheel={onTimelineWheel}
-                onPointerDown={onTimelineScrubPointerDown}
+                onPointerDown={onTimelinePointerDown}
+                onPointerMove={onTimelinePointerMove}
+                onPointerUp={onTimelinePointerUp}
+                onPointerCancel={onTimelinePointerUp}
               >
                 <div className="timeline-content" style={{ width: `${timelineContentWidth}px`, transform: `translateX(${-timelineScrollX}px)` }}>
                   {timelineTicks.map((tick) => (
@@ -4049,7 +4249,10 @@ function App() {
               <div
                 className="timeline-viewport timeline-lane"
                 onWheel={onTimelineWheel}
-                onPointerDown={onTimelineScrubPointerDown}
+                onPointerDown={onTimelinePointerDown}
+                onPointerMove={onTimelinePointerMove}
+                onPointerUp={onTimelinePointerUp}
+                onPointerCancel={onTimelinePointerUp}
               >
                 <div className="timeline-content" style={{ width: `${timelineContentWidth}px`, transform: `translateX(${-timelineScrollX}px)` }}>
                   {sortedSections.map((section, index) => {
@@ -4133,7 +4336,10 @@ function App() {
               <div
                 className="timeline-viewport timeline-lane audio-lane"
                 onWheel={onTimelineWheel}
-                onPointerDown={onTimelineScrubPointerDown}
+                onPointerDown={onTimelinePointerDown}
+                onPointerMove={onTimelinePointerMove}
+                onPointerUp={onTimelinePointerUp}
+                onPointerCancel={onTimelinePointerUp}
               >
                 <div className="timeline-content" style={{ width: `${timelineContentWidth}px`, transform: `translateX(${-timelineScrollX}px)` }}>
                   {hasUsableAudio ? (
@@ -4226,10 +4432,29 @@ function App() {
       <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
-            <button onClick={() => selectedPerformerId ? openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek) : openSelectedFormationPanel()}>선택</button>
-            <button onClick={openAddMobilePanel}>+</button>
-            <button onClick={toggleMobileTransitionOverlay} className={isTransitionOverlayOpen ? "active" : ""}>동선</button>
-            <button onClick={openMoreMobilePanel}>더보기</button>
+            {MOBILE_ACTIONS.map((action) => (
+              action.key === "music" ? (
+                <IconHintButton
+                  as="label"
+                  className="file-button tertiary"
+                  iconName={action.icon}
+                  key={action.key}
+                  label={action.label}
+                  showLabel
+                >
+                  <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+                </IconHintButton>
+              ) : (
+                <IconHintButton
+                  className={action.key === "route" && isTransitionOverlayOpen ? "active" : ""}
+                  iconName={action.icon}
+                  key={action.key}
+                  label={action.label}
+                  onClick={() => handleMobileAction(action.key)}
+                  showLabel
+                />
+              )
+            ))}
           </div>
         )}
         {isMobilePanelOpen && (
@@ -4245,7 +4470,9 @@ function App() {
                 <span />
               </button>
               <strong>{mobilePanelTitle}</strong>
-              <button className="bottom-sheet-close" onClick={closeMobilePanel}>닫기</button>
+              <button className="bottom-sheet-close" onClick={closeMobilePanel} aria-label="닫기" title="닫기">
+                <CoolIcon name="close" />
+              </button>
             </div>
             <div className="mobile-panel">
               {renderMobilePanelContent()}
@@ -4266,6 +4493,7 @@ function App() {
           </article>
         ))}
       </section>
+      <IconHintOverlay />
     </div>
   );
 }

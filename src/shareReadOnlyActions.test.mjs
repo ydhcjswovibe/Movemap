@@ -35,8 +35,14 @@ test("keeps readonly playback in the timeline while hiding edit capture", () => 
   const timeline = appSource.match(/<div className="timeline-editor"[\s\S]*?<audio/)?.[0] || "";
   const timelineRule = stylesSource.match(/\.timeline-editor \{[\s\S]*?\}/)?.[0] || "";
 
-  assert.match(timeline, /<button className="primary playback-button" onClick=\{togglePlayback\} disabled=\{!hasUsableAudio\}>/);
-  assert.match(timeline, /\{!readonly && <button className="secondary capture-button" onClick=\{addSection\}>대형 추가<\/button>\}/);
+  assert.match(timeline, /className="primary playback-button timeline-icon-button"/);
+  assert.match(timeline, /label=\{isPlaying \? "정지" : "재생"\}/);
+  assert.match(timeline, /onClick=\{togglePlayback\}/);
+  assert.match(timeline, /disabled=\{!hasUsableAudio\}/);
+  assert.match(timeline, /\{!readonly && \(/);
+  assert.match(timeline, /className="secondary capture-button timeline-icon-button timeline-add-button"/);
+  assert.match(timeline, /label="현재 시간에 대형 추가"/);
+  assert.match(timeline, /onClick=\{\(\) => addSection\(\{ forceAppend: true \}\)\}/);
   assert.match(timeline, /<span className="timeline-row-label">Forms<\/span>/);
   assert.match(timeline, /<span className="timeline-row-label">Audio<\/span>/);
   assert.match(timelineRule, /overflow:\s*hidden;/);

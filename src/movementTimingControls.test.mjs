@@ -4,6 +4,9 @@ import test from "node:test";
 
 const appSource = readFileSync(new URL("./App.jsx", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const coolIconSource = readFileSync(new URL("./icons/CoolIcon.jsx", import.meta.url), "utf8");
+const iconHintSource = readFileSync(new URL("./IconHintButton.jsx", import.meta.url), "utf8");
+const attributionSource = readFileSync(new URL("../docs/third-party-attribution.md", import.meta.url), "utf8");
 const selectedFormationStart = appSource.indexOf("<div className=\"selected-formation-bar\">");
 const selectedFormationEnd = appSource.indexOf("\n          )}\n        </section>", selectedFormationStart);
 const selectedFormationBar = selectedFormationStart === -1
@@ -13,8 +16,56 @@ const selectedFormationTools = appSource.match(/<div className="selected-formati
 const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
-  assert.match(appSource, />대형 추가<\/button>/);
+  assert.match(appSource, /label="대형 추가"/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
+});
+
+test("icon hint button centralizes icon labels and compact hints", () => {
+  assert.match(appSource, /import IconHintButton, \{ IconHintOverlay \} from "\.\/IconHintButton\.jsx";/);
+  assert.match(appSource, /<IconHintOverlay \/>/);
+  assert.match(iconHintSource, /function IconHintButton\(/);
+  assert.match(iconHintSource, /function IconHintOverlay\(/);
+  assert.match(iconHintSource, /"aria-label": label/);
+  assert.match(iconHintSource, /title: label/);
+  assert.match(iconHintSource, /window\.dispatchEvent\(new CustomEvent\(HINT_EVENT/);
+  assert.match(iconHintSource, /emitIconHint\(hintId, label, event\.currentTarget\)/);
+  assert.match(iconHintSource, /setHint\(event\.detail\)/);
+  assert.match(iconHintSource, /window\.setTimeout\(\(\) => setHint\(null\), HINT_LIFETIME_MS\)/);
+  assert.match(iconHintSource, /clampHintLeft/);
+  assert.match(iconHintSource, /"--icon-hint-left"/);
+  assert.match(styleSource, /\.icon-hint-wrapper/);
+  assert.match(styleSource, /\.icon-hint-popover/);
+  assert.match(styleSource, /position: fixed;/);
+  assert.match(styleSource, /@keyframes icon-hint-pop-above/);
+});
+
+test("timeline controls use a single icon rail", () => {
+  const railSource = appSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench">/)?.[0] || "";
+
+  assert.match(railSource, /IconHintButton/);
+  assert.match(railSource, /iconName=\{isPlaying \? "pause" : "play"\}/);
+  assert.match(railSource, /iconName="undo"/);
+  assert.match(railSource, /iconName="redo"/);
+  assert.match(railSource, /iconName="timer-add"/);
+  assert.match(railSource, /iconName="zoom-minus"/);
+  assert.match(railSource, /iconName="zoom-plus"/);
+  assert.match(railSource, /className="timeline-time-readout"/);
+  assert.match(railSource, /className="secondary capture-button timeline-icon-button timeline-add-button"/);
+  assert.doesNotMatch(railSource, />대형 추가<\/button>/);
+  assert.match(appSource, /function onTimelinePointerDown\(event\)/);
+  assert.match(appSource, /function onTimelinePointerMove\(event\)/);
+  assert.match(appSource, /function onTimelinePointerUp\(event\)/);
+  assert.match(styleSource, /\.timeline-control-rail/);
+  assert.match(styleSource, /flex-wrap: nowrap/);
+});
+
+test("mobile timeline keeps formation blocks compact and readable", () => {
+  assert.match(styleSource, /@media \(max-width: 840px\) and \(orientation: portrait\) \{/);
+  assert.match(styleSource, /\.formation-block \{[\s\S]*?min-height:\s*34px;/);
+  assert.match(styleSource, /\.formation-block-index \{[\s\S]*?font-size:\s*10px;/);
+  assert.match(styleSource, /\.formation-block strong \{[\s\S]*?line-height:\s*1\.1;/);
+  assert.match(styleSource, /\.formation-block em \{[\s\S]*?grid-column:\s*2;/);
+  assert.match(styleSource, /\.timeline-control-rail \{[\s\S]*?gap:\s*5px;/);
 });
 
 test("new projects start with a single four-second intro formation", () => {
@@ -49,7 +100,7 @@ test("bottom timeline uses formation and audio lanes", () => {
   assert.match(appSource, /formatTime\(block\.displayEndTime\)/);
   assert.match(appSource, /className="timeline-viewport timeline-ruler-viewport"/);
   assert.match(appSource, /onWheel=\{onTimelineWheel\}/);
-  assert.match(appSource, /\{!readonly && <button className="secondary capture-button" onClick=\{addSection\}>대형 추가<\/button>\}/);
+  assert.match(appSource, /label="현재 시간에 대형 추가"/);
 });
 
 test("timeline edits use tenth-second quantization", () => {
@@ -202,12 +253,13 @@ test("timeline pointer drags batch undo history until pointerup", () => {
 });
 
 test("formation add follows sequential append selection policy", () => {
-  const addSection = appSource.match(/function addSection\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
+  const addSection = appSource.match(/function addSection\(\{ forceAppend = false \} = \{\}\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
   assert.match(addSection, /const target = resolveFormationAddTarget\(sortedSections, captureTime\);/);
-  assert.match(addSection, /if \(target\.action === "select"\)/);
+  assert.match(addSection, /if \(target\.action === "select" && !forceAppend\)/);
   assert.match(addSection, /setSelectedSectionId\(target\.section\.id\);/);
-  assert.match(addSection, /const previous = target\.previous;/);
+  assert.match(addSection, /const time = target\.action === "select" \? pointTime\(sortedSections\.at\(-1\)\) : target\.time;/);
+  assert.match(addSection, /const previous = target\.action === "select" \? sortedSections\.at\(-1\) : target\.previous;/);
   assert.match(addSection, /action: "add-after"/);
   assert.match(addSection, /const nextSections = result\.sections\.map/);
   assert.match(addSection, /sections: nextSections/);
@@ -233,13 +285,34 @@ test("mobile header is status-first and management actions live in more panel", 
   assert.match(appSource, /<div className="mobile-status-title">/);
   assert.match(appSource, /<strong className="mobile-project-title">\{plan\.title\}<\/strong>/);
   assert.match(appSource, /<div className="mobile-status-meta">/);
-  assert.match(appSource, /<div className="mobile-more-status-grid" aria-label="프로젝트 상태 요약">/);
-  assert.match(appSource, /<span>계정 \/ 저장<\/span>/);
-  assert.match(appSource, /<span>음악<\/span>/);
-  assert.match(appSource, /<span>공유 링크<\/span>/);
-  assert.match(appSource, /<span>내보내기<\/span>/);
+  assert.match(appSource, /const mobileMoreStatusItems = \[/);
+  assert.match(appSource, /<div className="mobile-status-strip" aria-label="프로젝트 상태 요약">/);
+  assert.match(appSource, /label: "계정"/);
+  assert.match(appSource, /label: "음악"/);
+  assert.match(appSource, /label: "공유"/);
+  assert.match(appSource, /label: "출력"/);
+  assert.match(appSource, /<div className="mobile-command-grid" aria-label="모바일 메뉴 명령">/);
+  assert.doesNotMatch(appSource, /mobile-state-card/);
   assert.match(styleSource, /\.desktop-command-bar \{\s*display: none;/);
   assert.match(styleSource, /@media \(max-width: 920px\) and \(orientation: landscape\)[\s\S]*?\.desktop-command-bar \{\s*display: none;/);
+});
+
+test("mobile compression uses Coolicons with Wanted-inspired local tokens", () => {
+  assert.match(iconHintSource, /import CoolIcon from "\.\/icons\/CoolIcon\.jsx";/);
+  assert.match(appSource, /const MOBILE_ACTIONS = \[/);
+  assert.match(appSource, /MOBILE_ACTIONS\.map\(\(action\) =>/);
+  assert.match(appSource, /\{ key: "stage", icon: "settings", label: "무대" \}/);
+  assert.match(appSource, /iconName="undo"/);
+  assert.match(appSource, /iconName="grid"/);
+  assert.match(coolIconSource, /replaceAll\('stroke="black"', 'stroke="currentColor"'\)/);
+  assert.match(coolIconSource, /moreGrid/);
+  assert.match(coolIconSource, /import grid from "\.\/coolicons\/grid\.svg\?raw";/);
+  assert.match(attributionSource, /Coolicons/);
+  assert.match(attributionSource, /Wanted Design System Community/);
+  assert.match(styleSource, /--wanted-panel-strong:\s*#17191f;/);
+  assert.match(styleSource, /--wanted-accent:\s*#18a466;/);
+  assert.match(styleSource, /\.mobile-command-grid \{/);
+  assert.match(styleSource, /\.mobile-status-token\.ok/);
 });
 
 test("mobile layout overrides the open tool drawer grid", () => {
@@ -299,8 +372,16 @@ test("portrait mobile keeps the stage and timeline visible under temporary sheet
 
   assert.doesNotMatch(portraitMobile, /\.desktop-editor \{\s*display:\s*none;/);
   assert.match(portraitMobile, /\.desktop-editor \{[\s\S]*?display:\s*grid;/);
+  assert.match(portraitMobile, /\.app \{[\s\S]*?height:\s*100dvh;/);
+  assert.match(portraitMobile, /--mobile-stage-inline:\s*calc\(100dvw/);
+  assert.match(portraitMobile, /--mobile-stage-target:\s*min\(calc\(100dvh - 236px - env\(safe-area-inset-bottom\)\), calc\(var\(--mobile-stage-inline\) \* 1\.12\)\);/);
+  assert.match(portraitMobile, /\.stage-area \{[\s\S]*?grid-template-rows:\s*auto minmax\(var\(--mobile-stage-target\), 1fr\) minmax\(112px, 136px\) 0;/);
+  assert.match(portraitMobile, /\.stage-hint \{[\s\S]*?display:\s*none;/);
+  assert.match(portraitMobile, /\.mobile-action-bar \{[\s\S]*?overflow-x:\s*auto;/);
+  assert.match(portraitMobile, /\.mobile-action-bar \.icon-hint-wrapper \{[\s\S]*?flex:\s*0 0 54px;/);
+  assert.match(portraitMobile, /\.selected-formation-bar \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.left-work-panel,\s*\.right-context-surface \{[\s\S]*?display:\s*none;/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*22vh;/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*44vh;/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*calc\(100vh - 104px - env\(safe-area-inset-bottom\)\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*min\(18dvh, 156px\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*min\(32dvh, 270px\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*min\(38dvh, 320px\);/);
 });
