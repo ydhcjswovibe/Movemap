@@ -792,6 +792,7 @@ function App() {
   const interactiveEditSnapshotRef = useRef(null);
   const ignoreNextStageTapRef = useRef(false);
   const ignoreNextFormationClickRef = useRef(false);
+  const formationLongPressTimerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
@@ -1550,7 +1551,6 @@ function App() {
     event.stopPropagation();
     ignoreNextFormationClickRef.current = true;
     setSelectedSectionId(section.id);
-    beginInteractiveEdit();
 
     const startClientX = event.clientX;
     const startArrival = pointTime(section);
@@ -1559,7 +1559,33 @@ function App() {
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasDragged = false;
     let hasEdited = false;
+    let hasStartedEdit = mode !== "body";
+    let longPressConfirmed = false;
     let reorderTargetIndex = null;
+
+    if (hasStartedEdit) {
+      beginInteractiveEdit();
+    }
+
+    const clearFormationLongPressTimer = () => {
+      if (formationLongPressTimerRef.current) {
+        clearTimeout(formationLongPressTimerRef.current);
+        formationLongPressTimerRef.current = null;
+      }
+    };
+
+    const startBodyMoveEdit = () => {
+      clearFormationLongPressTimer();
+      if (mode !== "body" || hasStartedEdit) return;
+      longPressConfirmed = true;
+      hasStartedEdit = true;
+      beginInteractiveEdit();
+    };
+
+    if (mode === "body") {
+      clearFormationLongPressTimer();
+      formationLongPressTimerRef.current = setTimeout(startBodyMoveEdit, LONG_PRESS_MS);
+    }
 
     const replaceSectionsIfChanged = (nextSections) => {
       const nextSignature = sectionsTimingSignature(nextSections);
@@ -1572,7 +1598,8 @@ function App() {
 
     const commit = (clientX) => {
       const deltaTime = (clientX - startClientX) / timelinePixelsPerSecond;
-      if (Math.abs(clientX - startClientX) >= 4) hasDragged = true;
+      const passedDragThreshold = Math.abs(clientX - startClientX) >= 4;
+      if (passedDragThreshold) hasDragged = true;
 
       if (mode === "left") {
         const rawStart = startMoveStart + deltaTime;
@@ -1607,6 +1634,15 @@ function App() {
         return;
       }
 
+      if (!longPressConfirmed) {
+        if (passedDragThreshold) {
+          clearFormationLongPressTimer();
+          seekTimelineToTime(timeFromTimelineClientX(clientX));
+        }
+        return;
+      }
+
+      startBodyMoveEdit();
       const dragResult = applyFormationTimelineEdit({
         sections: sortedSections,
         action: "move-body",
@@ -1627,13 +1663,14 @@ function App() {
     const onPointerUp = () => {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      clearFormationLongPressTimer();
       setTimelineSnapTime(null);
       setTimelineReorderPreview(null);
       setTimelineBlockedEdge(null);
       if (!hasDragged && mode === "body") {
-        finishInteractiveEdit(false);
+        if (hasStartedEdit) finishInteractiveEdit(false);
         jumpTo(section);
-        openSelectedFormationPanel(section.id);
         return;
       }
       if (mode === "body" && reorderTargetIndex !== null && reorderTargetIndex !== index) {
@@ -1647,12 +1684,13 @@ function App() {
         clearQuietStatus();
         return;
       }
-      finishInteractiveEdit(hasEdited);
+      if (hasStartedEdit) finishInteractiveEdit(hasEdited);
       clearQuietStatus();
     };
 
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
   }
 
   function onMovementKeyframePointerDown(event, section, keyframe) {

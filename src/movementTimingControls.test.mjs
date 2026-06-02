@@ -14,6 +14,7 @@ const selectedFormationBar = selectedFormationStart === -1
   : appSource.slice(selectedFormationStart, selectedFormationEnd === -1 ? undefined : selectedFormationEnd);
 const selectedFormationTools = appSource.match(/<div className="selected-formation-tools">[\s\S]*?<\/div>\s*\)\}/)?.[0] || "";
 const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
+const formationPointerDown = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?\n  \}\n\n  function onMovementKeyframePointerDown/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
   assert.match(appSource, /label="대형 추가"/);
@@ -205,6 +206,10 @@ test("selected formation segment exposes drag and two trim handles", () => {
   assert.match(appSource, /action: "move-body"/);
   assert.match(appSource, /deltaTime,/);
   assert.match(appSource, /replaceSectionsIfChanged\(dragResult\.sections\);/);
+  assert.match(formationPointerDown, /setTimeout\(startBodyMoveEdit, LONG_PRESS_MS\)/);
+  assert.match(formationPointerDown, /if \(!longPressConfirmed\) \{[\s\S]*seekTimelineToTime\(timeFromTimelineClientX\(clientX\)\);[\s\S]*return;/);
+  assert.match(formationPointerDown, /startBodyMoveEdit\(\);\n      const dragResult = applyFormationTimelineEdit\(\{/);
+  assert.doesNotMatch(formationPointerDown, /openSelectedFormationPanel\(section\.id\)/);
   assert.match(leftHandleRule, /left:\s*2px;/);
   assert.match(rightHandleRule, /right:\s*2px;/);
 });

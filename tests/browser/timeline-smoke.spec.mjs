@@ -157,6 +157,16 @@ test("timeline formation editing keeps sequential segments and clean browser out
   expect(f1BodyBox).not.toBeNull();
   await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2, f1BodyBox.y + f1BodyBox.height / 2);
   await page.mouse.down();
+  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2 + 140, f1BodyBox.y + f1BodyBox.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expectNoBottomStatus(page);
+
+  expect((await formationTexts(page)).map(compactFormationText)).toEqual(finalTexts);
+  await expect(page.locator(".formation-block.current")).toContainText(/0:04.0 - 0:10.0|0:10.0 - 0:14.0/);
+
+  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2, f1BodyBox.y + f1BodyBox.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(500);
   await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2 + 1250, f1BodyBox.y + f1BodyBox.height / 2, { steps: 12 });
   await page.mouse.up();
   await expectNoBottomStatus(page);
@@ -451,6 +461,11 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await expect(page.locator(".mobile-command-grid")).toBeVisible();
   await expect(page.locator(".mobile-status-token")).toHaveCount(4);
   await page.locator(".bottom-sheet-close").click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+
+  await mobileFormationBlocks.nth(1).click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+  await expect(page.locator(".formation-block.selected")).toContainText("0:04.0 - 0:08.0");
 
   await expect(page.locator(".formation-block").first()).toBeVisible();
   const actionBarBox = await page.locator(".mobile-action-bar").boundingBox();
