@@ -1123,6 +1123,11 @@ function App() {
     }
   }
 
+  function dismissStatus() {
+    setStatus("");
+    setStatusRecovery("");
+  }
+
   function openMobilePanel(kind, size = MOBILE_PANEL_SIZES.peek) {
     setMobilePanel({ kind, size });
   }
@@ -3895,6 +3900,9 @@ function App() {
         <div className="status" role="status" aria-live="polite">
           <span>{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</span>
           {renderStatusActions()}
+          <button className="status-close" type="button" aria-label="상태 알림 닫기" onClick={dismissStatus}>
+            x
+          </button>
         </div>
       )}
       {readonly && (

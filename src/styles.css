@@ -615,7 +615,7 @@ label {
   z-index: 60;
   width: min(420px, calc(100vw - 32px));
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 42px 12px 14px;
   background: #ffffff;
   border: 1px solid #d9e2ec;
   border-radius: 8px;
@@ -624,6 +624,23 @@ label {
   display: grid;
   gap: 8px;
   pointer-events: none;
+}
+
+.status-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: auto;
 }
 
 .status a {
@@ -2671,7 +2688,9 @@ h3 {
     --mobile-page-pad: clamp(2px, 0.75dvw, 4px);
     --mobile-stage-pad: clamp(1px, 0.5dvw, 3px);
     --mobile-action-bar-height: 54px;
-    --mobile-action-bar-space: calc(var(--mobile-action-bar-height) + 8px + env(safe-area-inset-bottom));
+    --mobile-action-bar-bottom-offset: clamp(9px, 1.45dvh, 18px);
+    --mobile-action-bar-width: min(calc(100dvw - (var(--mobile-page-pad) * 2)), calc(100dvh * 0.56));
+    --mobile-action-bar-space: calc(var(--mobile-action-bar-height) + var(--mobile-action-bar-bottom-offset) + 8px + env(safe-area-inset-bottom));
     --mobile-stage-inline: calc(100dvw - (var(--mobile-page-pad) * 2) - (var(--mobile-stage-pad) * 2));
     --mobile-stage-target: min(calc(100dvh - 236px - env(safe-area-inset-bottom)), calc(var(--mobile-stage-inline) * 1.12));
   }
@@ -3005,9 +3024,10 @@ h3 {
 
   .mobile-action-bar {
     position: fixed;
-    left: var(--mobile-page-pad);
-    right: var(--mobile-page-pad);
-    bottom: calc(var(--mobile-page-pad) + env(safe-area-inset-bottom));
+    left: 50%;
+    bottom: calc(var(--mobile-action-bar-bottom-offset) + env(safe-area-inset-bottom));
+    width: var(--mobile-action-bar-width);
+    transform: translateX(-50%);
     z-index: 30;
     height: var(--mobile-action-bar-height);
     display: flex;

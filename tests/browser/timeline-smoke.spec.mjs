@@ -214,6 +214,15 @@ test("mobile viewport keeps stage performer drag editable", async ({ page }) => 
   }));
   expect(Math.abs(after.x - before.x) + Math.abs(after.y - before.y)).toBeGreaterThan(1);
   await expect(page.locator(".mobile-status-bar").getByText(/자동 저장/)).toBeVisible();
+
+  const viewport = page.viewportSize();
+  const actionBarBox = await page.locator(".mobile-action-bar").boundingBox();
+  expect(viewport).not.toBeNull();
+  expect(actionBarBox).not.toBeNull();
+  const bottomGap = viewport.height - actionBarBox.y - actionBarBox.height;
+  expect(bottomGap).toBeGreaterThanOrEqual(viewport.height * 0.01);
+  expect(bottomGap).toBeLessThanOrEqual(viewport.height * 0.035);
+  expect(Math.abs(actionBarBox.x + actionBarBox.width / 2 - viewport.width / 2)).toBeLessThan(2);
 });
 
 test("View Link route opens readonly review with transition warnings", async ({ page }) => {
@@ -252,6 +261,8 @@ test("valid Edit Link route exposes edit controls", async ({ page }) => {
   await page.locator(".share-action-menu").getByRole("button", { name: "보기 링크 복사" }).click();
   await expect(page.locator(".status")).toContainText("공유 링크를 복사했습니다.");
   await expect.poll(() => page.evaluate(() => window.__lastCopiedText)).toContain("/share/project-1");
+  await page.getByRole("button", { name: "상태 알림 닫기" }).click();
+  await expectNoBottomStatus(page);
 });
 
 test("invalid or disabled links fall back without edit controls", async ({ page }) => {

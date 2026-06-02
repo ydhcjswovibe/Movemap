@@ -73,3 +73,10 @@ test("important bottom status messages stay available", () => {
     );
   }
 });
+
+test("bottom status popup includes a dismiss button", () => {
+  const statusRender = appSource.match(/\{status && \([\s\S]*?\n      \)\}/)?.[0] || "";
+
+  assert.match(statusRender, /aria-label="상태 알림 닫기"/);
+  assert.match(statusRender, /onClick=\{dismissStatus\}/);
+});
