@@ -60,9 +60,15 @@ const MOBILE_PANEL_SIZES = Object.freeze({
 const MOBILE_PANEL_KINDS = Object.freeze({
   performer: "performer",
   formation: "formation",
+  people: "people",
   add: "add",
   more: "more",
   share: "share",
+  download: "download",
+  view: "view",
+  stage: "stage",
+  role: "role",
+  align: "align",
   transition: "transition"
 });
 const STAGE_WIDTH = 900;
@@ -72,18 +78,35 @@ const ROLE_COLORS = {
   groupB: ["#c0265f", "#e84a7f", "#f9739a", "#fb7185", "#be185d"],
   other: ["#6d5dfc", "#14b8a6", "#f59e0b", "#64748b"]
 };
-const MOBILE_ACTIONS = [
-  { key: "select", icon: "select", label: "선택" },
-  { key: "add", icon: "add", label: "추가" },
-  { key: "route", icon: "path", label: "동선" },
-  { key: "more", icon: "more", label: "메뉴" },
+const MOBILE_GLOBAL_ACTIONS = [
   { key: "save", icon: "save", label: "저장" },
   { key: "share", icon: "share", label: "공유" },
-  { key: "music", icon: "note", label: "음악" },
-  { key: "export", icon: "download", label: "내보내기" },
-  { key: "cast", icon: "users", label: "출연진" },
-  { key: "stage", icon: "settings", label: "무대" }
+  { key: "download", icon: "download", label: "다운로드" },
+  { key: "more", icon: "more", label: "더보기" }
 ];
+const MOBILE_ACTION_GROUPS = Object.freeze({
+  default: [
+    { key: "people", icon: "users", label: "사람" },
+    { key: "music", icon: "note", label: "음악" },
+    { key: "stage", icon: "settings", label: "무대" },
+    { key: "view", icon: "grid", label: "보기" }
+  ],
+  formation: [
+    { key: "duplicate-formation", icon: "add", label: "복제" },
+    { key: "delete-formation", icon: "close", label: "삭제", danger: true },
+    { key: "reset-formation", icon: "undo", label: "초기화", danger: true }
+  ],
+  performer: [
+    { key: "duplicate-performer", icon: "add", label: "복제" },
+    { key: "delete-performer", icon: "close", label: "삭제", danger: true },
+    { key: "performer-role", icon: "label", label: "역할" }
+  ],
+  multi: [
+    { key: "align-performers", icon: "grid", label: "정렬" },
+    { key: "delete-performers", icon: "close", label: "삭제", danger: true },
+    { key: "clear-selection", icon: "select", label: "해제" }
+  ]
+});
 
 const PERFORMANCE_TYPES = {
   shine: "솔로/그룹",
@@ -762,6 +785,7 @@ function App() {
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState(() => closedMobilePanel());
+  const [mobileContextSelection, setMobileContextSelection] = useState("");
   const [isTransitionOverlayOpen, setIsTransitionOverlayOpen] = useState(false);
   const [isShareOperationPending, setIsShareOperationPending] = useState(false);
   const [isExportOperationPending, setIsExportOperationPending] = useState(false);
@@ -1178,26 +1202,6 @@ function App() {
   }
 
   function handleMobileAction(actionKey) {
-    if (actionKey === "select") {
-      if (selectedPerformerId) {
-        openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
-      } else {
-        openSelectedFormationPanel();
-      }
-      return;
-    }
-    if (actionKey === "add") {
-      openAddMobilePanel();
-      return;
-    }
-    if (actionKey === "route") {
-      toggleMobileTransitionOverlay();
-      return;
-    }
-    if (actionKey === "more") {
-      openMoreMobilePanel();
-      return;
-    }
     if (actionKey === "save") {
       saveProjectToCloud();
       return;
@@ -1206,13 +1210,69 @@ function App() {
       openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.half);
       return;
     }
-    if (actionKey === "export") {
-      exportJson();
+    if (actionKey === "download") {
+      openMobilePanel(MOBILE_PANEL_KINDS.download, MOBILE_PANEL_SIZES.half);
       return;
     }
-    if (actionKey === "cast" || actionKey === "stage") {
-      setActiveWorkPanel(actionKey);
-      openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.half);
+    if (actionKey === "more") {
+      openMoreMobilePanel();
+      return;
+    }
+    if (actionKey === "people") {
+      setActiveWorkPanel("cast");
+      openMobilePanel(MOBILE_PANEL_KINDS.people, MOBILE_PANEL_SIZES.full);
+      return;
+    }
+    if (actionKey === "music") {
+      openMobilePanel(MOBILE_PANEL_KINDS.add, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "stage") {
+      setActiveWorkPanel("stage");
+      openMobilePanel(MOBILE_PANEL_KINDS.stage, MOBILE_PANEL_SIZES.full);
+      return;
+    }
+    if (actionKey === "view") {
+      openMobilePanel(MOBILE_PANEL_KINDS.view, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "duplicate-formation") {
+      duplicateSection();
+      setMobileContextSelection("formation");
+      return;
+    }
+    if (actionKey === "delete-formation") {
+      deleteSection();
+      setMobileContextSelection("");
+      return;
+    }
+    if (actionKey === "reset-formation") {
+      resetSelectedFormation();
+      setMobileContextSelection("formation");
+      return;
+    }
+    if (actionKey === "duplicate-performer") {
+      duplicateSelectedPerformer();
+      return;
+    }
+    if (actionKey === "delete-performer") {
+      deleteSelectedPerformer();
+      return;
+    }
+    if (actionKey === "performer-role") {
+      openMobilePanel(MOBILE_PANEL_KINDS.role, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "align-performers") {
+      openMobilePanel(MOBILE_PANEL_KINDS.align, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "delete-performers") {
+      deleteSelectedPerformers();
+      return;
+    }
+    if (actionKey === "clear-selection") {
+      clearSelection();
     }
   }
 
@@ -1556,6 +1616,10 @@ function App() {
     event.stopPropagation();
     ignoreNextFormationClickRef.current = true;
     setSelectedSectionId(section.id);
+    setSelectedPerformerId("");
+    setSelectedPerformerIds([]);
+    setSelectedPairKey("");
+    setMobileContextSelection("formation");
 
     const startClientX = event.clientX;
     const startArrival = pointTime(section);
@@ -1768,6 +1832,7 @@ function App() {
     setSelectedPerformerIds([]);
     setSelectedPairKey("");
     setTapMoveArmed(false);
+    setMobileContextSelection("");
   }
 
   function selectPerformer(performerId) {
@@ -1775,6 +1840,7 @@ function App() {
     setSelectedPerformerIds(performerId ? [performerId] : []);
     setSelectedPairKey("");
     setTapMoveArmed(Boolean(performerId));
+    setMobileContextSelection(performerId ? "performer" : "");
   }
 
   function selectPair(nextPairKey, performerId = "") {
@@ -1782,6 +1848,7 @@ function App() {
     setSelectedPerformerIds(performerId ? [performerId] : []);
     setSelectedPairKey(nextPairKey);
     setTapMoveArmed(Boolean(nextPairKey));
+    setMobileContextSelection(performerId ? "performer" : "");
   }
 
   function applySelectionClick(action) {
@@ -2137,8 +2204,98 @@ function App() {
     setSelectedPerformerId(performer.id);
     setSelectedPerformerIds([performer.id]);
     setSelectedPairKey("");
+    setMobileContextSelection("performer");
     clearQuietStatus();
     openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
+  }
+
+  function duplicateSelectedPerformer() {
+    const performerToCopy = selectedPerformerId ? performerById(selectedPerformerId) : null;
+    if (readonly || !plan || !performerToCopy || !selectedSection) return;
+    const index = plan.performers.length;
+    const palette = ROLE_COLORS[performerToCopy.role] || ROLE_COLORS.other;
+    const performer = {
+      ...performerToCopy,
+      id: uid("p"),
+      label: `${performerToCopy.label || "P"} 복사`,
+      name: `${performerToCopy.name || performerToCopy.label || "출연자"} 복사`,
+      color: palette[index % palette.length]
+    };
+    updatePlan((current) => ({
+      ...current,
+      performers: [...current.performers, performer],
+      sections: current.sections.map((section) => {
+        const sourcePosition = section.positions?.[performerToCopy.id] || selectedSection.positions?.[performerToCopy.id] || { x: 50, y: 50 };
+        return {
+          ...section,
+          positions: {
+            ...(section.positions || {}),
+            [performer.id]: {
+              x: clamp((sourcePosition.x || 50) + 3, 4, 96),
+              y: clamp((sourcePosition.y || 50) + 3, 5, 95)
+            }
+          }
+        };
+      })
+    }));
+    selectPerformer(performer.id);
+    clearQuietStatus();
+  }
+
+  function deletePerformersByIds(performerIds) {
+    if (readonly || !plan || !performerIds.length) return;
+    const idsToDelete = new Set(performerIds);
+    updatePlan((current) => ({
+      ...current,
+      performers: current.performers.filter((performer) => !idsToDelete.has(performer.id)),
+      sections: current.sections.map((section) => {
+        const nextPositions = { ...(section.positions || {}) };
+        idsToDelete.forEach((id) => delete nextPositions[id]);
+        return { ...section, positions: nextPositions };
+      }),
+      partnerSets: (current.partnerSets || []).map((set) => ({
+        ...set,
+        pairs: (set.pairs || []).filter((pair) => pair.every((id) => !idsToDelete.has(id)))
+      }))
+    }));
+    clearSelection();
+    clearQuietStatus();
+  }
+
+  function deleteSelectedPerformer() {
+    if (!selectedPerformerId) return;
+    deletePerformersByIds([selectedPerformerId]);
+  }
+
+  function deleteSelectedPerformers() {
+    deletePerformersByIds(selectedPerformerIds);
+  }
+
+  function setSelectedPerformerRole(role) {
+    if (readonly || !selectedPerformerId) return;
+    const nextRole = ROLE_COLORS[role] ? role : "other";
+    const palette = ROLE_COLORS[nextRole] || ROLE_COLORS.other;
+    updatePlan((current) => ({
+      ...current,
+      performers: current.performers.map((performer) => performer.id === selectedPerformerId
+        ? { ...performer, role: nextRole, color: palette[0] }
+        : performer)
+    }));
+    setMobileContextSelection("performer");
+    clearQuietStatus();
+  }
+
+  function alignCurrentSelection(axis) {
+    if (!selectedSection || selectedPerformerIds.length < 2) return;
+    const editKeyframeId = selectedMovementKeyframe?.id || "";
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === selectedSection.id
+        ? sectionWithPositionPatch(section, alignSelectedPerformers(sectionEditPositions(section, editKeyframeId), selectedPerformerIds, axis), editKeyframeId)
+        : section)
+    }));
+    setMobileContextSelection("multi");
+    clearQuietStatus();
   }
 
   function previewTemplate() {
@@ -2354,6 +2511,7 @@ function App() {
       setSelectedPerformerId(performerId);
       setSelectedPairKey("");
       setTapMoveArmed(false);
+      setMobileContextSelection(nextSelection.length > 1 ? "multi" : "performer");
       clearQuietStatus();
       return;
     }
@@ -3311,21 +3469,13 @@ function App() {
           ? `${selectedPerformer.name || selectedPerformer.label} 토큰`
           : "선택 없음"
     );
-    const alignSelection = (axis) => {
-      if (!selectedSection || selectedPerformerIds.length < 2) return;
-      const editKeyframeId = selectedMovementKeyframe?.id || "";
-      updatePlan((current) => ({
-        ...current,
-        sections: current.sections.map((section) => section.id === selectedSection.id
-          ? sectionWithPositionPatch(section, alignSelectedPerformers(sectionEditPositions(section, editKeyframeId), selectedPerformerIds, axis), editKeyframeId)
-          : section)
-      }));
-    };
+    const alignSelection = (axis) => alignCurrentSelection(axis);
     const selectRole = (role) => {
       const ids = performerIdsForRole(plan.performers, role);
       setSelectedPerformerIds(ids);
       setSelectedPerformerId(ids[0] || "");
       setSelectedPairKey("");
+      setMobileContextSelection(ids.length > 1 ? "multi" : ids.length === 1 ? "performer" : "");
       clearQuietStatus();
     };
     return (
@@ -3724,9 +3874,15 @@ function App() {
   const mobilePanelTitle = {
     [MOBILE_PANEL_KINDS.performer]: "선택",
     [MOBILE_PANEL_KINDS.formation]: "대형",
+    [MOBILE_PANEL_KINDS.people]: "사람",
     [MOBILE_PANEL_KINDS.add]: "추가",
     [MOBILE_PANEL_KINDS.more]: "더보기",
     [MOBILE_PANEL_KINDS.share]: "공유",
+    [MOBILE_PANEL_KINDS.download]: "다운로드",
+    [MOBILE_PANEL_KINDS.view]: "보기",
+    [MOBILE_PANEL_KINDS.stage]: "무대",
+    [MOBILE_PANEL_KINDS.role]: "역할 선택",
+    [MOBILE_PANEL_KINDS.align]: "정렬 방향",
     [MOBILE_PANEL_KINDS.transition]: "동선"
   }[mobilePanel.kind] || "도구";
   const mobileMoreStatusItems = [
@@ -3759,6 +3915,14 @@ function App() {
       meta: canUseAdvancedExports ? "고급 출력" : "기본 출력"
     }
   ];
+  const mobileActionMode = selectedPerformerIds.length > 1
+    ? "multi"
+    : selectedPerformerId
+      ? "performer"
+      : mobileContextSelection === "formation"
+        ? "formation"
+        : "default";
+  const mobileActions = MOBILE_ACTION_GROUPS[mobileActionMode] || MOBILE_ACTION_GROUPS.default;
 
   function renderMobilePanelContent() {
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.performer) {
@@ -3784,6 +3948,29 @@ function App() {
           )}
         </div>
       );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.role) {
+      return (
+        <div className="mobile-command-grid compact" aria-label="역할 선택">
+          <IconHintButton iconName="label" label="A 그룹" onClick={() => setSelectedPerformerRole("groupA")} showLabel />
+          <IconHintButton iconName="label" label="B 그룹" onClick={() => setSelectedPerformerRole("groupB")} showLabel />
+          <IconHintButton iconName="label" label="기타" onClick={() => setSelectedPerformerRole("other")} showLabel />
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.align) {
+      return (
+        <div className="mobile-command-grid compact" aria-label="정렬 방향">
+          <IconHintButton iconName="grid" label="세로 정렬" onClick={() => alignCurrentSelection("x")} disabled={selectedPerformerIds.length < 2} showLabel />
+          <IconHintButton iconName="grid" label="가로 정렬" onClick={() => alignCurrentSelection("y")} disabled={selectedPerformerIds.length < 2} showLabel />
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.people) {
+      return renderPerformersPanel();
     }
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.formation) {
@@ -3840,18 +4027,42 @@ function App() {
                 <IconHintButton iconName="users" label="로그인" onClick={signInOwner} disabled={authLoading} showLabel />
               )
             )}
-            {!readonly && <IconHintButton className="primary" iconName="save" label="저장" onClick={saveProjectToCloud} showLabel />}
-            <IconHintButton iconName="users" label="출연진" onClick={() => { setActiveWorkPanel("cast"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }} showLabel />
-            <IconHintButton iconName="settings" label="무대" onClick={() => { setActiveWorkPanel("stage"); openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full); }} showLabel />
             {!readonly && <IconHintButton iconName="home" label="프로젝트" onClick={returnToProjectPicker} showLabel />}
-            <IconHintButton as="label" className="file-button tertiary" iconName="note" label="음악" showLabel>
-              <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
-            </IconHintButton>
-            <IconHintButton iconName="share" label="공유" onClick={() => openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.full)} showLabel />
-            <IconHintButton iconName="download" label="내보내기" onClick={exportJson} showLabel />
+            {!readonly && <IconHintButton as="label" className="file-button tertiary" iconName="home" label="불러오기" showLabel>
+              <input type="file" accept="application/json" onChange={importJson} />
+            </IconHintButton>}
+            {!readonly && <IconHintButton iconName={snapEnabled ? "grid" : "select"} label={snapEnabled ? "스냅 끄기" : "스냅 켜기"} onClick={() => setSnapEnabled((value) => !value)} showLabel />}
           </div>
         </div>
       );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.download) {
+      return (
+        <div className="mobile-command-grid compact" aria-label="다운로드 메뉴">
+          <IconHintButton iconName="download" label="프로젝트 파일" onClick={exportJson} showLabel />
+          <IconHintButton iconName="download" label="현재 대형 이미지" onClick={() => exportPng()} disabled={!canUseAdvancedExports} showLabel />
+          <IconHintButton iconName="download" label="전체 대형 이미지" onClick={exportAllPng} disabled={!canUseAdvancedExports} showLabel />
+          <IconHintButton iconName="download" label="인쇄/PDF" onClick={() => window.print()} disabled={!canUseAdvancedExports} showLabel />
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.view) {
+      return (
+        <div className="mobile-panel-stack">
+          <div className="mobile-command-grid compact" aria-label="보기 옵션">
+            <IconHintButton iconName="path" label={showAllTransitionPaths ? "동선 숨기기" : "동선 보기"} onClick={() => setShowAllTransitionPaths((value) => !value)} showLabel />
+            <IconHintButton iconName="grid" label={showStageReferences ? "참조선 끄기" : "참조선 켜기"} onClick={() => setShowStageReferences((value) => !value)} showLabel />
+            <IconHintButton iconName="label" label={showStageReferenceLabels ? "참조선 라벨 끄기" : "참조선 라벨 켜기"} onClick={() => setShowStageReferenceLabels((value) => !value)} showLabel />
+            <IconHintButton iconName="layer" label={stageViewMode === "2d" ? "3D" : "2D"} onClick={() => setStageViewMode((value) => value === "2d" ? "3d" : "2d")} showLabel />
+          </div>
+        </div>
+      );
+    }
+
+    if (mobilePanel.kind === MOBILE_PANEL_KINDS.stage) {
+      return renderWorkPanelContent();
     }
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.share) {
@@ -3927,6 +4138,20 @@ function App() {
             <strong>{activeSection?.name || "대형 없음"}</strong>
             <span>{formatTime(currentTime)} · 도착 {activeSection ? formatTime(pointTime(activeSection)) : "0:00.0"}</span>
           </div>
+          {!readonly && (
+            <div className="mobile-global-actions" aria-label="모바일 전역 명령">
+              {MOBILE_GLOBAL_ACTIONS.map((action) => (
+                <IconHintButton
+                  className={action.key === "save" ? "primary" : ""}
+                  iconName={action.icon}
+                  key={action.key}
+                  label={action.label}
+                  onClick={() => handleMobileAction(action.key)}
+                  showLabel
+                />
+              ))}
+            </div>
+          )}
         </header>
 
         <header className="global-command-bar desktop-command-bar" aria-label="전역 명령">
@@ -4328,6 +4553,10 @@ function App() {
                         onClick={(event) => {
                           if (ignoreNextFormationClickRef.current) {
                             ignoreNextFormationClickRef.current = false;
+                            setSelectedPerformerId("");
+                            setSelectedPerformerIds([]);
+                            setSelectedPairKey("");
+                            setMobileContextSelection("formation");
                             event.preventDefault();
                           }
                         }}
@@ -4481,28 +4710,15 @@ function App() {
       <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
-            {MOBILE_ACTIONS.map((action) => (
-              action.key === "music" ? (
-                <IconHintButton
-                  as="label"
-                  className="file-button tertiary"
-                  iconName={action.icon}
-                  key={action.key}
-                  label={action.label}
-                  showLabel
-                >
-                  <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
-                </IconHintButton>
-              ) : (
-                <IconHintButton
-                  className={action.key === "route" && isTransitionOverlayOpen ? "active" : ""}
-                  iconName={action.icon}
-                  key={action.key}
-                  label={action.label}
-                  onClick={() => handleMobileAction(action.key)}
-                  showLabel
-                />
-              )
+            {mobileActions.map((action) => (
+              <IconHintButton
+                className={action.danger ? "danger-button compact-danger" : ""}
+                iconName={action.icon}
+                key={action.key}
+                label={action.label}
+                onClick={() => handleMobileAction(action.key)}
+                showLabel
+              />
             ))}
           </div>
         )}

@@ -284,12 +284,18 @@ test("top actions expose save share and tools without legacy tabs", () => {
   assert.doesNotMatch(appSource, /renderMobileTabs/);
 });
 
-test("mobile header is status-first and management actions live in more panel", () => {
+test("mobile header owns global commands and management actions live in more panel", () => {
   assert.match(appSource, /<header className="mobile-status-bar" aria-label="모바일 프로젝트 상태">/);
   assert.match(appSource, /<header className="global-command-bar desktop-command-bar" aria-label="전역 명령">/);
   assert.match(appSource, /<div className="mobile-status-title">/);
   assert.match(appSource, /<strong className="mobile-project-title">\{plan\.title\}<\/strong>/);
   assert.match(appSource, /<div className="mobile-status-meta">/);
+  assert.match(appSource, /const MOBILE_GLOBAL_ACTIONS = \[/);
+  assert.match(appSource, /\{ key: "save", icon: "save", label: "저장" \}/);
+  assert.match(appSource, /\{ key: "share", icon: "share", label: "공유" \}/);
+  assert.match(appSource, /\{ key: "download", icon: "download", label: "다운로드" \}/);
+  assert.match(appSource, /\{ key: "more", icon: "more", label: "더보기" \}/);
+  assert.match(appSource, /<div className="mobile-global-actions" aria-label="모바일 전역 명령">/);
   assert.match(appSource, /const mobileMoreStatusItems = \[/);
   assert.match(appSource, /<div className="mobile-status-strip" aria-label="프로젝트 상태 요약">/);
   assert.match(appSource, /label: "계정"/);
@@ -304,9 +310,34 @@ test("mobile header is status-first and management actions live in more panel", 
 
 test("mobile compression uses Coolicons with Wanted-inspired local tokens", () => {
   assert.match(iconHintSource, /import CoolIcon from "\.\/icons\/CoolIcon\.jsx";/);
-  assert.match(appSource, /const MOBILE_ACTIONS = \[/);
-  assert.match(appSource, /MOBILE_ACTIONS\.map\(\(action\) =>/);
+  assert.match(appSource, /const MOBILE_ACTION_GROUPS = Object\.freeze\(\{/);
+  assert.match(appSource, /MOBILE_ACTION_GROUPS\[mobileActionMode\]/);
+  assert.match(appSource, /\{ key: "people", icon: "users", label: "사람" \}/);
+  assert.match(appSource, /\{ key: "music", icon: "note", label: "음악" \}/);
   assert.match(appSource, /\{ key: "stage", icon: "settings", label: "무대" \}/);
+  assert.match(appSource, /\{ key: "view", icon: "grid", label: "보기" \}/);
+  assert.doesNotMatch(appSource, /const MOBILE_ACTIONS = \[/);
+  const mobileActionGroups = appSource.match(/const MOBILE_ACTION_GROUPS = Object\.freeze\(\{[\s\S]*?\n\}\);/)?.[0] || "";
+  assert.doesNotMatch(mobileActionGroups, /label: "저장"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "공유"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "다운로드"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "내보내기"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "메뉴"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "동선"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "추가"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "선택"/);
+  assert.match(appSource, /aria-label="다운로드 메뉴"/);
+  assert.match(appSource, /label="프로젝트 파일"/);
+  assert.match(appSource, /label="현재 대형 이미지"/);
+  assert.match(appSource, /label="전체 대형 이미지"/);
+  assert.match(appSource, /label="인쇄\/PDF"/);
+  assert.match(appSource, /\[MOBILE_PANEL_KINDS\.role\]: "역할 선택"/);
+  assert.match(appSource, /aria-label="역할 선택"/);
+  assert.match(appSource, /label="A 그룹"/);
+  assert.match(appSource, /\[MOBILE_PANEL_KINDS\.align\]: "정렬 방향"/);
+  assert.match(appSource, /aria-label="정렬 방향"/);
+  assert.match(appSource, /label="세로 정렬"/);
+  assert.match(appSource, /label="가로 정렬"/);
   assert.match(appSource, /iconName="undo"/);
   assert.match(appSource, /iconName="grid"/);
   assert.match(coolIconSource, /replaceAll\('stroke="black"', 'stroke="currentColor"'\)/);
@@ -317,6 +348,7 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(styleSource, /--wanted-panel-strong:\s*#17191f;/);
   assert.match(styleSource, /--wanted-accent:\s*#18a466;/);
   assert.match(styleSource, /\.mobile-command-grid \{/);
+  assert.match(styleSource, /\.mobile-global-actions/);
   assert.match(styleSource, /\.mobile-status-token\.ok/);
 });
 

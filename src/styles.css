@@ -2299,6 +2299,10 @@ h3 {
   display: none;
 }
 
+.mobile-global-actions {
+  display: none;
+}
+
 .mobile-action-bar {
   display: none;
 }
@@ -2717,9 +2721,9 @@ h3 {
 
   .mobile-status-bar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-height: 40px;
     margin-bottom: 4px;
     padding: 5px 7px;
@@ -2771,6 +2775,33 @@ h3 {
     font-weight: 950;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .mobile-global-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  .mobile-global-actions .icon-hint-wrapper {
+    width: 44px;
+  }
+
+  .mobile-global-actions button {
+    width: 44px;
+    min-height: 36px;
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    padding: 4px 2px;
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1.05;
+  }
+
+  .mobile-global-actions .cool-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .editor-body {
@@ -3078,6 +3109,10 @@ h3 {
     color: #ffffff;
   }
 
+  .mobile-action-bar button.danger-button {
+    color: #b4234f;
+  }
+
   .mobile-action-bar input[type="file"] {
     display: none;
   }
@@ -3218,9 +3253,9 @@ h3 {
 
   .mobile-status-bar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-height: 44px;
     margin-bottom: 6px;
     padding: 6px 10px;
@@ -3271,6 +3306,33 @@ h3 {
     font-weight: 950;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .mobile-global-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .mobile-global-actions .icon-hint-wrapper {
+    width: 48px;
+  }
+
+  .mobile-global-actions button {
+    width: 48px;
+    min-height: 38px;
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    padding: 4px 2px;
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1.05;
+  }
+
+  .mobile-global-actions .cool-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .workspace {
