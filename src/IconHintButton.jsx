@@ -50,6 +50,7 @@ function IconHintButton({
   label,
   onClick,
   children,
+  pressed,
   showLabel = false,
   type = "button"
 }) {
@@ -104,6 +105,9 @@ function IconHintButton({
     controlProps.disabled = disabled;
   } else if (disabled) {
     controlProps["aria-disabled"] = "true";
+  }
+  if (typeof pressed === "boolean") {
+    controlProps["aria-pressed"] = pressed;
   }
 
   return (

@@ -3923,6 +3923,14 @@ function App() {
         ? "formation"
         : "default";
   const mobileActions = MOBILE_ACTION_GROUPS[mobileActionMode] || MOBILE_ACTION_GROUPS.default;
+  const activeMobilePanelActionKey = isMobilePanelOpen ? {
+    [MOBILE_PANEL_KINDS.people]: "people",
+    [MOBILE_PANEL_KINDS.add]: "music",
+    [MOBILE_PANEL_KINDS.stage]: "stage",
+    [MOBILE_PANEL_KINDS.view]: "view",
+    [MOBILE_PANEL_KINDS.role]: "performer-role",
+    [MOBILE_PANEL_KINDS.align]: "align-performers"
+  }[mobilePanel.kind] : "";
 
   function renderMobilePanelContent() {
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.performer) {
@@ -4031,7 +4039,6 @@ function App() {
             {!readonly && <IconHintButton as="label" className="file-button tertiary" iconName="home" label="불러오기" showLabel>
               <input type="file" accept="application/json" onChange={importJson} />
             </IconHintButton>}
-            {!readonly && <IconHintButton iconName={snapEnabled ? "grid" : "select"} label={snapEnabled ? "스냅 끄기" : "스냅 켜기"} onClick={() => setSnapEnabled((value) => !value)} showLabel />}
           </div>
         </div>
       );
@@ -4055,7 +4062,7 @@ function App() {
             <IconHintButton iconName="path" label={showAllTransitionPaths ? "동선 숨기기" : "동선 보기"} onClick={() => setShowAllTransitionPaths((value) => !value)} showLabel />
             <IconHintButton iconName="grid" label={showStageReferences ? "참조선 끄기" : "참조선 켜기"} onClick={() => setShowStageReferences((value) => !value)} showLabel />
             <IconHintButton iconName="label" label={showStageReferenceLabels ? "참조선 라벨 끄기" : "참조선 라벨 켜기"} onClick={() => setShowStageReferenceLabels((value) => !value)} showLabel />
-            <IconHintButton iconName="layer" label={stageViewMode === "2d" ? "3D" : "2D"} onClick={() => setStageViewMode((value) => value === "2d" ? "3d" : "2d")} showLabel />
+            {!readonly && <IconHintButton iconName={snapEnabled ? "grid" : "select"} label={snapEnabled ? "스냅 끄기" : "스냅 켜기"} onClick={() => setSnapEnabled((value) => !value)} showLabel />}
           </div>
         </div>
       );
@@ -4147,7 +4154,6 @@ function App() {
                   key={action.key}
                   label={action.label}
                   onClick={() => handleMobileAction(action.key)}
-                  showLabel
                 />
               ))}
             </div>
@@ -4284,6 +4290,15 @@ function App() {
                 disabled={!showStageReferences}
               />
             </div>
+            <button
+              className="stage-view-float-toggle"
+              type="button"
+              aria-label={stageViewMode === "2d" ? "3D 보기" : "2D 보기"}
+              title={stageViewMode === "2d" ? "3D 보기" : "2D 보기"}
+              onClick={() => setStageViewMode((value) => value === "2d" ? "3d" : "2d")}
+            >
+              {stageViewMode === "2d" ? "3D" : "2D"}
+            </button>
             <div className="stage-view-toggle segmented-control" aria-label="무대 보기 방식">
               <button className={stageViewMode === "2d" ? "active" : ""} onClick={() => setStageViewMode("2d")}>2D</button>
               <button className={stageViewMode === "3d" ? "active" : ""} onClick={() => setStageViewMode("3d")}>3D</button>
@@ -4710,16 +4725,23 @@ function App() {
       <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
-            {mobileActions.map((action) => (
-              <IconHintButton
-                className={action.danger ? "danger-button compact-danger" : ""}
-                iconName={action.icon}
-                key={action.key}
-                label={action.label}
-                onClick={() => handleMobileAction(action.key)}
-                showLabel
-              />
-            ))}
+            {mobileActions.map((action) => {
+              const isActive = activeMobilePanelActionKey === action.key;
+              return (
+                <IconHintButton
+                  className={[
+                    action.danger ? "danger-button compact-danger" : "",
+                    isActive ? "active" : ""
+                  ].filter(Boolean).join(" ")}
+                  iconName={action.icon}
+                  key={action.key}
+                  label={action.label}
+                  onClick={() => handleMobileAction(action.key)}
+                  pressed={isActive}
+                  showLabel
+                />
+              );
+            })}
           </div>
         )}
         {isMobilePanelOpen && (

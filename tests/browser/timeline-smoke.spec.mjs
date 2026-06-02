@@ -251,12 +251,17 @@ test("mobile contextual performer actions open role and alignment option sheets"
 
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "역할" })).toBeVisible();
   await page.locator(".bottom-sheet-close").click();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "역할" }).click();
+  const roleAction = page.locator(".mobile-action-bar").getByRole("button", { name: "역할" });
+  await roleAction.click();
+  await expect(roleAction).toHaveClass(/active/);
+  await expect(roleAction).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".mobile-action-bar")).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("역할 선택");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("A 그룹");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("B 그룹");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("기타");
   await page.locator(".bottom-sheet-close").click();
+  await expect(roleAction).not.toHaveClass(/active/);
 
   const secondBox = await secondToken.boundingBox();
   expect(secondBox).not.toBeNull();
@@ -273,7 +278,11 @@ test("mobile contextual performer actions open role and alignment option sheets"
   });
 
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "정렬" })).toBeVisible();
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "정렬" }).click();
+  const alignAction = page.locator(".mobile-action-bar").getByRole("button", { name: "정렬" });
+  await alignAction.click();
+  await expect(alignAction).toHaveClass(/active/);
+  await expect(alignAction).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".mobile-action-bar")).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("정렬 방향");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("세로 정렬");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("가로 정렬");
@@ -385,6 +394,13 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await expect(globalActions.getByRole("button", { name: "공유" })).toHaveCount(1);
   await expect(globalActions.getByRole("button", { name: "다운로드" })).toHaveCount(1);
   await expect(globalActions.getByRole("button", { name: "더보기" })).toHaveCount(1);
+  await expect(globalActions).not.toContainText("저장");
+  await expect(globalActions).not.toContainText("공유");
+  await expect(globalActions).not.toContainText("다운로드");
+  await expect(globalActions).not.toContainText("더보기");
+  const globalActionButtonBox = await globalActions.getByRole("button", { name: "다운로드" }).boundingBox();
+  expect(globalActionButtonBox).not.toBeNull();
+  expect(globalActionButtonBox.width).toBeLessThanOrEqual(38);
   await expect(actionBar.getByRole("button", { name: "사람" })).toHaveCount(1);
   await expect(actionBar.getByRole("button", { name: "음악" })).toHaveCount(1);
   await expect(actionBar.getByRole("button", { name: "무대" })).toHaveCount(1);
@@ -406,6 +422,7 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   });
   expect(actionRailMetrics.scrollWidth).toBeLessThanOrEqual(actionRailMetrics.clientWidth + 4);
   await expect(actionBar.getByRole("button", { name: "무대" })).toBeVisible();
+  await expect(actionBar.getByRole("button", { name: "사람" })).toHaveAttribute("aria-pressed", "false");
   await actionBar.evaluate((node) => {
     node.scrollLeft = 0;
   });
@@ -501,14 +518,31 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await timelineRail.getByRole("button", { name: "앞으로가기" }).click();
   await expect(mobileFormationBlocks).toHaveCount(2);
 
-  const stageToolBox = await page.locator(".stage-corner-tools").boundingBox();
   const stageBox = await page.locator(".stage-frame").boundingBox();
-  expect(stageToolBox).not.toBeNull();
   expect(stageBox).not.toBeNull();
-  expect(stageToolBox.height).toBeLessThan(58);
-  expect(stageToolBox.width).toBeLessThanOrEqual(stageBox.width);
+  await expect(page.locator(".stage-corner-tools")).toBeHidden();
+  await expect(page.locator(".stage-view-toggle")).toBeHidden();
+  const stageViewToggle = page.locator(".stage-view-float-toggle");
+  await expect(stageViewToggle).toBeVisible();
+  await expect(stageViewToggle).toHaveText("3D");
+  const stageViewToggleBox = await stageViewToggle.boundingBox();
+  expect(stageViewToggleBox).not.toBeNull();
+  expect(stageViewToggleBox.x).toBeGreaterThanOrEqual(stageBox.x);
+  expect(stageViewToggleBox.y).toBeGreaterThanOrEqual(stageBox.y);
+  await stageViewToggle.click();
+  await expect(stageViewToggle).toHaveText("2D");
+  await expect(page.locator(".stage-3d-preview")).toBeVisible();
+  await stageViewToggle.click();
+  await expect(stageViewToggle).toHaveText("3D");
 
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "사람" }).click();
+  const peopleAction = page.locator(".mobile-action-bar").getByRole("button", { name: "사람" });
+  await peopleAction.click();
+  await expect(peopleAction).toHaveClass(/active/);
+  await expect(peopleAction).toHaveAttribute("aria-pressed", "true");
+  await expect(actionBar).toBeVisible();
+  const actionBarWithPeoplePanelBox = await actionBar.boundingBox();
+  expect(actionBarWithPeoplePanelBox).not.toBeNull();
+  expect(actionBarWithPeoplePanelBox.y).toBeGreaterThan(actionBarInitialBox.y - 4);
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
   await expect(page.locator(".mobile-bottom-sheet.full")).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet")).toContainText("출연자 / 앞줄 노출");
@@ -520,14 +554,23 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   expect(fullSheetBox.y + fullSheetBox.height).toBeLessThanOrEqual(actionBarInitialBox.y);
   await page.locator(".bottom-sheet-close").click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+  await expect(peopleAction).not.toHaveClass(/active/);
+  await expect(peopleAction).toHaveAttribute("aria-pressed", "false");
 
-  await page.locator(".mobile-action-bar").getByRole("button", { name: "보기" }).click();
+  const viewAction = page.locator(".mobile-action-bar").getByRole("button", { name: "보기" });
+  await viewAction.click();
+  await expect(viewAction).toHaveClass(/active/);
+  await expect(viewAction).toHaveAttribute("aria-pressed", "true");
+  await expect(actionBar).toBeVisible();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("보기");
   await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("참조선");
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("3D");
+  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("스냅");
+  await expect(page.locator(".mobile-bottom-sheet.half")).not.toContainText("무대 맞춤");
+  await expect(page.locator(".mobile-bottom-sheet.half")).not.toContainText("3D");
   await page.locator(".bottom-sheet-close").click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+  await expect(viewAction).not.toHaveClass(/active/);
 
   await page.locator(".mobile-global-actions").getByRole("button", { name: "공유" }).click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
@@ -549,7 +592,7 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("계정");
   await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("프로젝트");
   await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("불러오기");
-  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("스냅");
+  await expect(page.locator(".mobile-bottom-sheet.full")).not.toContainText("스냅");
   await expect(page.locator(".mobile-command-grid")).toBeVisible();
   await expect(page.locator(".mobile-command-grid")).not.toContainText("공유");
   await expect(page.locator(".mobile-command-grid")).not.toContainText("다운로드");

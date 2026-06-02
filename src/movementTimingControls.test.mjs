@@ -296,6 +296,8 @@ test("mobile header owns global commands and management actions live in more pan
   assert.match(appSource, /\{ key: "download", icon: "download", label: "다운로드" \}/);
   assert.match(appSource, /\{ key: "more", icon: "more", label: "더보기" \}/);
   assert.match(appSource, /<div className="mobile-global-actions" aria-label="모바일 전역 명령">/);
+  const mobileGlobalActionsBlock = appSource.match(/<div className="mobile-global-actions" aria-label="모바일 전역 명령">[\s\S]*?<\/div>/)?.[0] || "";
+  assert.doesNotMatch(mobileGlobalActionsBlock, /showLabel/);
   assert.match(appSource, /const mobileMoreStatusItems = \[/);
   assert.match(appSource, /<div className="mobile-status-strip" aria-label="프로젝트 상태 요약">/);
   assert.match(appSource, /label: "계정"/);
@@ -312,6 +314,12 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(iconHintSource, /import CoolIcon from "\.\/icons\/CoolIcon\.jsx";/);
   assert.match(appSource, /const MOBILE_ACTION_GROUPS = Object\.freeze\(\{/);
   assert.match(appSource, /MOBILE_ACTION_GROUPS\[mobileActionMode\]/);
+  assert.match(appSource, /const activeMobilePanelActionKey = isMobilePanelOpen \? \{/);
+  assert.match(appSource, /\[MOBILE_PANEL_KINDS\.view\]: "view"/);
+  assert.match(appSource, /isActive \? "active" : ""/);
+  assert.match(appSource, /pressed=\{isActive\}/);
+  assert.match(iconHintSource, /pressed,/);
+  assert.match(iconHintSource, /controlProps\["aria-pressed"\] = pressed;/);
   assert.match(appSource, /\{ key: "people", icon: "users", label: "사람" \}/);
   assert.match(appSource, /\{ key: "music", icon: "note", label: "음악" \}/);
   assert.match(appSource, /\{ key: "stage", icon: "settings", label: "무대" \}/);
@@ -340,6 +348,12 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(appSource, /label="가로 정렬"/);
   assert.match(appSource, /iconName="undo"/);
   assert.match(appSource, /iconName="grid"/);
+  assert.match(appSource, /className="stage-view-float-toggle"/);
+  assert.match(appSource, /aria-label=\{stageViewMode === "2d" \? "3D 보기" : "2D 보기"\}/);
+  assert.match(appSource, /label=\{snapEnabled \? "스냅 끄기" : "스냅 켜기"\}/);
+  const mobileViewPanel = appSource.match(/if \(mobilePanel\.kind === MOBILE_PANEL_KINDS\.view\) \{[\s\S]*?\n    \}/)?.[0] || "";
+  assert.doesNotMatch(mobileViewPanel, /setStageViewMode/);
+  assert.doesNotMatch(mobileViewPanel, /무대 맞춤|setIsStageFocus/);
   assert.match(coolIconSource, /replaceAll\('stroke="black"', 'stroke="currentColor"'\)/);
   assert.match(coolIconSource, /moreGrid/);
   assert.match(coolIconSource, /import grid from "\.\/coolicons\/grid\.svg\?raw";/);
@@ -349,6 +363,10 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(styleSource, /--wanted-accent:\s*#18a466;/);
   assert.match(styleSource, /\.mobile-command-grid \{/);
   assert.match(styleSource, /\.mobile-global-actions/);
+  assert.match(styleSource, /\.mobile-global-actions \.icon-hint-wrapper \{\s*width: 34px;/);
+  assert.match(styleSource, /@media \(max-width: 920px\) and \(orientation: landscape\)[\s\S]*?\.mobile-global-actions \.icon-hint-wrapper \{\s*width: 36px;/);
+  assert.match(styleSource, /\.stage-corner-tools,\s*\.stage-view-toggle \{\s*display: none;/);
+  assert.match(styleSource, /\.stage-view-float-toggle \{[\s\S]*?display: grid;/);
   assert.match(styleSource, /\.mobile-status-token\.ok/);
 });
 
@@ -416,6 +434,9 @@ test("portrait mobile keeps the stage and timeline visible under temporary sheet
   assert.match(portraitMobile, /\.stage-hint \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.mobile-action-bar \{[\s\S]*?overflow-x:\s*auto;/);
   assert.match(portraitMobile, /\.mobile-action-bar \.icon-hint-wrapper \{[\s\S]*?flex:\s*0 0 54px;/);
+  assert.match(portraitMobile, /\.mobile-action-bar button\.active,[\s\S]*?\.mobile-action-bar \.file-button\.active \{[\s\S]*?transform:\s*translateY\(-1px\);/);
+  assert.match(portraitMobile, /\.mobile-action-bar button\.active::before,[\s\S]*?background:\s*var\(--wanted-accent\);/);
+  assert.match(portraitMobile, /\.mobile-action-bar button\.danger-button\.active \{[\s\S]*?background:\s*#b4234f;/);
   assert.match(portraitMobile, /\.selected-formation-bar \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.left-work-panel,\s*\.right-context-surface \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*min\(18dvh, 156px\);/);
