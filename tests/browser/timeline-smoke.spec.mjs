@@ -86,6 +86,10 @@ async function formationTexts(page) {
   ));
 }
 
+async function expectNoBottomStatus(page) {
+  await expect(page.locator(".status")).toHaveCount(0);
+}
+
 function collectBrowserIssues(page) {
   const browserIssues = [];
   page.on("console", (message) => {
@@ -114,8 +118,11 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await page.goto("/");
 
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  await expectNoBottomStatus(page);
   await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
+  await expectNoBottomStatus(page);
   await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
+  await expectNoBottomStatus(page);
 
   const formationBlocks = page.locator(".formation-block");
   await expect(formationBlocks).toHaveCount(3);
@@ -136,6 +143,7 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await page.mouse.down();
   await page.mouse.move(handleBox.x + handleBox.width / 2 + 112, handleBox.y + handleBox.height / 2, { steps: 8 });
   await page.mouse.up();
+  await expectNoBottomStatus(page);
 
   await expect(formationBlocks.nth(1)).toContainText("0:04.0 - 0:10.0");
   await expect(formationBlocks.nth(2)).toContainText("0:10.0 - 0:14.0");
@@ -151,6 +159,7 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await page.mouse.down();
   await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2 + 1250, f1BodyBox.y + f1BodyBox.height / 2, { steps: 12 });
   await page.mouse.up();
+  await expectNoBottomStatus(page);
 
   const reorderedTexts = (await formationTexts(page)).map(compactFormationText);
   expect(reorderedTexts[0]).toContain("F1 | 대형 0:08.0 | 0:00.0 - 0:06.0");
@@ -187,6 +196,7 @@ test("mobile viewport keeps stage performer drag editable", async ({ page }) => 
   await token.dispatchEvent("pointerdown", { ...pointer, clientX: start.x, clientY: start.y, buttons: 1 });
   await page.locator(".stage").dispatchEvent("pointermove", { ...pointer, clientX: end.x, clientY: end.y, buttons: 1 });
   await page.locator(".stage").dispatchEvent("pointerup", { ...pointer, clientX: end.x, clientY: end.y, buttons: 0 });
+  await expectNoBottomStatus(page);
 
   const after = await token.locator("circle").nth(1).evaluate((node) => ({
     x: Number(node.getAttribute("cx")),
@@ -210,6 +220,16 @@ test("View Link route opens readonly review with transition warnings", async ({ 
 });
 
 test("valid Edit Link route exposes edit controls", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text) => {
+          window.__lastCopiedText = text;
+        }
+      },
+      configurable: true
+    });
+  });
   await routeCloudProject(page, seededProject());
   await page.goto("/edit/project-1?token=valid");
 
@@ -217,6 +237,11 @@ test("valid Edit Link route exposes edit controls", async ({ page }) => {
   await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /대형 추가/ })).toBeVisible();
   await expect(page.getByLabel("전환 리뷰")).toBeVisible();
+
+  await page.locator(".desktop-command-bar").getByRole("button", { name: "공유" }).click();
+  await page.locator(".share-action-menu").getByRole("button", { name: "보기 링크 복사" }).click();
+  await expect(page.locator(".status")).toContainText("공유 링크를 복사했습니다.");
+  await expect.poll(() => page.evaluate(() => window.__lastCopiedText)).toContain("/share/project-1");
 });
 
 test("invalid or disabled links fall back without edit controls", async ({ page }) => {

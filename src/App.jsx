@@ -1116,6 +1116,12 @@ function App() {
     || statusRecovery === "share"
     || statusRecovery === "audio";
 
+  function clearQuietStatus() {
+    if (!statusRecovery) {
+      setStatus("");
+    }
+  }
+
   function openMobilePanel(kind, size = MOBILE_PANEL_SIZES.peek) {
     setMobilePanel({ kind, size });
   }
@@ -1249,7 +1255,7 @@ function App() {
     setPlan(clonePlan(previous));
     normalizeSelectionForPlan(previous);
     restoreAudioFromPlan(previous, { clearWhenMissing: true });
-    setStatus("되돌렸습니다.");
+    clearQuietStatus();
   }
 
   function redoPlan() {
@@ -1261,7 +1267,7 @@ function App() {
     setPlan(clonePlan(next));
     normalizeSelectionForPlan(next);
     restoreAudioFromPlan(next, { clearWhenMissing: true });
-    setStatus("다시 실행했습니다.");
+    clearQuietStatus();
   }
 
   function updateSection(sectionId, patch, options = {}) {
@@ -1368,14 +1374,14 @@ function App() {
       }
     ]);
     setSelectedMovementKeyframeId(id);
-    setStatus(`${selectedSection.name} 이동 keyframe을 추가했습니다.`);
+    clearQuietStatus();
   }
 
   function deleteSelectedMovementKeyframe() {
     if (!selectedSection || !selectedMovementKeyframeId) return;
     updateMovementKeyframes(selectedSection.id, (keyframes) => keyframes.filter((keyframe) => keyframe.id !== selectedMovementKeyframeId));
     setSelectedMovementKeyframeId("");
-    setStatus(`${selectedSection.name} 이동 keyframe을 삭제했습니다.`);
+    clearQuietStatus();
   }
 
   function seekTimelineToTime(nextTime) {
@@ -1638,12 +1644,11 @@ function App() {
           toIndex: reorderTargetIndex
         }).sections, { history: false });
         finishInteractiveEdit(true);
-        setStatus(`${section.name} 순서를 변경했습니다.`);
+        clearQuietStatus();
         return;
       }
       finishInteractiveEdit(hasEdited);
-      const action = mode === "left" ? "이동 시작" : mode === "right" ? "도착 시각" : "구간";
-      setStatus(`${section.name} ${action}을 조정했습니다.`);
+      clearQuietStatus();
     };
 
     window.addEventListener("pointermove", onPointerMove);
@@ -1680,7 +1685,7 @@ function App() {
       setTimelineSnapTime(null);
       finishInteractiveEdit(hasDragged);
       if (hasDragged) {
-        setStatus(`${section.name} 이동 keyframe 위치를 조정했습니다.`);
+        clearQuietStatus();
       } else {
         seekTimelineToTime(movementKeyframeTime(section, keyframe));
       }
@@ -1823,7 +1828,7 @@ function App() {
       sections: current.sections.map((section) => section.id === sectionId ? { ...section } : section)
     }));
     setSelectedPairKey("");
-    setStatus(`${sourcePerformer.name || sourcePerformer.label}와 ${targetPerformer.name || targetPerformer.label}를 교체했습니다.`);
+    clearQuietStatus();
     return true;
   }
 
@@ -1867,7 +1872,7 @@ function App() {
       };
     });
     setSelectedPairKey(pairKey([firstId, secondId]));
-    setStatus("파트너가 연결되었습니다.");
+    clearQuietStatus();
   }
 
   function commitDropAction(action, drag) {
@@ -2000,15 +2005,13 @@ function App() {
 
     if (action.type === "connect-pair") {
       setSelectedPairKey(pairKey([action.performerId, action.targetId]));
-      setStatus("파트너가 연결되었습니다.");
+      clearQuietStatus();
     } else if (action.type === "swap-same-role") {
-      const source = performerById(action.performerId);
-      const target = performerById(action.targetId);
       setSelectedPairKey("");
-      setStatus(`${source?.name || source?.label || "출연자"}와 ${target?.name || target?.label || "출연자"}를 교체했습니다.`);
+      clearQuietStatus();
     } else if (action.sourcePair) {
       setSelectedPairKey("");
-    setStatus("페어를 해제하고 토큰을 이동했습니다.");
+      clearQuietStatus();
     }
   }
 
@@ -2022,7 +2025,7 @@ function App() {
         : set)
     }));
     setSelectedPairKey("");
-    setStatus("파트너 연결을 해제했습니다.");
+    clearQuietStatus();
   }
 
   function addSection({ forceAppend = false } = {}) {
@@ -2031,7 +2034,7 @@ function App() {
     if (target.action === "select" && !forceAppend) {
       setSelectedSectionId(target.section.id);
       jumpTo(target.section);
-      setStatus(`${target.section.name} 대형을 선택했습니다.`);
+      clearQuietStatus();
       return;
     }
     const time = target.action === "select" ? pointTime(sortedSections.at(-1)) : target.time;
@@ -2058,7 +2061,7 @@ function App() {
       : item);
     updatePlan((current) => ({ ...current, sections: nextSections }));
     setSelectedSectionId(section.id);
-    setStatus(`${formatTime(pointTime(addedSection))}에 대형 지점을 추가했습니다. 이제 무대에서 위치를 수정하세요.`);
+    clearQuietStatus();
   }
 
   function addPerformer() {
@@ -2091,14 +2094,14 @@ function App() {
     setSelectedPerformerId(performer.id);
     setSelectedPerformerIds([performer.id]);
     setSelectedPairKey("");
-    setStatus(`${performer.name}를 추가했습니다.`);
+    clearQuietStatus();
     openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
   }
 
   function previewTemplate() {
     if (!selectedTemplatePreview) return;
     setFormationPreview({ kind: "template", ...selectedTemplatePreview });
-    setStatus(`${selectedTemplatePreview.label} 템플릿을 미리 봅니다. 적용 전까지 프로젝트는 바뀌지 않습니다.`);
+    clearQuietStatus();
   }
 
   function saveCurrentPersonalTemplate() {
@@ -2114,7 +2117,7 @@ function App() {
     ]);
     setPersonalTemplates(nextTemplates);
     setSelectedTemplateId(`personal:${template.id}`);
-    setStatus(`${template.label}을 개인 템플릿으로 저장했습니다.`);
+    clearQuietStatus();
   }
 
   function updateStageDimension(axis, nextValue) {
@@ -2169,7 +2172,7 @@ function App() {
       proposal,
       positions: validation.positions
     });
-    setStatus("AI 후보를 안전 검증했습니다. 적용 전까지 프로젝트는 바뀌지 않습니다.");
+    clearQuietStatus();
   }
 
   function applyFormationPreviewToCurrent() {
@@ -2182,7 +2185,7 @@ function App() {
       sections: current.sections.map((section) => section.id === selectedSection.id ? nextSection : section)
     }));
     setFormationPreview(null);
-    setStatus(`${selectedSection.name}에 ${formationPreview.label} 배치를 적용했습니다.`);
+    clearQuietStatus();
   }
 
   function createSectionFromFormationPreview() {
@@ -2192,7 +2195,7 @@ function App() {
     if (target.action === "select") {
       setSelectedSectionId(target.section.id);
       jumpTo(target.section);
-      setStatus(`${target.section.name} 대형을 선택했습니다. 선택 지점에 적용하려면 다시 적용하세요.`);
+      clearQuietStatus();
       return;
     }
     const baseSection = {
@@ -2222,7 +2225,7 @@ function App() {
     }));
     setSelectedSectionId(section.id);
     setFormationPreview(null);
-    setStatus(`${formatTime(pointTime(addedSection))}에 ${formationPreview.label} 대형을 추가했습니다.`);
+    clearQuietStatus();
   }
 
   function duplicateSection() {
@@ -2288,7 +2291,7 @@ function App() {
     setMagnetCandidateId("");
     setDragPositions(null);
     dragStateRef.current = null;
-    setStatus(`${selectedSection.name} 대형을 기본 배치로 초기화했습니다.`);
+    clearQuietStatus();
   }
 
   function clearLongPressTimer() {
@@ -2308,7 +2311,7 @@ function App() {
       setSelectedPerformerId(performerId);
       setSelectedPairKey("");
       setTapMoveArmed(false);
-      setStatus(`${nextSelection.length}명을 선택했습니다.`);
+      clearQuietStatus();
       return;
     }
     collapseMobilePanelForStageGesture();
@@ -3280,7 +3283,7 @@ function App() {
       setSelectedPerformerIds(ids);
       setSelectedPerformerId(ids[0] || "");
       setSelectedPairKey("");
-      setStatus(`${ids.length}명을 선택했습니다.`);
+      clearQuietStatus();
     };
     return (
       <div className="form-stack">
