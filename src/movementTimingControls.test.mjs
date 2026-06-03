@@ -463,7 +463,7 @@ test("portrait mobile keeps the stage and timeline visible under temporary sheet
   assert.match(portraitMobile, /\.mobile-action-bar button\.danger-button\.active \{[\s\S]*?background:\s*#b4234f;/);
   assert.match(portraitMobile, /\.selected-formation-bar \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.left-work-panel,\s*\.right-context-surface \{[\s\S]*?display:\s*none;/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*min\(18dvh, 156px\);/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*min\(32dvh, 270px\);/);
-  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*min\(38dvh, 320px\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.peek \{[\s\S]*?height:\s*min\(16dvh, 136px\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.half \{[\s\S]*?height:\s*min\(30dvh, 246px\);/);
+  assert.match(portraitMobile, /\.mobile-bottom-sheet\.full \{[\s\S]*?height:\s*min\(36dvh, 292px\);/);
 });
