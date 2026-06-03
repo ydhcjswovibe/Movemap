@@ -1063,19 +1063,38 @@ h3 {
   position: relative;
 }
 
+.top-action-scope {
+  position: relative;
+}
+
+.top-action-scope > button.active,
+.mobile-global-actions button.active {
+  background: var(--wanted-panel-strong);
+  border-color: var(--wanted-panel-strong);
+  color: #ffffff;
+}
+
 .top-action-menu {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  z-index: 20;
+  z-index: 80;
   display: grid;
   gap: 6px;
-  width: min(230px, 82vw);
+  width: min(300px, 82vw);
+  max-height: min(520px, calc(100dvh - 112px));
+  overflow: auto;
   padding: 10px;
-  border: 1px solid #dbe3ee;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+  border: 1px solid var(--wanted-border);
+  border-radius: var(--wanted-radius);
+  background: var(--wanted-panel);
+  box-shadow: 0 18px 38px rgba(23, 25, 31, 0.18);
+  overscroll-behavior: contain;
+}
+
+.share-action-menu,
+.more-action-menu {
+  width: min(360px, 88vw);
 }
 
 .top-action-menu button,
@@ -1085,16 +1104,124 @@ h3 {
   min-height: 38px;
   justify-content: flex-start;
   text-align: left;
+  border-color: var(--wanted-border);
+  border-radius: var(--wanted-radius);
+  background: var(--wanted-surface);
+  color: var(--wanted-ink);
+  font-weight: 850;
 }
 
 .top-action-menu a {
   display: inline-flex;
   align-items: center;
   padding: 9px 10px;
-  color: #162033;
   text-decoration: none;
-  border: 1px solid #dbe3ee;
-  border-radius: 8px;
+}
+
+.top-action-menu button:hover,
+.top-action-menu a:hover,
+.top-action-menu .file-button:hover {
+  background: #eef2f6;
+  border-color: #c7d0df;
+}
+
+.top-action-menu button:focus-visible,
+.top-action-menu a:focus-visible,
+.top-action-menu .file-button:focus-within {
+  outline: 2px solid rgba(24, 164, 102, 0.24);
+  outline-offset: 2px;
+}
+
+.top-action-menu button:active,
+.top-action-menu .file-button:active {
+  transform: translateY(1px);
+}
+
+.top-menu-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+.top-menu-status-row > span:not(.mobile-status-token) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid var(--wanted-border);
+  border-radius: var(--wanted-radius);
+  background: var(--wanted-surface);
+  color: var(--wanted-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.top-menu-status-row.compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-bottom: 4px;
+}
+
+.top-menu-status-row.compact .mobile-status-token {
+  max-width: none;
+}
+
+.top-menu-link-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--wanted-border);
+  border-radius: var(--wanted-radius);
+  background: #ffffff;
+}
+
+.top-menu-link-row > span {
+  color: var(--wanted-muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.top-menu-link-row > em {
+  color: var(--wanted-muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.top-menu-link-row > button,
+.top-menu-link-row > a {
+  grid-column: 1 / -1;
+}
+
+.top-menu-split-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (max-width: 920px) {
+  .mobile-global-actions {
+    position: relative;
+  }
+
+  .mobile-global-actions .top-action-group {
+    position: static;
+  }
+
+  .mobile-global-actions .top-action-menu {
+    top: calc(100% + 9px);
+    right: 0;
+    width: min(340px, calc(100dvw - (var(--mobile-page-pad) * 2)));
+    max-height: min(58dvh, 430px);
+  }
+
+  .mobile-global-actions .top-menu-status-row.compact {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stage-title-input {
@@ -2735,6 +2862,8 @@ h3 {
     border-radius: var(--wanted-radius);
     background: rgba(255, 255, 255, 0.97);
     box-shadow: 0 6px 18px rgba(23, 25, 31, 0.08);
+    position: relative;
+    z-index: 90;
   }
 
   .mobile-status-title,
@@ -2785,6 +2914,7 @@ h3 {
     display: flex;
     align-items: stretch;
     gap: 2px;
+    position: relative;
   }
 
   .mobile-global-actions .icon-hint-wrapper {
@@ -3285,6 +3415,8 @@ h3 {
     border: 1px solid #dbe3ee;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.96);
+    position: relative;
+    z-index: 90;
   }
 
   .mobile-status-title,
@@ -3335,6 +3467,7 @@ h3 {
     display: flex;
     align-items: stretch;
     gap: 3px;
+    position: relative;
   }
 
   .mobile-global-actions .icon-hint-wrapper {

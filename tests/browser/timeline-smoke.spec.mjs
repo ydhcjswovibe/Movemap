@@ -103,6 +103,43 @@ function collectBrowserIssues(page) {
   return browserIssues;
 }
 
+async function expectMenuInsideViewport(page, selector, { avoidSelector = "", screenshotPath = "" } = {}) {
+  const menu = page.locator(selector);
+  await expect(menu).toBeVisible();
+  const menuBox = await menu.boundingBox();
+  const viewport = page.viewportSize();
+  expect(menuBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(menuBox.x).toBeGreaterThanOrEqual(0);
+  expect(menuBox.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width);
+  expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height);
+
+  if (avoidSelector) {
+    const avoid = page.locator(`${avoidSelector}:visible`);
+    const avoidCount = await avoid.count();
+    if (avoidCount) {
+      const avoidBox = await avoid.first().boundingBox();
+      expect(avoidBox).not.toBeNull();
+      const overlaps = menuBox.x < avoidBox.x + avoidBox.width
+        && menuBox.x + menuBox.width > avoidBox.x
+        && menuBox.y < avoidBox.y + avoidBox.height
+        && menuBox.y + menuBox.height > avoidBox.y;
+      expect(overlaps).toBe(false);
+    }
+  }
+
+  if (screenshotPath) {
+    await page.screenshot({ path: screenshotPath, fullPage: false });
+  }
+}
+
+async function openTopActionMenu(page, surfaceSelector, label, menuSelector) {
+  await page.locator(surfaceSelector).getByRole("button", { name: label }).click();
+  await expect(page.locator(".top-action-menu")).toHaveCount(1);
+  await expect(page.locator(`${surfaceSelector} ${menuSelector}`)).toBeVisible();
+}
+
 test("timeline formation editing keeps sequential segments and clean browser output", async ({ page }) => {
   const browserIssues = [];
   page.on("console", (message) => {
@@ -118,6 +155,13 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await page.goto("/");
 
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  await expectNoBottomStatus(page);
+  await page.getByRole("button", { name: "공유" }).click();
+  await expect(page.locator(".top-action-menu.share-action-menu")).toHaveCount(1);
+  await expect(page.locator(".desktop-command-bar .top-action-menu.share-action-menu")).toBeVisible();
+  await page.locator(".desktop-command-bar").getByRole("button", { name: "저장하기" }).click();
+  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+  await page.locator(".status-close").click();
   await expectNoBottomStatus(page);
   await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
   await expectNoBottomStatus(page);
@@ -175,6 +219,67 @@ test("timeline formation editing keeps sequential segments and clean browser out
   expect(reorderedTexts[0]).toContain("F1 | 대형 0:08.0 | 0:00.0 - 0:06.0");
   expect(reorderedTexts[1]).toContain("F2 | 대형 0:12.0 | 0:06.0 - 0:10.0");
   expect(reorderedTexts[2]).toContain("F3 | Intro | 0:10.0 - 0:14.0");
+  expect(browserIssues).toEqual([]);
+});
+
+test("top action dropdowns stay scoped and visible across desktop and mobile", async ({ page }) => {
+  const browserIssues = collectBrowserIssues(page);
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto("/");
+  await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+
+  const desktopSurface = ".desktop-command-bar";
+  await openTopActionMenu(page, desktopSurface, "공유", ".share-action-menu");
+  await expectMenuInsideViewport(page, ".desktop-command-bar .share-action-menu");
+  await openTopActionMenu(page, desktopSurface, "다운로드", ".download-action-menu");
+  await expect(page.locator(".desktop-command-bar .share-action-menu")).toHaveCount(0);
+  await expectMenuInsideViewport(page, ".desktop-command-bar .download-action-menu");
+  await openTopActionMenu(page, desktopSurface, "더보기", ".more-action-menu");
+  await expect(page.locator(".desktop-command-bar .download-action-menu")).toHaveCount(0);
+  await expectMenuInsideViewport(page, ".desktop-command-bar .more-action-menu", { screenshotPath: "test-results/top-dropdown-desktop-more.png" });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+  await openTopActionMenu(page, desktopSurface, "공유", ".share-action-menu");
+  await page.locator(".stage-frame").click({ position: { x: 12, y: 12 } });
+  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".mobile-status-bar")).toBeVisible();
+  const mobileSurface = ".mobile-global-actions";
+  for (const [label, slug, menuSelector] of [
+    ["공유", "share", ".share-action-menu"],
+    ["다운로드", "download", ".download-action-menu"],
+    ["더보기", "more", ".more-action-menu"]
+  ]) {
+    await openTopActionMenu(page, mobileSurface, label, menuSelector);
+    await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+    await expectMenuInsideViewport(page, `.mobile-global-actions ${menuSelector}`, {
+      avoidSelector: ".mobile-action-bar",
+      screenshotPath: `test-results/top-dropdown-mobile-portrait-${slug}.png`
+    });
+  }
+  await expect(page.locator(".mobile-global-actions .more-action-menu input[type='file'][accept='application/json']")).toHaveCount(1);
+  await page.locator(".mobile-action-bar").getByRole("button", { name: "사람" }).click();
+  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+  await expect(page.locator(".mobile-bottom-sheet.full")).toBeVisible();
+  await page.locator(".bottom-sheet-close").click();
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.locator(".mobile-status-bar")).toBeVisible();
+  for (const [label, slug, menuSelector] of [
+    ["공유", "share", ".share-action-menu"],
+    ["다운로드", "download", ".download-action-menu"],
+    ["더보기", "more", ".more-action-menu"]
+  ]) {
+    await openTopActionMenu(page, mobileSurface, label, menuSelector);
+    await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+    await expectMenuInsideViewport(page, `.mobile-global-actions ${menuSelector}`, {
+      avoidSelector: ".mobile-action-bar",
+      screenshotPath: `test-results/top-dropdown-mobile-landscape-${slug}.png`
+    });
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".top-action-menu")).toHaveCount(0);
   expect(browserIssues).toEqual([]);
 });
 
@@ -572,32 +677,38 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
   await expect(viewAction).not.toHaveClass(/active/);
 
-  await page.locator(".mobile-global-actions").getByRole("button", { name: "공유" }).click();
-  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("공유");
-  await expect(page.locator(".share-panel")).toBeVisible();
-  await page.locator(".bottom-sheet-close").click();
+  const mobileShareAction = page.locator(".mobile-global-actions").getByRole("button", { name: "공유" });
+  const mobileTopMenu = page.locator(".mobile-global-actions .top-action-menu");
+  await mobileShareAction.click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+  await expect(page.locator(".top-action-menu")).toHaveCount(1);
+  await expect(page.locator(".mobile-global-actions .top-action-menu.share-action-menu")).toBeVisible();
+  await expect(page.locator(".mobile-global-actions .top-action-menu.share-action-menu")).toContainText("보기 링크");
+  await expect(actionBar).toBeVisible();
+  await expect(mobileShareAction).toHaveClass(/active/);
+  await page.keyboard.press("Escape");
+  await expect(mobileTopMenu).toHaveCount(0);
 
   await page.locator(".mobile-global-actions").getByRole("button", { name: "다운로드" }).click();
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("프로젝트 파일");
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("현재 대형 이미지");
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("전체 대형 이미지");
-  await expect(page.locator(".mobile-bottom-sheet.half")).toContainText("인쇄/PDF");
-  await page.locator(".bottom-sheet-close").click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
+  await expect(page.locator(".top-action-menu")).toHaveCount(1);
+  await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toContainText("프로젝트 파일");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toContainText("현재 PNG");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toContainText("대형 PNG 전체 저장");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toContainText("인쇄/PDF");
 
   await page.locator(".mobile-global-actions").getByRole("button", { name: "더보기" }).click();
-  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(1);
-  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("계정");
-  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("프로젝트");
-  await expect(page.locator(".mobile-bottom-sheet.full")).toContainText("불러오기");
-  await expect(page.locator(".mobile-bottom-sheet.full")).not.toContainText("스냅");
-  await expect(page.locator(".mobile-command-grid")).toBeVisible();
-  await expect(page.locator(".mobile-command-grid")).not.toContainText("공유");
-  await expect(page.locator(".mobile-command-grid")).not.toContainText("다운로드");
-  await expect(page.locator(".mobile-status-token")).toHaveCount(4);
-  await page.locator(".bottom-sheet-close").click();
+  await expect(page.locator(".top-action-menu")).toHaveCount(1);
+  await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toHaveCount(0);
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("계정");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("프로젝트");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("불러오기");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).not.toContainText("스냅");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu .mobile-status-token")).toHaveCount(4);
+  await expect(actionBar).toBeVisible();
+
+  await page.locator(".stage-frame").click({ position: { x: 20, y: 20 } });
+  await expect(mobileTopMenu).toHaveCount(0);
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
 
   await mobileFormationBlocks.nth(1).click();
@@ -640,8 +751,8 @@ test("stage references templates stage size import and 3d smoke stay stable", as
   await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("120");
   await expect(page.locator(".stage")).toHaveAttribute("viewBox", "0 0 120 100");
 
-  await page.getByRole("button", { name: "프로젝트" }).click();
-  await page.locator("input[type='file'][accept='application/json']").first().setInputFiles({
+  await page.getByRole("button", { name: "더보기" }).click();
+  await page.locator(".desktop-command-bar .more-action-menu input[type='file'][accept='application/json']").setInputFiles({
     name: "bad-movemap.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify({ title: "Bad", performers: [], sections: [] }))

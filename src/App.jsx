@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Stage3dPreview from "./Stage3dPreview.jsx";
 import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
+import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -62,9 +63,6 @@ const MOBILE_PANEL_KINDS = Object.freeze({
   formation: "formation",
   people: "people",
   add: "add",
-  more: "more",
-  share: "share",
-  download: "download",
   view: "view",
   stage: "stage",
   role: "role",
@@ -782,8 +780,8 @@ function App() {
   const [dragPositions, setDragPositions] = useState(null);
   const [isToolDrawerOpen, setIsToolDrawerOpen] = useState(false);
   const [activeWorkPanel, setActiveWorkPanel] = useState("cast");
-  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
-  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [topActionMenu, setTopActionMenu] = useState("");
+  const [topActionSurface, setTopActionSurface] = useState("");
   const [mobilePanel, setMobilePanel] = useState(() => closedMobilePanel());
   const [mobileContextSelection, setMobileContextSelection] = useState("");
   const [isTransitionOverlayOpen, setIsTransitionOverlayOpen] = useState(false);
@@ -820,6 +818,16 @@ function App() {
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
+
+  function closeTopActionMenu() {
+    setTopActionMenu("");
+    setTopActionSurface("");
+  }
+
+  function openTopActionMenu(menu, surface) {
+    setTopActionMenu(menu);
+    setTopActionSurface(surface);
+  }
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -1153,6 +1161,7 @@ function App() {
   }
 
   function openMobilePanel(kind, size = MOBILE_PANEL_SIZES.peek) {
+    closeTopActionMenu();
     setMobilePanel({ kind, size });
   }
 
@@ -1192,10 +1201,6 @@ function App() {
     openMobilePanel(MOBILE_PANEL_KINDS.add, MOBILE_PANEL_SIZES.half);
   }
 
-  function openMoreMobilePanel() {
-    openMobilePanel(MOBILE_PANEL_KINDS.more, MOBILE_PANEL_SIZES.full);
-  }
-
   function toggleMobileTransitionOverlay() {
     setIsTransitionOverlayOpen((value) => !value);
     openMobilePanel(MOBILE_PANEL_KINDS.transition, MOBILE_PANEL_SIZES.half);
@@ -1203,19 +1208,8 @@ function App() {
 
   function handleMobileAction(actionKey) {
     if (actionKey === "save") {
+      closeTopActionMenu();
       saveProjectToCloud();
-      return;
-    }
-    if (actionKey === "share") {
-      openMobilePanel(MOBILE_PANEL_KINDS.share, MOBILE_PANEL_SIZES.half);
-      return;
-    }
-    if (actionKey === "download") {
-      openMobilePanel(MOBILE_PANEL_KINDS.download, MOBILE_PANEL_SIZES.half);
-      return;
-    }
-    if (actionKey === "more") {
-      openMoreMobilePanel();
       return;
     }
     if (actionKey === "people") {
@@ -3139,8 +3133,7 @@ function App() {
         setSelectedSectionId(normalized.sections[0]?.id || "");
         setSelectedPerformerId("");
         setSelectedPairKey("");
-        setIsProjectMenuOpen(false);
-        setIsShareMenuOpen(false);
+        closeTopActionMenu();
         setUndoStack([]);
         setRedoStack([]);
         resetTransientEditState();
@@ -3302,21 +3295,63 @@ function App() {
 
   function renderShareMenu() {
     return (
-      <div className="top-action-menu share-action-menu">
+      <div className="top-action-menu share-action-menu" role="menu" aria-label="공유 메뉴">
+        <div className="top-menu-status-row" aria-label="공유 상태">
+          <span>View {viewLinkState}</span>
+          {!readonly && <span>Edit {editLinkState}</span>}
+        </div>
         {!readonly && <button className="primary" onClick={shareProject} disabled={!canCreateViewLink && !plan.shareLinks?.view?.projectId}>편집 링크 만들기</button>}
-        {shareUrl && <button onClick={copyShareUrl}>보기 링크 복사</button>}
-        {editShareUrl && !readonly && <button onClick={copyEditShareUrl}>편집 링크 복사</button>}
+        <div className="top-menu-link-row">
+          <span>보기 링크</span>
+          {shareUrl ? <a href={shareUrl}>열기</a> : <em>저장 후 생성</em>}
+          {shareUrl && <button onClick={copyShareUrl}>보기 링크 복사</button>}
+        </div>
+        {!readonly && (
+          <div className="top-menu-link-row">
+            <span>편집 링크</span>
+            {editShareUrl ? <a href={editShareUrl}>열기</a> : <em>생성 대기</em>}
+            {editShareUrl && <button onClick={copyEditShareUrl}>편집 링크 복사</button>}
+          </div>
+        )}
         {canManageLinks && (
-          <>
+          <div className="top-menu-split-actions">
             {shareUrl && <button onClick={() => setShareLinkEnabled(LINK_TYPES.view, !plan.shareLinks?.view?.enabled)}>View Link {plan.shareLinks?.view?.enabled === false ? "켜기" : "끄기"}</button>}
             {editShareUrl && !readonly && <button onClick={() => setShareLinkEnabled(LINK_TYPES.edit, !plan.shareLinks?.edit?.enabled)}>Edit Link {plan.shareLinks?.edit?.enabled === false ? "켜기" : "끄기"}</button>}
-          </>
+          </div>
         )}
+      </div>
+    );
+  }
+
+  function renderDownloadMenu() {
+    return (
+      <div className="top-action-menu download-action-menu" role="menu" aria-label="다운로드 메뉴">
         <button onClick={exportJson}>{readonly ? "JSON 내보내기" : "프로젝트 파일 공유"}</button>
         <button onClick={() => exportPng()} disabled={!canUseAdvancedExports}>현재 PNG</button>
         <button onClick={exportAllPng} disabled={!canUseAdvancedExports}>대형 PNG 전체 저장</button>
         <button onClick={() => window.print()} disabled={!canUseAdvancedExports}>인쇄/PDF</button>
-        {!readonly && <label className="file-button tertiary">저장한 프로젝트 열기<input type="file" accept="application/json" onChange={importJson} /></label>}
+      </div>
+    );
+  }
+
+  function renderMoreMenu() {
+    return (
+      <div className="top-action-menu more-action-menu" role="menu" aria-label="더보기 메뉴">
+        <div className="top-menu-status-row compact" aria-label="프로젝트 상태 요약">
+          {mobileMoreStatusItems.map((item) => (
+            <span className={`mobile-status-token ${item.tone}`} key={item.key} title={`${item.label}: ${item.value} · ${item.meta}`}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </span>
+          ))}
+        </div>
+        {currentAuth.userId ? (
+          <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
+        ) : (
+          <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
+        )}
+        <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>
+        <label className="file-button tertiary">불러오기<input type="file" accept="application/json" onChange={importJson} /></label>
       </div>
     );
   }
@@ -3333,8 +3368,7 @@ function App() {
     setIsPlaying(false);
     setAudioSrc("");
     setAudioUploadStatus("idle");
-    setIsProjectMenuOpen(false);
-    setIsShareMenuOpen(false);
+    closeTopActionMenu();
     setIsToolDrawerOpen(false);
     setUndoStack([]);
     setRedoStack([]);
@@ -3345,15 +3379,6 @@ function App() {
       localAudioUrlRef.current = "";
     }
     setStatus("프로젝트 선택 화면으로 돌아왔습니다.");
-  }
-
-  function renderProjectMenu() {
-    return (
-      <div className="top-action-menu project-action-menu">
-        <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>
-        <label className="file-button tertiary">저장한 프로젝트 열기<input type="file" accept="application/json" onChange={importJson} /></label>
-      </div>
-    );
   }
 
   function renderFormationPanel() {
@@ -3876,9 +3901,6 @@ function App() {
     [MOBILE_PANEL_KINDS.formation]: "대형",
     [MOBILE_PANEL_KINDS.people]: "사람",
     [MOBILE_PANEL_KINDS.add]: "추가",
-    [MOBILE_PANEL_KINDS.more]: "더보기",
-    [MOBILE_PANEL_KINDS.share]: "공유",
-    [MOBILE_PANEL_KINDS.download]: "다운로드",
     [MOBILE_PANEL_KINDS.view]: "보기",
     [MOBILE_PANEL_KINDS.stage]: "무대",
     [MOBILE_PANEL_KINDS.role]: "역할 선택",
@@ -4016,45 +4038,6 @@ function App() {
       );
     }
 
-    if (mobilePanel.kind === MOBILE_PANEL_KINDS.more) {
-      return (
-        <div className="mobile-more-panel">
-          <div className="mobile-status-strip" aria-label="프로젝트 상태 요약">
-            {mobileMoreStatusItems.map((item) => (
-              <div className={`mobile-status-token ${item.tone}`} key={item.key} title={`${item.label}: ${item.value} · ${item.meta}`}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="mobile-command-grid" aria-label="모바일 메뉴 명령">
-            {!readonly && (
-              currentAuth.userId ? (
-                <IconHintButton iconName="users" label="로그아웃" onClick={signOutOwner} showLabel />
-              ) : (
-                <IconHintButton iconName="users" label="로그인" onClick={signInOwner} disabled={authLoading} showLabel />
-              )
-            )}
-            {!readonly && <IconHintButton iconName="home" label="프로젝트" onClick={returnToProjectPicker} showLabel />}
-            {!readonly && <IconHintButton as="label" className="file-button tertiary" iconName="home" label="불러오기" showLabel>
-              <input type="file" accept="application/json" onChange={importJson} />
-            </IconHintButton>}
-          </div>
-        </div>
-      );
-    }
-
-    if (mobilePanel.kind === MOBILE_PANEL_KINDS.download) {
-      return (
-        <div className="mobile-command-grid compact" aria-label="다운로드 메뉴">
-          <IconHintButton iconName="download" label="프로젝트 파일" onClick={exportJson} showLabel />
-          <IconHintButton iconName="download" label="현재 대형 이미지" onClick={() => exportPng()} disabled={!canUseAdvancedExports} showLabel />
-          <IconHintButton iconName="download" label="전체 대형 이미지" onClick={exportAllPng} disabled={!canUseAdvancedExports} showLabel />
-          <IconHintButton iconName="download" label="인쇄/PDF" onClick={() => window.print()} disabled={!canUseAdvancedExports} showLabel />
-        </div>
-      );
-    }
-
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.view) {
       return (
         <div className="mobile-panel-stack">
@@ -4070,10 +4053,6 @@ function App() {
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.stage) {
       return renderWorkPanelContent();
-    }
-
-    if (mobilePanel.kind === MOBILE_PANEL_KINDS.share) {
-      return renderSharePanel();
     }
 
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.transition) {
@@ -4147,15 +4126,75 @@ function App() {
           </div>
           {!readonly && (
             <div className="mobile-global-actions" aria-label="모바일 전역 명령">
-              {MOBILE_GLOBAL_ACTIONS.map((action) => (
+              {MOBILE_GLOBAL_ACTIONS.filter((action) => action.key === "save").map((action) => (
                 <IconHintButton
-                  className={action.key === "save" ? "primary" : ""}
+                  className="primary"
                   iconName={action.icon}
                   key={action.key}
                   label={action.label}
                   onClick={() => handleMobileAction(action.key)}
                 />
               ))}
+              <TopActionDropdown
+                activeMenu={topActionMenu}
+                activeSurface={topActionSurface}
+                label="공유"
+                menu={TOP_ACTION_MENUS.share}
+                onClose={closeTopActionMenu}
+                onOpen={openTopActionMenu}
+                renderTrigger={(triggerProps) => (
+                  <IconHintButton
+                    className={triggerProps.active ? "active" : ""}
+                    iconName="share"
+                    label="공유"
+                    onClick={triggerProps.onClick}
+                    pressed={triggerProps.pressed}
+                  />
+                )}
+                surface="mobile"
+              >
+                {renderShareMenu()}
+              </TopActionDropdown>
+              <TopActionDropdown
+                activeMenu={topActionMenu}
+                activeSurface={topActionSurface}
+                label="다운로드"
+                menu={TOP_ACTION_MENUS.download}
+                onClose={closeTopActionMenu}
+                onOpen={openTopActionMenu}
+                renderTrigger={(triggerProps) => (
+                  <IconHintButton
+                    className={triggerProps.active ? "active" : ""}
+                    iconName="download"
+                    label="다운로드"
+                    onClick={triggerProps.onClick}
+                    pressed={triggerProps.pressed}
+                  />
+                )}
+                surface="mobile"
+              >
+                {renderDownloadMenu()}
+              </TopActionDropdown>
+              <TopActionDropdown
+                activeMenu={topActionMenu}
+                activeSurface={topActionSurface}
+                label="더보기"
+                menu={TOP_ACTION_MENUS.more}
+                onClose={closeTopActionMenu}
+                onOpen={openTopActionMenu}
+                renderTrigger={(triggerProps) => (
+                  <IconHintButton
+                    className={triggerProps.active ? "active" : ""}
+                    iconName="more"
+                    label="더보기"
+                    onClick={triggerProps.onClick}
+                    pressed={triggerProps.pressed}
+                  />
+                )}
+                surface="mobile"
+              >
+                {renderMoreMenu()}
+              </TopActionDropdown>
             </div>
           )}
         </header>
@@ -4187,25 +4226,58 @@ function App() {
             </div>
           </div>
           <div className="stage-toolbar-actions">
+            {!readonly && <button className="primary" onClick={() => { closeTopActionMenu(); saveProjectToCloud(); }}>저장하기</button>}
+            <TopActionDropdown
+              activeMenu={topActionMenu}
+              activeSurface={topActionSurface}
+              label="공유"
+              menu={TOP_ACTION_MENUS.share}
+              onClose={closeTopActionMenu}
+              onOpen={openTopActionMenu}
+              renderTrigger={(triggerProps) => (
+                <button className={triggerProps.active ? "active" : ""} onClick={triggerProps.onClick} aria-expanded={triggerProps["aria-expanded"]} aria-haspopup={triggerProps["aria-haspopup"]}>
+                  공유
+                </button>
+              )}
+              surface="desktop"
+            >
+              {renderShareMenu()}
+            </TopActionDropdown>
+            <TopActionDropdown
+              activeMenu={topActionMenu}
+              activeSurface={topActionSurface}
+              label="다운로드"
+              menu={TOP_ACTION_MENUS.download}
+              onClose={closeTopActionMenu}
+              onOpen={openTopActionMenu}
+              renderTrigger={(triggerProps) => (
+                <button className={triggerProps.active ? "active" : ""} onClick={triggerProps.onClick} aria-expanded={triggerProps["aria-expanded"]} aria-haspopup={triggerProps["aria-haspopup"]}>
+                  다운로드
+                </button>
+              )}
+              surface="desktop"
+            >
+              {renderDownloadMenu()}
+            </TopActionDropdown>
             {!readonly && (
-              currentAuth.userId ? (
-                <button onClick={signOutOwner} title={authLabel}>로그아웃</button>
-              ) : (
-                <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
-              )
+              <TopActionDropdown
+                activeMenu={topActionMenu}
+                activeSurface={topActionSurface}
+                label="더보기"
+                menu={TOP_ACTION_MENUS.more}
+                onClose={closeTopActionMenu}
+                onOpen={openTopActionMenu}
+                renderTrigger={(triggerProps) => (
+                  <button className={triggerProps.active ? "active" : ""} onClick={triggerProps.onClick} aria-expanded={triggerProps["aria-expanded"]} aria-haspopup={triggerProps["aria-haspopup"]}>
+                    더보기
+                  </button>
+                )}
+                surface="desktop"
+              >
+                {renderMoreMenu()}
+              </TopActionDropdown>
             )}
-            {!readonly && <button className="primary" onClick={saveProjectToCloud}>저장하기</button>}
-            {!readonly && (
-              <div className="top-action-group">
-                <button onClick={() => setIsProjectMenuOpen((value) => !value)}>프로젝트</button>
-                {isProjectMenuOpen && renderProjectMenu()}
-              </div>
-            )}
-            <div className="top-action-group">
-              <button onClick={() => setIsShareMenuOpen((value) => !value)}>공유</button>
-              {isShareMenuOpen && renderShareMenu()}
-            </div>
-            <button className="mobile-tools-toggle" onClick={() => setIsToolDrawerOpen((value) => !value)}>
+            <button className="mobile-tools-toggle" onClick={() => { closeTopActionMenu(); setIsToolDrawerOpen((value) => !value); }}>
               {isToolDrawerOpen ? "도구 닫기" : "도구"}
             </button>
           </div>
