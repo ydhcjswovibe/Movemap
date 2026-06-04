@@ -3894,8 +3894,17 @@ function App() {
     ? "페어 선택됨"
     : selectedPerformer
       ? `${selectedPerformer.name || selectedPerformer.label} 선택됨`
+      : mobileContextSelection === "formation" && selectedSection
+        ? `${selectedSection.name} 대형 선택됨`
       : "선택 없음";
   const isMobilePanelOpen = Boolean(mobilePanel.kind);
+  const selectionVisualState = selectedPerformerId || selectedPerformerIds.length || selectedPairKey
+    ? "token-selected"
+    : mobileContextSelection === "formation"
+      ? "formation-selected"
+      : "idle";
+  const timelineVisualState = "visible";
+  const menuVisualState = topActionMenu || isMobilePanelOpen ? "expanded" : "idle";
   const mobilePanelTitle = {
     [MOBILE_PANEL_KINDS.performer]: "선택",
     [MOBILE_PANEL_KINDS.formation]: "대형",
@@ -4092,7 +4101,12 @@ function App() {
   }
 
   return (
-    <div className={isStageFocus ? "app stage-focus" : "app"}>
+    <div
+      className={isStageFocus ? "app stage-focus" : "app"}
+      data-selection-state={selectionVisualState}
+      data-timeline-state={timelineVisualState}
+      data-menu-state={menuVisualState}
+    >
       {status && (
         <div className="status" role="status" aria-live="polite">
           <span>{status} {shareUrl && <a href={shareUrl}>{shareUrl}</a>}</span>
@@ -4114,7 +4128,12 @@ function App() {
         </div>
       )}
 
-      <main className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}>
+      <main
+        className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}
+        data-selection-state={selectionVisualState}
+        data-timeline-state={timelineVisualState}
+        data-menu-state={menuVisualState}
+      >
         <header className="mobile-status-bar" aria-label="모바일 프로젝트 상태">
           <div className="mobile-status-title">
             <strong className="mobile-project-title">{plan.title}</strong>
@@ -4304,7 +4323,12 @@ function App() {
             </div>
           </aside>
 
-          <section className="stage-area">
+          <section
+            className="stage-area"
+            data-selection-state={selectionVisualState}
+            data-timeline-state={timelineVisualState}
+            data-menu-state={menuVisualState}
+          >
           {!readonly && <p className="stage-hint">{hasUsableAudio ? "음악을 재생하고 원하는 순간에 대형을 만드세요." : "음악 없이도 대형을 만들고 배치를 시작할 수 있습니다."}</p>}
           <div className="canvas-status-strip">
             <span>{selectedStateText}</span>
@@ -4389,14 +4413,14 @@ function App() {
             >
               <defs>
                 <marker id="arrow-live" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
-                  <path d="M0,0 L5,2.5 L0,5 Z" fill="#334155" />
+                  <path d="M0,0 L5,2.5 L0,5 Z" fill="#b7c4ff" />
                 </marker>
               </defs>
-              <rect x="0" y="0" width={stageDimensions.width} height={stageDimensions.height} rx="2" fill="#f8fafc" />
-              <rect x="0" y={plan.frontZone.y} width={stageDimensions.width} height={Math.max(0, stageDimensions.height - plan.frontZone.y)} fill="#fee2e2" opacity="0.72" />
-              <text x={stageDimensions.width / 2} y={Math.max(8, stageDimensions.height - 4)} textAnchor="middle" fontSize="3.5" fill="#991b1b" fontWeight="700">관객 방향 / 앞줄</text>
-              <path d={`M8 ${Math.max(8, stageDimensions.height - 8)} H${Math.max(8, stageDimensions.width - 8)}`} stroke="#991b1b" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
-              <g stroke="#cbd5e1" strokeWidth="0.16">
+              <rect x="0" y="0" width={stageDimensions.width} height={stageDimensions.height} rx="2" fill="#151515" />
+              <rect x="0" y={plan.frontZone.y} width={stageDimensions.width} height={Math.max(0, stageDimensions.height - plan.frontZone.y)} fill="#2a1718" opacity="0.68" />
+              <text x={stageDimensions.width / 2} y={Math.max(8, stageDimensions.height - 4)} textAnchor="middle" fontSize="3.5" fill="#ffb3ae" fontWeight="700">관객 방향 / 앞줄</text>
+              <path d={`M8 ${Math.max(8, stageDimensions.height - 8)} H${Math.max(8, stageDimensions.width - 8)}`} stroke="#d43237" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
+              <g stroke="#434656" strokeWidth="0.16" opacity="0.62">
                 {GRID_X.filter((x) => x <= stageDimensions.width).map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2={stageDimensions.height} />)}
                 {GRID_Y.filter((y) => y <= stageDimensions.height).map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2={stageDimensions.width} y2={y} />)}
               </g>
@@ -4506,7 +4530,11 @@ function App() {
                 return (
                   <g
                     key={performer.id}
-                    className={readonly ? "token readonly" : "token"}
+                    className={[
+                      readonly ? "token readonly" : "token",
+                      selectedPerformerId === performer.id || isMultiSelected ? "selected" : "",
+                      dragPositions?.[performer.id] ? "dragging" : ""
+                    ].filter(Boolean).join(" ")}
                     opacity={dim ? 0.35 : 1}
                     onPointerDown={(event) => onStagePointerDown(event, performer.id)}
                     onClick={(event) => {
@@ -4516,11 +4544,11 @@ function App() {
                   >
                     <title>{fullName}</title>
                     <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
-                    {(selectedPerformerId === performer.id || isMultiSelected || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#162033" opacity="0.45" pointerEvents="none" />}
-                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_PAIR_RING_RADIUS : PAIR_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b4234f" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.78" : "0.62"} pointerEvents="none" />}
-                    {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#b4234f" strokeWidth="1.1" strokeDasharray="1.5 1" />}
-                    {(selectedPerformerId === performer.id || isMultiSelected) && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#162033" strokeWidth="0.7" pointerEvents="none" />}
-                    <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#f8fafc" strokeWidth="0.8" />
+                    {(selectedPerformerId === performer.id || isMultiSelected || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#b7c4ff" opacity="0.6" pointerEvents="none" />}
+                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_PAIR_RING_RADIUS : PAIR_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b7c4ff" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.9" : "0.62"} pointerEvents="none" />}
+                    {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#d43237" strokeWidth="1.1" strokeDasharray="1.5 1" />}
+                    {(selectedPerformerId === performer.id || isMultiSelected) && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#2e62ff" strokeWidth="0.9" pointerEvents="none" />}
+                    <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#201f1f" strokeWidth="0.7" />
                     <text x={pos.x} y={pos.y + fontSize * 0.34} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="800" pointerEvents="none">{shortName}</text>
                   </g>
                 );
