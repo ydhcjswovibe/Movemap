@@ -62,12 +62,21 @@ test("timeline controls use a single icon rail", () => {
 });
 
 test("mobile timeline keeps formation blocks compact and readable", () => {
+  const portraitMobile = styleSource.match(/@media \(max-width: 840px\) and \(orientation: portrait\)[\s\S]*?@media \(max-width: 920px\) and \(orientation: landscape\)/)?.[0] || "";
+
   assert.match(styleSource, /@media \(max-width: 840px\) and \(orientation: portrait\) \{/);
-  assert.match(styleSource, /\.formation-block \{[\s\S]*?min-height:\s*34px;/);
-  assert.match(styleSource, /\.formation-block-index \{[\s\S]*?font-size:\s*10px;/);
-  assert.match(styleSource, /\.formation-block strong \{[\s\S]*?line-height:\s*1\.1;/);
+  assert.match(portraitMobile, /\.formation-block \{[\s\S]*?height:\s*calc\(100% - 8px\);/);
+  assert.match(portraitMobile, /\.formation-block \{[\s\S]*?overflow:\s*hidden;/);
+  assert.match(portraitMobile, /\.formation-block-index \{[\s\S]*?font-size:\s*9px;/);
+  assert.match(portraitMobile, /\.formation-block strong \{[\s\S]*?line-height:\s*1;/);
   assert.match(styleSource, /\.formation-block em \{[\s\S]*?grid-column:\s*2;/);
   assert.match(styleSource, /\.timeline-control-rail \{[\s\S]*?gap:\s*5px;/);
+  assert.match(styleSource, /@media \(max-width: 840px\) and \(orientation: portrait\) \{[\s\S]*?\.timeline-zoom-controls \{[\s\S]*?padding:\s*0;[\s\S]*?background:\s*transparent;/);
+  assert.match(styleSource, /@media \(max-width: 840px\) and \(orientation: portrait\) \{[\s\S]*?\.timeline-control-rail \.icon-hint-wrapper,[\s\S]*?\.timeline-zoom-controls \.icon-hint-wrapper \{[\s\S]*?width:\s*34px;[\s\S]*?min-width:\s*34px;/);
+  assert.match(styleSource, /\.audio-lane \{[\s\S]*?min-height:\s*42px;/);
+  assert.match(portraitMobile, /\.timeline-ruler-viewport \{[\s\S]*?height:\s*22px;/);
+  assert.match(portraitMobile, /\.timeline-lane \{[\s\S]*?min-height:\s*48px;/);
+  assert.match(portraitMobile, /\.audio-lane \{[\s\S]*?min-height:\s*34px;/);
 });
 
 test("new projects start with a single four-second intro formation", () => {
@@ -454,7 +463,8 @@ test("portrait mobile keeps the stage and timeline visible under temporary sheet
   assert.match(portraitMobile, /\.app \{[\s\S]*?height:\s*100dvh;/);
   assert.match(portraitMobile, /--mobile-stage-inline:\s*calc\(100dvw/);
   assert.match(portraitMobile, /--mobile-stage-target:\s*min\(calc\(100dvh - 236px - env\(safe-area-inset-bottom\)\), calc\(var\(--mobile-stage-inline\) \* 1\.12\)\);/);
-  assert.match(portraitMobile, /\.stage-area \{[\s\S]*?grid-template-rows:\s*auto minmax\(var\(--mobile-stage-target\), 1fr\) minmax\(112px, 136px\) 0;/);
+  assert.match(portraitMobile, /\.stage-area \{[\s\S]*?grid-template-rows:\s*auto minmax\(var\(--mobile-stage-target\), 1fr\) minmax\(150px, 172px\) 0;/);
+  assert.match(portraitMobile, /\.timeline-editor \{[\s\S]*?padding:\s*5px;/);
   assert.match(portraitMobile, /\.stage-hint \{[\s\S]*?display:\s*none;/);
   assert.match(portraitMobile, /\.mobile-action-bar \{[\s\S]*?overflow-x:\s*auto;/);
   assert.match(portraitMobile, /\.mobile-action-bar \.icon-hint-wrapper \{[\s\S]*?flex:\s*0 0 54px;/);

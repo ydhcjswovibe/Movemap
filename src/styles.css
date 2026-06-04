@@ -3086,7 +3086,7 @@ h3 {
 
   .stage-area {
     display: grid;
-    grid-template-rows: auto minmax(var(--mobile-stage-target), 1fr) minmax(112px, 136px) 0;
+    grid-template-rows: auto minmax(var(--mobile-stage-target), 1fr) minmax(150px, 172px) 0;
     gap: 5px;
     min-height: 0;
     max-height: none;
@@ -3190,7 +3190,7 @@ h3 {
     overflow: hidden;
     gap: 5px;
     margin-top: 0;
-    padding: 6px;
+    padding: 5px;
   }
 
   .timeline-control-rail {
@@ -3206,6 +3206,12 @@ h3 {
     gap: 3px;
   }
 
+  .timeline-control-rail .icon-hint-wrapper,
+  .timeline-zoom-controls .icon-hint-wrapper {
+    width: 32px;
+    min-width: 32px;
+  }
+
   .timeline-lane-scroll {
     overflow-x: auto;
     overflow-y: hidden;
@@ -3218,6 +3224,7 @@ h3 {
 
   .timeline-zoom-controls {
     margin-left: 0;
+    width: max-content;
     padding: 2px;
   }
 
@@ -3233,29 +3240,49 @@ h3 {
     gap: 5px;
   }
 
+  .timeline-header-spacer {
+    min-height: 22px;
+  }
+
+  .timeline-ruler-viewport {
+    height: 22px;
+  }
+
+  .timeline-lane {
+    min-height: 48px;
+    margin-bottom: 0;
+  }
+
+  .audio-lane {
+    min-height: 34px;
+  }
+
   .formation-block {
     width: var(--formation-hit-width, var(--formation-width));
-    min-height: 34px;
-    gap: 5px;
-    padding: 6px 8px;
+    top: 4px;
+    height: calc(100% - 8px);
+    min-height: 0;
+    gap: 3px;
+    padding: 4px 7px;
+    overflow: hidden;
   }
 
   .formation-block-index {
-    min-width: 22px;
-    min-height: 20px;
-    font-size: 10px;
+    min-width: 20px;
+    min-height: 18px;
+    font-size: 9px;
   }
 
   .formation-block strong {
     min-width: 0;
-    font-size: 12px;
-    line-height: 1.1;
+    font-size: 11px;
+    line-height: 1;
   }
 
   .formation-block em {
     grid-column: 2;
-    font-size: 10px;
-    line-height: 1.1;
+    font-size: 9px;
+    line-height: 1;
   }
 
   .formation-block.marker {
@@ -4089,6 +4116,28 @@ h3 {
 .landing-page .landing-button {
   border-color: var(--wanted-panel-strong);
   border-radius: var(--wanted-radius-tight);
+}
+
+@media (max-width: 840px) and (orientation: portrait) {
+  .timeline-zoom-controls {
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .timeline-control-rail .icon-hint-wrapper,
+  .timeline-zoom-controls .icon-hint-wrapper {
+    width: 34px;
+    min-width: 34px;
+  }
+
+  .timeline-control-rail .timeline-icon-button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
 }
 
 .landing-button.primary {
