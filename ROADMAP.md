@@ -11,7 +11,8 @@ and product work would make the project easier to use and review.
 
 ## Sample choreography templates
 
-- Add reusable formation templates for common stage layouts.
+- Promote reusable formation presets into a first-class creation panel for common stage layouts.
+- Add quick preset controls for preview, spacing, flip, and apply-as-new versus replace-current behavior.
 - Include example projects for solo, group, and partner dance formats.
 - Make templates easy to inspect without requiring Supabase setup.
 
@@ -30,7 +31,8 @@ and product work would make the project easier to use and review.
 ## Sharing and export improvements
 
 - Continue improving public view/edit link workflows.
-- Make export paths more predictable for rehearsal sharing.
+- Keep Share and Export visually separate: Share creates links, Export creates files or rendered artifacts.
+- Make export paths more predictable with a single export panel for JSON backup, PNG/image, PDF/print, and later MP4/GIF options.
 - Improve backup and restore documentation for project files.
 
 ## Accessibility

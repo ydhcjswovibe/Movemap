@@ -273,17 +273,20 @@ Status: `Implemented locally`
 
 SPEC source:
 
-- Templates are included.
-- Initial templates should be local and deterministic.
-- Templates should adapt to roster count.
+- Formation presets are included as a primary creation tool.
+- Initial presets should be local and deterministic.
+- Presets should adapt to roster count.
+- Presets should support preview before applying, spacing adjustment, and simple transforms such as flip/re-center where the shape supports it.
 
 Next implementation slices:
 
 1. Done: local deterministic line, two-line, V, circle, diagonal, and block templates exist.
 2. Done: templates adapt to current roster count.
-3. Remaining: saving personal local templates.
+3. Next: expose presets as a first-class, quick-access formation panel inspired by FlowDance's preset affordance, without copying its visual design wholesale.
 4. Done: template provenance is stored on applied formations.
 5. Done: deterministic adaptation tests cover bounds and mutation safety.
+6. Remaining: richer preset controls for spacing, horizontal flip, re-center, and apply-as-new-formation versus replace-current-formation.
+7. Remaining: saving personal local templates.
 
 Acceptance criteria:
 
@@ -291,6 +294,7 @@ Acceptance criteria:
 - Template output is deterministic and editable.
 - Templates work with different roster sizes.
 - Mobile users can preview/select templates, and apply them where mobile editing permissions allow.
+- Preset application is visible and reversible enough that users can try a shape without losing their current formation unexpectedly.
 
 ### Stage 7: Bounded AI Formation Generation
 
@@ -357,6 +361,8 @@ Status: `Implemented locally`
 SPEC source:
 
 - Projects should remain portable through JSON export/import where plan allows export.
+- Sharing and export are separate concepts: share creates a link, export creates a file or rendered artifact.
+- Export should be presented as a choice panel rather than one hard-coded action.
 - Shared review should explain choreography without exposing editing complexity.
 - App packaging should remain possible later.
 
@@ -374,13 +380,17 @@ Next implementation slices:
 1. Done: import/export validation is hardened.
 2. Done locally: snapshot metadata is attached to manual JSON export.
 3. Partial: existing review/export layout remains readable; deeper visual QA is still useful.
-4. Remaining: native app packaging as a later platform step.
+4. Next: split the product surface into `Share` and `Export`, where Export opens a panel for JSON backup, PNG/image, PDF/print, and future video options.
+5. Remaining: add explicit export choices for scope, layers, layout, and media where supported.
+6. Remaining: MP4/GIF movement preview as a later export tier after PNG/PDF/JSON are dependable.
+7. Remaining: native app packaging as a later platform step.
 
 Acceptance criteria:
 
 - Users can recover their work through portable exports.
 - Shared/exported views are readable without editor-only controls.
 - Mobile shared review remains readable and export actions stay discoverable where the plan allows export.
+- Users can understand why they would choose Share versus Export without reading documentation.
 
 ## Explicitly Out Of MVP
 

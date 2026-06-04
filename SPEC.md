@@ -500,9 +500,11 @@ Basic 3D Preview should be available in Free. It helps users understand movement
 
 ### Templates
 
-Templates are included.
+Formation presets are included. They are a primary creation tool, not only
+sample content: the user should be able to start from a recognizable stage
+shape and then refine it manually.
 
-Initial templates should be local and deterministic:
+Initial presets should be local and deterministic:
 
 - line
 - two lines
@@ -513,13 +515,16 @@ Initial templates should be local and deterministic:
 - block
 - pairs
 
-Templates should adapt to roster count.
+Presets should adapt to roster count.
 
-Template actions:
+Preset actions:
 
 - create as new formation
 - replace current formation
 - preview before applying
+- adjust spacing
+- flip horizontally
+- rotate or re-center where the shape supports it
 
 Later expansion can include:
 
@@ -568,13 +573,23 @@ The core editor must remain useful without AI. Movemap should not depend on a fr
 
 ### Export
 
-Export is useful but should not block the core editor experience.
+Export is useful but should not block the core editor experience. Sharing and
+export are separate concepts: sharing creates a browser-accessible link, while
+export creates a portable file or rendered artifact.
 
 Supported early exports:
 
 - JSON export and import
-- basic image export
-- basic PDF export when feasible
+- PNG/image export for the current formation or selected timeline moment
+- PDF export for a readable rehearsal packet when feasible
+
+Export options should be chosen from an export panel rather than a single
+hard-coded button. The panel should make these choices explicit where supported:
+
+- export scope: current formation, selected timeline range, or full project
+- included layers: names, movement paths, stage grid, and stage reference
+- layout: desktop/wide, mobile/vertical, or print-friendly
+- media: music included or omitted where video export is available
 
 Pro-level exports can include:
 
@@ -582,6 +597,7 @@ Pro-level exports can include:
 - full formation packet
 - higher-resolution image
 - branded export
+- MP4 or GIF movement preview
 
 ## Account, Storage, Sharing, And Pricing
 
