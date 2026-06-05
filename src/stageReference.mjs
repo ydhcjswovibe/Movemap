@@ -1,4 +1,4 @@
-import { DEFAULT_STAGE_DIMENSIONS } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
 
 export const DEFAULT_FRONT_ZONE_Y = DEFAULT_STAGE_DIMENSIONS.height * 0.7;
 
@@ -55,17 +55,35 @@ const TONES = {
   side: { stroke: "#475569", fill: "#475569", dash: "" }
 };
 
-function clampStageValue(value, fallback = 0) {
+const LEGACY_REFERENCE_STAGE = Object.freeze({ width: 100, height: 100 });
+
+function roundReferenceMetric(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function referenceMetricsForStage(stage = LEGACY_REFERENCE_STAGE) {
+  const tokenMetrics = stageTokenMetrics(stage);
+  return {
+    pointRadius: roundReferenceMetric(Math.max(0.12, tokenMetrics.tokenRadius * 0.75)),
+    labelFontSize: roundReferenceMetric(Math.max(0.55, tokenMetrics.tokenRadius * 1.5)),
+    lineStrokeWidth: tokenMetrics.strokeWidth,
+    labelOffset: roundReferenceMetric(Math.max(0.55, tokenMetrics.tokenRadius * 1.5)),
+    pointLabelOffset: roundReferenceMetric(Math.max(0.75, tokenMetrics.tokenRadius * 2))
+  };
+}
+
+function clampStageValue(value, fallback = 0, max = 100) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
-  return Math.max(0, Math.min(100, number));
+  return Math.max(0, Math.min(max, number));
 }
 
 function cleanText(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-function normalizeReference(reference, index = 0) {
+function normalizeReference(reference, index = 0, stage = LEGACY_REFERENCE_STAGE) {
+  const dimensions = normalizeStageDimensions(stage);
   const type = reference?.type === "point" ? "point" : "line";
   const id = cleanText(reference?.id, `reference-${index + 1}`);
   const tone = TONES[reference?.tone] ? reference.tone : "neutral";
@@ -81,17 +99,17 @@ function normalizeReference(reference, index = 0) {
   if (type === "point") {
     return {
       ...base,
-      x: clampStageValue(reference?.x, 50),
-      y: clampStageValue(reference?.y, 50)
+      x: clampStageValue(reference?.x, dimensions.width / 2, dimensions.width),
+      y: clampStageValue(reference?.y, dimensions.height / 2, dimensions.height)
     };
   }
 
   return {
     ...base,
-    x1: clampStageValue(reference?.x1, 0),
-    y1: clampStageValue(reference?.y1, 0),
-    x2: clampStageValue(reference?.x2, 100),
-    y2: clampStageValue(reference?.y2, 100)
+    x1: clampStageValue(reference?.x1, 0, dimensions.width),
+    y1: clampStageValue(reference?.y1, 0, dimensions.height),
+    x2: clampStageValue(reference?.x2, dimensions.width, dimensions.width),
+    y2: clampStageValue(reference?.y2, dimensions.height, dimensions.height)
   };
 }
 
@@ -103,20 +121,22 @@ export function defaultStageReferences(frontZone = { y: DEFAULT_FRONT_ZONE_Y }) 
   }));
 }
 
-export function normalizeStageReferences(references, frontZone = { y: DEFAULT_FRONT_ZONE_Y }) {
+export function normalizeStageReferences(references, frontZone = { y: DEFAULT_FRONT_ZONE_Y }, options = {}) {
   const source = Array.isArray(references) && references.length ? references : defaultStageReferences(frontZone);
-  return source.map(normalizeReference);
+  return source.map((reference, index) => normalizeReference(reference, index, options.stage || LEGACY_REFERENCE_STAGE));
 }
 
 export function visibleStageReferences(references, options = {}) {
   if (options.visible === false) return [];
-  return normalizeStageReferences(references, options.frontZone).filter((reference) => reference.visible);
+  return normalizeStageReferences(references, options.frontZone, { stage: options.stage }).filter((reference) => reference.visible);
 }
 
 export function stageReferenceRenderItems(references, options = {}) {
   const showLabels = options.showLabels !== false;
+  const metrics = referenceMetricsForStage(options.stage || LEGACY_REFERENCE_STAGE);
   return visibleStageReferences(references, options).map((reference) => ({
     ...reference,
+    metrics,
     showLabel: showLabels,
     style: TONES[reference.tone] || TONES.neutral
   }));
@@ -134,16 +154,16 @@ export function renderStageReferenceSvg(references, options = {}) {
   return stageReferenceRenderItems(references, options).map((reference) => {
     if (reference.type === "point") {
       return [
-        `<circle cx="${reference.x}" cy="${reference.y}" r="1.35" fill="${reference.style.fill}" opacity="0.52" />`,
-        reference.showLabel ? `<text x="${reference.x}" y="${reference.y - 2.4}" text-anchor="middle" font-size="2.8" fill="${reference.style.fill}" font-family="Arial" font-weight="700">${escapeXml(reference.label)}</text>` : ""
+        `<circle cx="${reference.x}" cy="${reference.y}" r="${reference.metrics.pointRadius}" fill="${reference.style.fill}" opacity="0.52" />`,
+        reference.showLabel ? `<text x="${reference.x}" y="${roundReferenceMetric(reference.y - reference.metrics.pointLabelOffset)}" text-anchor="middle" font-size="${reference.metrics.labelFontSize}" fill="${reference.style.fill}" font-family="Arial" font-weight="700">${escapeXml(reference.label)}</text>` : ""
       ].join("");
     }
 
     const midX = (reference.x1 + reference.x2) / 2;
     const midY = (reference.y1 + reference.y2) / 2;
     return [
-      `<line x1="${reference.x1}" y1="${reference.y1}" x2="${reference.x2}" y2="${reference.y2}" stroke="${reference.style.stroke}" stroke-width="0.42" stroke-dasharray="${reference.style.dash}" opacity="0.54" />`,
-      reference.showLabel ? `<text x="${midX}" y="${Math.max(5, midY - 1.8)}" text-anchor="middle" font-size="2.6" fill="${reference.style.fill}" font-family="Arial" font-weight="700">${escapeXml(reference.label)}</text>` : ""
+      `<line x1="${reference.x1}" y1="${reference.y1}" x2="${reference.x2}" y2="${reference.y2}" stroke="${reference.style.stroke}" stroke-width="${reference.metrics.lineStrokeWidth}" stroke-dasharray="${reference.style.dash}" opacity="0.54" />`,
+      reference.showLabel ? `<text x="${midX}" y="${roundReferenceMetric(Math.max(reference.metrics.labelFontSize, midY - reference.metrics.labelOffset))}" text-anchor="middle" font-size="${reference.metrics.labelFontSize}" fill="${reference.style.fill}" font-family="Arial" font-weight="700">${escapeXml(reference.label)}</text>` : ""
     ].join("");
   }).join("");
 }

@@ -1,3 +1,5 @@
+import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
+
 export const PAIR_GRID_SPACING = 8.8;
 export const TOKEN_COLLISION_DISTANCE = 8.4;
 export const STAGE_GRID_X = [14.8, 23.6, 32.4, 41.2, 50, 58.8, 67.6, 76.4, 85.2];
@@ -5,14 +7,66 @@ export const STAGE_GRID_Y = [10.8, 19.6, 28.4, 37.2, 46, 54.8, 63.6, 72.4, 81.2,
 const LEGACY_GROUP_A_ROLE = "ma" + "le";
 const LEGACY_GROUP_B_ROLE = "fe" + "ma" + "le";
 
-export function horizontalPairPositions(plan, firstId, secondId, center) {
+function roundStage(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function isDefaultStage(stage) {
+  if (!stage) return false;
+  const dimensions = normalizeStageDimensions(stage);
+  return dimensions.width === DEFAULT_STAGE_DIMENSIONS.width && dimensions.height === DEFAULT_STAGE_DIMENSIONS.height;
+}
+
+export function pairMetricsForStage(stage) {
+  if (!stage) {
+    return {
+      spacing: PAIR_GRID_SPACING,
+      collisionDistance: TOKEN_COLLISION_DISTANCE
+    };
+  }
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const tokenMetrics = stageTokenMetrics(dimensions);
+  const spacing = roundStage(Math.max(tokenMetrics.tokenRadius * 2.2, Math.min(shortSide * 0.11, PAIR_GRID_SPACING)));
+  const collisionDistance = roundStage(Math.max(tokenMetrics.tokenRadius * 1.8, Math.min(tokenMetrics.hitRadius * 0.94, TOKEN_COLLISION_DISTANCE)));
+  return { spacing, collisionDistance };
+}
+
+function stageGridAxis(size, spacing, marginRatio) {
+  const margin = Math.max(spacing * 1.35, size * marginRatio);
+  if (size <= margin * 2) return [roundStage(size / 2)];
+  const points = [];
+  for (let value = margin; value <= size - margin + 0.001; value += spacing) {
+    points.push(roundStage(value));
+  }
+  const far = roundStage(size - margin);
+  const last = points.at(-1);
+  if (!points.includes(far) && (!Number.isFinite(last) || far - last >= spacing * 0.75)) points.push(far);
+  return points;
+}
+
+export function pairGridForStage(stage) {
+  if (!stage) return { x: STAGE_GRID_X, y: STAGE_GRID_Y };
+  const dimensions = normalizeStageDimensions(stage);
+  if (!isDefaultStage(dimensions) && dimensions.width === 100 && dimensions.height === 100) {
+    return { x: STAGE_GRID_X, y: STAGE_GRID_Y };
+  }
+  const metrics = pairMetricsForStage(dimensions);
+  return {
+    x: stageGridAxis(dimensions.width, metrics.spacing, 0.12),
+    y: stageGridAxis(dimensions.height, metrics.spacing, 0.1)
+  };
+}
+
+export function horizontalPairPositions(plan, firstId, secondId, center, stage = plan?.stage) {
   return findPairGridPlacement({
     plan,
     firstId,
     secondId,
     point: center,
     positions: {},
-    excludeIds: [firstId, secondId]
+    excludeIds: [firstId, secondId],
+    stage
   });
 }
 
@@ -35,16 +89,20 @@ export function findPairGridPlacement({
   point,
   positions = {},
   excludeIds = [],
-  gridX = STAGE_GRID_X,
-  gridY = STAGE_GRID_Y
+  stage,
+  gridX,
+  gridY
 }) {
   if (!plan || !firstId || !secondId || firstId === secondId || !point) return null;
   const { leftId, rightId } = pairSideIds(plan, firstId, secondId);
+  const grid = gridX && gridY ? { x: gridX, y: gridY } : pairGridForStage(stage);
+  const metrics = pairMetricsForStage(stage);
   const candidates = [];
-  gridY.forEach((y) => {
-    for (let index = 0; index < gridX.length - 1; index += 1) {
-      const left = { x: gridX[index], y };
-      const right = { x: gridX[index + 1], y };
+  grid.y.forEach((y) => {
+    for (let index = 0; index < grid.x.length - 1; index += 1) {
+      const left = { x: grid.x[index], y };
+      const right = { x: grid.x[index + 1], y };
+      if (distance(left, right) < metrics.collisionDistance) continue;
       const center = { x: (left.x + right.x) / 2, y };
       candidates.push({
         left,
@@ -67,7 +125,7 @@ export function findPairGridPlacement({
       [leftId]: candidate.left,
       [rightId]: candidate.right
     };
-    return pairPlacementCollides(positions, proposed, excludeIds) ? null : proposed;
+    return pairPlacementCollides(positions, proposed, excludeIds, metrics.collisionDistance) ? null : proposed;
   }, null);
 }
 

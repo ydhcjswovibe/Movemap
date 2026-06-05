@@ -4,10 +4,10 @@ import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import StitchMobileEditor from "./StitchMobileEditor.jsx";
-import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
+import { findPairGridPlacement, pairMetricsForStage, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
-import { findIndependentMergeCandidate, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
+import { findIndependentMergeCandidate, pairMergeDistanceForStage, resolveDropAction, resolveEmptyStageTap, resolveSelectionClick, shouldStartPairMemberPullOut } from "./dragPolicy.mjs";
 import { createProjectJsonDownload, validateProjectImport, withProjectSnapshotMetadata } from "./projectJson.mjs";
 import { partnerSetIdForAddedSection } from "./sectionPolicy.mjs";
 import { canCreateLink, canOwnCloudProject, canUseAiProposal, planCapabilities } from "./planCapabilities.mjs";
@@ -118,7 +118,6 @@ const MOVE_MODES = {
   late: "늦게 이동"
 };
 const HISTORY_LIMIT = 50;
-const MAGNET_DISTANCE = 4.8;
 const LONG_PRESS_MS = 450;
 const GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
@@ -156,6 +155,44 @@ function parseNumber(value, fallback = 0) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function stageSafeMargin(stage) {
+  const dimensions = normalizeStageDimensions(stage);
+  const metrics = stageTokenMetrics(dimensions);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const largeStageCap = Math.max(0.9, shortSide * 0.04);
+  return Math.min(Math.max(metrics.hitRadius, shortSide * 0.08), largeStageCap, shortSide / 3);
+}
+
+function clampPointToStage(point, stage) {
+  const dimensions = normalizeStageDimensions(stage);
+  const margin = stageSafeMargin(dimensions);
+  const xMin = Math.min(margin, dimensions.width / 2);
+  const yMin = Math.min(margin, dimensions.height / 2);
+  return {
+    x: clamp(point?.x ?? dimensions.width / 2, xMin, Math.max(xMin, dimensions.width - xMin)),
+    y: clamp(point?.y ?? dimensions.height / 2, yMin, Math.max(yMin, dimensions.height - yMin))
+  };
+}
+
+function stageOffsetDistance(stage, ratio = 0.08) {
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  return Math.max(stageSafeMargin(dimensions) * 0.8, Math.min(shortSide * ratio, 3));
+}
+
+function stageFrontGuide(stage) {
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const inset = Math.min(Math.max(shortSide * 0.08, 0.35), dimensions.width / 3);
+  const y = Math.max(inset, dimensions.height - inset);
+  return {
+    arrowPath: `M${inset} ${y} H${Math.max(inset, dimensions.width - inset)}`,
+    labelY: Math.max(inset, y - inset * 0.35),
+    fontSize: Math.min(3.5, Math.max(0.55, shortSide * 0.18)),
+    strokeWidth: Math.min(0.5, Math.max(0.08, shortSide * 0.035))
+  };
 }
 
 function closedMobilePanel() {
@@ -366,7 +403,7 @@ function normalizePlan(plan) {
       view: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.view || {}) },
       edit: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.edit || {}) }
     },
-    stageReferences: normalizeStageReferences(plan.stageReferences, plan.frontZone),
+    stageReferences: normalizeStageReferences(plan.stageReferences, plan.frontZone, { stage }),
     sections: plan.sections.map(normalizeSection).sort((a, b) => pointTime(a) - pointTime(b))
   };
 }
@@ -620,6 +657,7 @@ async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFinger
 function buildStageSvg(plan, sectionIndex, options = {}) {
   const stage = normalizeStageDimensions(plan.stage);
   const tokenMetrics = stageTokenMetrics(stage);
+  const frontGuide = stageFrontGuide(stage);
   const section = plan.sections[sectionIndex];
   const prev = plan.sections[sectionIndex - 1];
   const positions = section?.positions || {};
@@ -629,7 +667,8 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
   const referenceSvg = renderStageReferenceSvg(plan.stageReferences, {
     frontZone: plan.frontZone,
     visible: options.showStageReferences !== false,
-    showLabels: options.showStageReferenceLabels !== false
+    showLabels: options.showStageReferenceLabels !== false,
+    stage
   });
   const warnings = longDistanceWarnings(buildTransitionPaths({
     performers: plan.performers,
@@ -681,8 +720,8 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
       </defs>
       <rect x="0" y="0" width="${stage.width}" height="${stage.height}" fill="#f8fafc" rx="2" />
       <rect x="0" y="${plan.frontZone.y}" width="${stage.width}" height="${Math.max(0, stage.height - plan.frontZone.y)}" fill="#fee2e2" opacity="0.72" />
-      <text x="${stage.width / 2}" y="${Math.max(8, stage.height - 4)}" text-anchor="middle" font-size="3.5" fill="#991b1b" font-family="Arial" font-weight="700">관객 방향 / 앞줄</text>
-      <path d="M8 ${Math.max(8, stage.height - 8)} H${Math.max(8, stage.width - 8)}" stroke="#991b1b" stroke-width="0.5" marker-end="url(#arrow)" />
+      <text x="${stage.width / 2}" y="${frontGuide.labelY}" text-anchor="middle" font-size="${frontGuide.fontSize}" fill="#991b1b" font-family="Arial" font-weight="700">관객 방향 / 앞줄</text>
+      <path d="${frontGuide.arrowPath}" stroke="#991b1b" stroke-width="${frontGuide.strokeWidth}" marker-end="url(#arrow)" />
       <g stroke="#cbd5e1" stroke-width="0.16">
         ${GRID_X.filter((x) => x <= stage.width).map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="${stage.height}" />`).join("")}
         ${GRID_Y.filter((y) => y <= stage.height).map((y) => `<line x1="0" y1="${y}" x2="${stage.width}" y2="${y}" />`).join("")}
@@ -1127,18 +1166,20 @@ function App() {
     ? `중간 keyframe ${formatTime(selectedMovementKeyframeTime)}`
     : "도착 대형";
   const activeSection = sortedSections[activeSectionIndex];
+  const stageDimensions = useMemo(() => normalizeStageDimensions(plan?.stage), [plan?.stage]);
+  const tokenMetrics = useMemo(() => stageTokenMetrics(stageDimensions), [stageDimensions]);
+  const frontGuide = useMemo(() => stageFrontGuide(stageDimensions), [stageDimensions]);
   const stageReferenceItems = useMemo(() => plan ? stageReferenceRenderItems(plan.stageReferences, {
     frontZone: plan.frontZone,
     visible: showStageReferences,
-    showLabels: showStageReferenceLabels
-  }) : [], [plan, showStageReferences, showStageReferenceLabels]);
+    showLabels: showStageReferenceLabels,
+    stage: stageDimensions
+  }) : [], [plan, stageDimensions, showStageReferences, showStageReferenceLabels]);
   const selectedTemplatePreview = useMemo(() => plan
     ? selectedTemplateId.startsWith("personal:")
       ? personalTemplateToPreview(personalTemplates.find((template) => `personal:${template.id}` === selectedTemplateId))
       : buildFormationTemplatePreview(selectedTemplateId, plan.performers, plan.stage)
     : null, [plan, selectedTemplateId, personalTemplates]);
-  const stageDimensions = useMemo(() => normalizeStageDimensions(plan?.stage), [plan?.stage]);
-  const tokenMetrics = useMemo(() => stageTokenMetrics(stageDimensions), [stageDimensions]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -1152,6 +1193,7 @@ function App() {
     return dragPositions ? { ...editBase, ...dragPositions } : editBase;
   }, [plan, sortedSections, activeSectionIndex, currentTime, isPlaying, dragPositions, selectedSection, selectedMovementKeyframe]);
   const stage3dProjection = useMemo(() => buildStage3dProjection({
+    stage: stageDimensions,
     performers: plan?.performers || [],
     positions: visiblePositions,
     transitionPaths: plan ? buildTransitionPaths({
@@ -1162,7 +1204,7 @@ function App() {
       selectedPerformerId
     }) : [],
     selectedPerformerId
-  }), [plan, visiblePositions, sortedSections, activeSectionIndex, activeSection, selectedPerformerId]);
+  }), [plan, stageDimensions, visiblePositions, sortedSections, activeSectionIndex, activeSection, selectedPerformerId]);
 
   useEffect(() => {
     if (isPlaying && activeSection?.id) {
@@ -1902,7 +1944,8 @@ function App() {
       secondId,
       point,
       positions: { ...(section?.positions || {}), ...extraPositions },
-      excludeIds
+      excludeIds,
+      stage: currentPlan?.stage || stageDimensions
     });
   }
 
@@ -1913,7 +1956,8 @@ function App() {
       positions,
       performers: plan.performers,
       pairs,
-      sourcePair
+      sourcePair,
+      maxDistance: pairMergeDistanceForStage(stageDimensions)
     })?.id || "";
   }
 
@@ -1935,7 +1979,7 @@ function App() {
         y: pairPositions.reduce((sum, pos) => sum + pos.y, 0) / pairPositions.length
       };
       const gap = Math.min(distance(nextPosition, sameRolePosition), distance(nextPosition, center));
-      if (gap <= MAGNET_DISTANCE * 2 && (!nearest || gap < nearest.gap)) {
+      if (gap <= pairMergeDistanceForStage(stageDimensions) * 2 && (!nearest || gap < nearest.gap)) {
         nearest = { targetId: sameRoleId, pair, gap };
       }
     });
@@ -2124,7 +2168,7 @@ function App() {
 
       if (action.type === "move-pair") {
         const movingIds = Object.keys(action.positions || {});
-        if (pairPlacementCollides(currentPositions, action.positions || {}, movingIds)) return current;
+        if (pairPlacementCollides(currentPositions, action.positions || {}, movingIds, pairMetricsForStage(current.stage || stageDimensions).collisionDistance)) return current;
         return {
           ...current,
           sections: current.sections.map((item) => item.id === drag.sectionId ? sectionWithPositionPatch(item, basePositions, keyframeId) : item)
@@ -2216,10 +2260,10 @@ function App() {
       role,
       color: palette[index % palette.length]
     };
-    const position = {
-      x: clamp(18 + (index % 8) * 8, 4, 96),
-      y: clamp(42 + Math.floor(index / 8) * 7, 5, 95)
-    };
+    const position = clampPointToStage({
+      x: stageDimensions.width * 0.18 + (index % 8) * stageDimensions.width * 0.08,
+      y: stageDimensions.height * 0.42 + Math.floor(index / 8) * stageDimensions.height * 0.07
+    }, stageDimensions);
     updatePlan((current) => ({
       ...current,
       performers: [...current.performers, performer],
@@ -2255,15 +2299,17 @@ function App() {
       ...current,
       performers: [...current.performers, performer],
       sections: current.sections.map((section) => {
-        const sourcePosition = section.positions?.[performerToCopy.id] || selectedSection.positions?.[performerToCopy.id] || { x: 50, y: 50 };
+        const fallbackPosition = { x: stageDimensions.width / 2, y: stageDimensions.height / 2 };
+        const sourcePosition = section.positions?.[performerToCopy.id] || selectedSection.positions?.[performerToCopy.id] || fallbackPosition;
+        const offset = stageOffsetDistance(stageDimensions);
         return {
           ...section,
           positions: {
             ...(section.positions || {}),
-            [performer.id]: {
-              x: clamp((sourcePosition.x || 50) + 3, 4, 96),
-              y: clamp((sourcePosition.y || 50) + 3, 5, 95)
-            }
+            [performer.id]: clampPointToStage({
+              x: (sourcePosition.x ?? fallbackPosition.x) + offset,
+              y: (sourcePosition.y ?? fallbackPosition.y) + offset
+            }, stageDimensions)
           }
         };
       })
@@ -2676,15 +2722,12 @@ function App() {
       drag.moved = true;
       collapseMobilePanelForStageGesture();
     }
-    const rawPosition = {
-      x: clamp(pointer.x + drag.offsetX, 4, 96),
-      y: clamp(pointer.y + drag.offsetY, 5, 95)
-    };
+    const rawPosition = clampPointToStage({
+      x: pointer.x + drag.offsetX,
+      y: pointer.y + drag.offsetY
+    }, stageDimensions);
     const snapped = snapPoint(rawPosition, snapEnabled && !event.altKey);
-    const nextPosition = {
-      x: clamp(snapped.x, 4, 96),
-      y: clamp(snapped.y, 5, 95)
-    };
+    const nextPosition = clampPointToStage(snapped, stageDimensions);
     const partnerSet = getPartnerSetForSection(selectedSection);
     const pairs = partnerSet?.pairs || [];
     const editPositions = sectionEditPositions(selectedSection, drag.keyframeId);
@@ -2694,7 +2737,7 @@ function App() {
       y: nextPosition.y - (editPositions[performerId]?.y || nextPosition.y)
     };
     const movedGroupPositions = groupIds.length > 1
-      ? Object.fromEntries(groupIds.map((id) => [id, moveSelectedPerformers(editPositions, [id], groupDelta)[id]]))
+      ? Object.fromEntries(groupIds.map((id) => [id, moveSelectedPerformers(editPositions, [id], groupDelta, stageDimensions)[id]]))
       : { [performerId]: nextPosition };
     const nextPositions = { ...editPositions, ...movedGroupPositions };
     const swapCandidate = drag.individual && drag.sourcePair
@@ -2887,10 +2930,7 @@ function App() {
     }
 
     if (tapAction.type !== "move-token" || !selectedPerformerId) return;
-    const nextPosition = {
-      x: clamp(targetPoint.x, 4, 96),
-      y: clamp(targetPoint.y, 5, 95)
-    };
+    const nextPosition = clampPointToStage(targetPoint, stageDimensions);
     const editKeyframeId = selectedMovementKeyframe?.id || "";
     const nextPositions = { ...sectionEditPositions(selectedSection, editKeyframeId), [selectedPerformerId]: nextPosition };
     const candidateId = findIndependentMagnetCandidate(selectedPerformerId, pointer, nextPositions, partnerSet?.pairs || []);
@@ -4564,8 +4604,8 @@ function App() {
               </defs>
               <rect x="0" y="0" width={stageDimensions.width} height={stageDimensions.height} rx="2" fill="#151515" />
               <rect x="0" y={plan.frontZone.y} width={stageDimensions.width} height={Math.max(0, stageDimensions.height - plan.frontZone.y)} fill="#2a1718" opacity="0.68" />
-              <text x={stageDimensions.width / 2} y={Math.max(8, stageDimensions.height - 4)} textAnchor="middle" fontSize="3.5" fill="#ffb3ae" fontWeight="700">관객 방향 / 앞줄</text>
-              <path d={`M8 ${Math.max(8, stageDimensions.height - 8)} H${Math.max(8, stageDimensions.width - 8)}`} stroke="#d43237" strokeWidth="0.5" markerEnd="url(#arrow-live)" />
+              <text x={stageDimensions.width / 2} y={frontGuide.labelY} textAnchor="middle" fontSize={frontGuide.fontSize} fill="#ffb3ae" fontWeight="700">관객 방향 / 앞줄</text>
+              <path d={frontGuide.arrowPath} stroke="#d43237" strokeWidth={frontGuide.strokeWidth} markerEnd="url(#arrow-live)" />
               <g stroke="#434656" strokeWidth="0.16" opacity="0.62">
                 {GRID_X.filter((x) => x <= stageDimensions.width).map((x) => <line key={`grid-x-${x}`} x1={x} y1="0" x2={x} y2={stageDimensions.height} />)}
                 {GRID_Y.filter((y) => y <= stageDimensions.height).map((y) => <line key={`grid-y-${y}`} x1="0" y1={y} x2={stageDimensions.width} y2={y} />)}

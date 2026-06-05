@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   PAIR_MERGE_DISTANCE,
+  pairMergeDistanceForStage,
   findIndependentMergeCandidate,
   resolveEmptyStageTap,
   resolveSelectionClick,
@@ -181,6 +182,34 @@ test("merge candidates allow visually overlapping tokens", () => {
 
   assert.equal(candidate?.id, "p2");
   assert.ok(candidate.gap <= PAIR_MERGE_DISTANCE);
+});
+
+test("merge candidate distance scales down for a compact 12x8 stage", () => {
+  const maxDistance = pairMergeDistanceForStage({ width: 12, height: 8 });
+
+  assert.ok(maxDistance < PAIR_MERGE_DISTANCE);
+  assert.equal(findIndependentMergeCandidate({
+    performerId: "p1",
+    rawPosition: { x: 5.9, y: 4 },
+    positions: {
+      p1: { x: 5.9, y: 4 },
+      p2: { x: 6.7, y: 4 }
+    },
+    performers: [{ id: "p1" }, { id: "p2" }],
+    pairs: [],
+    maxDistance
+  })?.id, "p2");
+  assert.equal(findIndependentMergeCandidate({
+    performerId: "p1",
+    rawPosition: { x: 5.9, y: 4 },
+    positions: {
+      p1: { x: 5.9, y: 4 },
+      p2: { x: 8, y: 4 }
+    },
+    performers: [{ id: "p1" }, { id: "p2" }],
+    pairs: [],
+    maxDistance
+  }), null);
 });
 
 test("nearby but non-overlapping tokens do not create a merge candidate", () => {

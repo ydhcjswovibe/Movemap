@@ -46,6 +46,20 @@ test("normalizes custom stage references without allowing out-of-stage coordinat
   assert.equal(references[1].locked, false);
 });
 
+test("normalizes custom stage references against supplied stage bounds", () => {
+  const references = normalizeStageReferences([
+    { id: "bad-line", type: "line", x1: -20, y1: 10, x2: 140, y2: 120 },
+    { id: "bad-point", type: "point", x: "nope", y: 88, locked: false }
+  ], { y: 5.6 }, { stage: { width: 12, height: 8 } });
+
+  assert.equal(references[0].x1, 0);
+  assert.equal(references[0].y1, 8);
+  assert.equal(references[0].x2, 12);
+  assert.equal(references[0].y2, 8);
+  assert.equal(references[1].x, 6);
+  assert.equal(references[1].y, 8);
+});
+
 test("filters the stage reference layer without deleting model data", () => {
   const references = normalizeStageReferences([
     { id: "visible", type: "point", x: 20, y: 30 },
@@ -71,4 +85,15 @@ test("renders stage reference svg safely for exported readable views", () => {
 
   assert.match(svg, /<line/);
   assert.match(svg, /Front &lt;A&gt;/);
+});
+
+test("renders compact reference marks from stage token metrics", () => {
+  const svg = renderStageReferenceSvg([
+    { id: "front", type: "line", label: "Front", x1: 0, y1: 5.6, x2: 12, y2: 5.6 },
+    { id: "mark", type: "point", label: "M", x: 6, y: 5.6 }
+  ], { stage: { width: 12, height: 8 } });
+
+  assert.match(svg, /stroke-width="0.1"/);
+  assert.match(svg, /r="0.3"/);
+  assert.match(svg, /font-size="0.6"/);
 });

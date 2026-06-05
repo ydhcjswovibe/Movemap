@@ -1,9 +1,24 @@
+import { normalizeStageDimensions } from "./stageGeometry.mjs";
+
 function byPointTime(section) {
   return Number.isFinite(section?.time) ? section.time : 0;
 }
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function movementBounds(stage) {
+  if (!stage) return { xMin: 4, xMax: 96, yMin: 5, yMax: 95 };
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const margin = Math.min(Math.max(shortSide * 0.08, 0.6), Math.max(0.9, shortSide * 0.04), shortSide / 3);
+  return {
+    xMin: Math.min(margin, dimensions.width / 2),
+    xMax: Math.max(margin, dimensions.width - margin),
+    yMin: Math.min(margin, dimensions.height / 2),
+    yMax: Math.max(margin, dimensions.height - margin)
+  };
 }
 
 export function duplicateSelectionTarget(sections = [], copiedSectionId = "") {
@@ -31,15 +46,16 @@ export function togglePerformerSelection(selection = [], performerId = "", addit
     : [...selection, performerId];
 }
 
-export function moveSelectedPerformers(positions = {}, performerIds = [], delta = {}) {
+export function moveSelectedPerformers(positions = {}, performerIds = [], delta = {}, stage) {
+  const bounds = movementBounds(stage);
   return performerIds.reduce((next, id) => {
     const pos = next[id];
     if (!pos) return next;
     return {
       ...next,
       [id]: {
-        x: clamp(pos.x + (delta.x || 0), 4, 96),
-        y: clamp(pos.y + (delta.y || 0), 5, 95)
+        x: clamp(pos.x + (delta.x || 0), bounds.xMin, bounds.xMax),
+        y: clamp(pos.y + (delta.y || 0), bounds.yMin, bounds.yMax)
       }
     };
   }, { ...positions });

@@ -35,3 +35,17 @@ test("multi-select can toggle roles, move performers, and align them", () => {
   assert.equal(aligned.a.y, aligned.b.y);
   assert.deepEqual(performerIdsForRole(performers, "lead"), ["a", "b"]);
 });
+
+test("multi-select movement clamps to compact stage bounds", () => {
+  const moved = moveSelectedPerformers(
+    { a: { x: 11.8, y: 7.8 }, b: { x: 2, y: 2 } },
+    ["a", "b"],
+    { x: 5, y: 5 },
+    { width: 12, height: 8 }
+  );
+
+  assert.ok(moved.a.x <= 12);
+  assert.ok(moved.a.y <= 8);
+  assert.ok(moved.b.x <= 12);
+  assert.ok(moved.b.y <= 8);
+});

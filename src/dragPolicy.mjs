@@ -1,5 +1,15 @@
+import { normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
+
 export const PAIR_MERGE_DISTANCE = 7.0;
 export const PULL_OUT_MOVE_THRESHOLD = 0.8;
+
+export function pairMergeDistanceForStage(stage) {
+  if (!stage) return PAIR_MERGE_DISTANCE;
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const metrics = stageTokenMetrics(dimensions);
+  return Math.round(Math.max(metrics.hitRadius * 0.9, Math.min(shortSide * 0.14, PAIR_MERGE_DISTANCE)) * 100) / 100;
+}
 
 function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
