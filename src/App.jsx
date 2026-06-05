@@ -3,6 +3,7 @@ import Stage3dPreview from "./Stage3dPreview.jsx";
 import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
+import StitchMobileEditor from "./StitchMobileEditor.jsx";
 import { STAGE_GRID_X, STAGE_GRID_Y, findPairGridPlacement, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -62,7 +63,6 @@ const MOBILE_PANEL_KINDS = Object.freeze({
   performer: "performer",
   formation: "formation",
   people: "people",
-  add: "add",
   view: "view",
   stage: "stage",
   role: "role",
@@ -85,7 +85,6 @@ const MOBILE_GLOBAL_ACTIONS = [
 const MOBILE_ACTION_GROUPS = Object.freeze({
   default: [
     { key: "people", icon: "users", label: "사람" },
-    { key: "music", icon: "note", label: "음악" },
     { key: "stage", icon: "settings", label: "무대" },
     { key: "view", icon: "grid", label: "보기" }
   ],
@@ -126,6 +125,13 @@ const PAIR_RING_RADIUS = 4.45;
 const SELECTED_PAIR_RING_RADIUS = 4.9;
 const GRID_X = STAGE_GRID_X;
 const GRID_Y = STAGE_GRID_Y;
+const SNAP_GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
+const SNAP_GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
+
+function buildMeterGrid(max) {
+  const count = Math.max(0, Math.floor(Number(max) || 0));
+  return Array.from({ length: count + 1 }, (_, index) => index);
+}
 
 function uid(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
@@ -322,8 +328,8 @@ function snapPoint(point, enabled) {
     Math.abs(item - value) < Math.abs(best - value) ? item : best
   ), points[0]);
   return {
-    x: nearest(point.x, GRID_X),
-    y: nearest(point.y, GRID_Y)
+    x: nearest(point.x, SNAP_GRID_X),
+    y: nearest(point.y, SNAP_GRID_Y)
   };
 }
 
@@ -782,6 +788,11 @@ function App() {
   const [activeWorkPanel, setActiveWorkPanel] = useState("cast");
   const [topActionMenu, setTopActionMenu] = useState("");
   const [topActionSurface, setTopActionSurface] = useState("");
+  const [stitchFormationContext, setStitchFormationContext] = useState(false);
+  const [isStitchMobileViewport, setIsStitchMobileViewport] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 900px)").matches;
+  });
   const [mobilePanel, setMobilePanel] = useState(() => closedMobilePanel());
   const [mobileContextSelection, setMobileContextSelection] = useState("");
   const [isTransitionOverlayOpen, setIsTransitionOverlayOpen] = useState(false);
@@ -828,6 +839,31 @@ function App() {
     setTopActionMenu(menu);
     setTopActionSurface(surface);
   }
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 900px)");
+    const update = () => setIsStitchMobileViewport(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!isStitchMobileViewport) return undefined;
+    function selectClickedFormation(event) {
+      const block = event.target?.closest?.(".stitch-mobile-editor .formation-block");
+      const sectionId = block?.dataset?.sectionId;
+      if (!sectionId) return;
+      setSelectedSectionId(sectionId);
+      setSelectedPerformerId("");
+      setSelectedPerformerIds([]);
+      setSelectedPairKey("");
+      setMobileContextSelection("formation");
+      setStitchFormationContext(true);
+    }
+    document.addEventListener("click", selectClickedFormation, true);
+    return () => document.removeEventListener("click", selectClickedFormation, true);
+  }, [isStitchMobileViewport]);
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -1187,18 +1223,9 @@ function App() {
     closeMobilePanel();
   }
 
-  function openSelectedPerformerPanel(performerId) {
-    selectPerformer(performerId);
-    openMobilePanel(MOBILE_PANEL_KINDS.performer, MOBILE_PANEL_SIZES.peek);
-  }
-
   function openSelectedFormationPanel(sectionId = selectedSectionId) {
     if (sectionId) setSelectedSectionId(sectionId);
     openMobilePanel(MOBILE_PANEL_KINDS.formation, MOBILE_PANEL_SIZES.half);
-  }
-
-  function openAddMobilePanel() {
-    openMobilePanel(MOBILE_PANEL_KINDS.add, MOBILE_PANEL_SIZES.half);
   }
 
   function toggleMobileTransitionOverlay() {
@@ -1215,10 +1242,6 @@ function App() {
     if (actionKey === "people") {
       setActiveWorkPanel("cast");
       openMobilePanel(MOBILE_PANEL_KINDS.people, MOBILE_PANEL_SIZES.full);
-      return;
-    }
-    if (actionKey === "music") {
-      openMobilePanel(MOBILE_PANEL_KINDS.add, MOBILE_PANEL_SIZES.half);
       return;
     }
     if (actionKey === "stage") {
@@ -1827,6 +1850,7 @@ function App() {
     setSelectedPairKey("");
     setTapMoveArmed(false);
     setMobileContextSelection("");
+    setStitchFormationContext(false);
   }
 
   function selectPerformer(performerId) {
@@ -1835,6 +1859,7 @@ function App() {
     setSelectedPairKey("");
     setTapMoveArmed(Boolean(performerId));
     setMobileContextSelection(performerId ? "performer" : "");
+    setStitchFormationContext(false);
   }
 
   function selectPair(nextPairKey, performerId = "") {
@@ -1843,6 +1868,7 @@ function App() {
     setSelectedPairKey(nextPairKey);
     setTapMoveArmed(Boolean(nextPairKey));
     setMobileContextSelection(performerId ? "performer" : "");
+    setStitchFormationContext(false);
   }
 
   function applySelectionClick(action) {
@@ -2530,7 +2556,7 @@ function App() {
       clearLongPressTimer();
       return;
     }
-    openSelectedPerformerPanel(performerId);
+    selectPerformer(performerId);
     if (performerPair) {
       const [firstId, secondId] = performerPair;
       const firstStart = { ...(editPositions[firstId] || { x: pointer.x, y: pointer.y }) };
@@ -3350,6 +3376,12 @@ function App() {
         ) : (
           <button onClick={signInOwner} disabled={authLoading}>Google 로그인</button>
         )}
+        {!readonly && (
+          <label className="file-button tertiary">
+            {musicActionLabel}
+            <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
+          </label>
+        )}
         <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>
         <label className="file-button tertiary">불러오기<input type="file" accept="application/json" onChange={importJson} /></label>
       </div>
@@ -3599,7 +3631,10 @@ function App() {
               <div
                 key={performer.id}
                 className={selectedPerformerId === performer.id ? "performer active" : "performer"}
-                onClick={() => applySelectionClick(resolveSelectionClick({ selectedPerformerId, selectedPairKey, performerId: performer.id }))}
+                onClick={() => {
+                  applySelectionClick(resolveSelectionClick({ selectedPerformerId, selectedPairKey, performerId: performer.id }));
+                  if (mobilePanel.kind === MOBILE_PANEL_KINDS.people) closeMobilePanel();
+                }}
               >
                 <span style={{ background: performer.color }}>{performer.label}</span>
                 <input readOnly={readonly} value={performer.name} onChange={(event) => updatePlan((current) => ({
@@ -3716,7 +3751,7 @@ function App() {
         {!readonly && (
           <div className="tool-card stage-size-card">
             <strong>무대 크기</strong>
-            <span>{stageDimensions.width} x {stageDimensions.height}</span>
+            <span>{stageDimensions.width}m x {stageDimensions.height}m</span>
             <div className="stage-size-grid">
               {[
                 ["width", "가로"],
@@ -3778,7 +3813,7 @@ function App() {
           {!readonly && (
             <div className="tool-card stage-size-card">
               <strong>무대 크기</strong>
-              <span>{stageDimensions.width} x {stageDimensions.height}</span>
+              <span>{stageDimensions.width}m x {stageDimensions.height}m</span>
               <div className="stage-size-grid">
                 {[
                   ["width", "가로"],
@@ -3894,22 +3929,24 @@ function App() {
     ? "페어 선택됨"
     : selectedPerformer
       ? `${selectedPerformer.name || selectedPerformer.label} 선택됨`
-      : mobileContextSelection === "formation" && selectedSection
+    : (mobileContextSelection === "formation" || stitchFormationContext) && selectedSection
         ? `${selectedSection.name} 대형 선택됨`
       : "선택 없음";
   const isMobilePanelOpen = Boolean(mobilePanel.kind);
   const selectionVisualState = selectedPerformerId || selectedPerformerIds.length || selectedPairKey
     ? "token-selected"
-    : mobileContextSelection === "formation"
+    : mobileContextSelection === "formation" || stitchFormationContext
       ? "formation-selected"
       : "idle";
+  const stitchSelectedSectionId = mobileContextSelection === "formation" || stitchFormationContext
+    ? selectedSection?.id || ""
+    : "";
   const timelineVisualState = "visible";
   const menuVisualState = topActionMenu || isMobilePanelOpen ? "expanded" : "idle";
   const mobilePanelTitle = {
     [MOBILE_PANEL_KINDS.performer]: "선택",
     [MOBILE_PANEL_KINDS.formation]: "대형",
     [MOBILE_PANEL_KINDS.people]: "사람",
-    [MOBILE_PANEL_KINDS.add]: "추가",
     [MOBILE_PANEL_KINDS.view]: "보기",
     [MOBILE_PANEL_KINDS.stage]: "무대",
     [MOBILE_PANEL_KINDS.role]: "역할 선택",
@@ -3950,13 +3987,12 @@ function App() {
     ? "multi"
     : selectedPerformerId
       ? "performer"
-      : mobileContextSelection === "formation"
+      : mobileContextSelection === "formation" || stitchFormationContext
         ? "formation"
         : "default";
   const mobileActions = MOBILE_ACTION_GROUPS[mobileActionMode] || MOBILE_ACTION_GROUPS.default;
   const activeMobilePanelActionKey = isMobilePanelOpen ? {
     [MOBILE_PANEL_KINDS.people]: "people",
-    [MOBILE_PANEL_KINDS.add]: "music",
     [MOBILE_PANEL_KINDS.stage]: "stage",
     [MOBILE_PANEL_KINDS.view]: "view",
     [MOBILE_PANEL_KINDS.role]: "performer-role",
@@ -4035,18 +4071,6 @@ function App() {
       );
     }
 
-    if (mobilePanel.kind === MOBILE_PANEL_KINDS.add) {
-      return (
-        <div className="mobile-command-grid compact">
-          <IconHintButton iconName="users" label="사람 추가" onClick={addPerformer} showLabel />
-          <IconHintButton iconName="timer-add" label="대형 추가" onClick={() => addSection({ forceAppend: true })} showLabel />
-          <IconHintButton as="label" className="file-button tertiary" iconName="note" label="음악 추가" showLabel>
-            <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
-          </IconHintButton>
-        </div>
-      );
-    }
-
     if (mobilePanel.kind === MOBILE_PANEL_KINDS.view) {
       return (
         <div className="mobile-panel-stack">
@@ -4100,6 +4124,105 @@ function App() {
     return null;
   }
 
+  const stitchEditorModel = {
+    activeMobilePanelActionKey,
+    activeSection,
+    activeSectionName: activeSection?.name || "대형 없음",
+    activeTransitionPaths,
+    arrivalLabel: activeSection ? formatTime(pointTime(activeSection)) : "0:00.0",
+    currentSectionId: sortedSections[timeSectionIndex]?.id || "",
+    dragPositions,
+    focusedPerformerIds: activeFocusedPerformerIds,
+    frontZone: plan.frontZone,
+    globalActions: MOBILE_GLOBAL_ACTIONS,
+    hasUsableAudio,
+    isMobilePanelOpen,
+    isPlaying,
+    localSaveLabel,
+    mobileActions: !selectedPerformerId && stitchSelectedSectionId && stitchSelectedSectionId !== sortedSections[0]?.id
+      ? MOBILE_ACTION_GROUPS.formation
+      : mobileActions,
+    mobilePanelSize: mobilePanel.size,
+    mobilePanelTitle,
+    performers: plan.performers,
+    playheadPixel,
+    projectTitle: plan.title,
+    readonly,
+    redoDisabled: !redoStack.length,
+    selectedPerformerId,
+    selectedPerformerIds,
+    selectedSection,
+    selectedSectionId: stitchSelectedSectionId,
+    selectedStateText,
+    selectionVisualState,
+    snapPixel: snapPixel !== null && snapPixel >= 0 && snapPixel <= timelineViewportWidth
+      ? timelineSnapTime * timelinePixelsPerSecond
+      : null,
+    sortedSections,
+    stage3dProjection,
+    stageDimensions,
+    stageReferences: stageReferenceItems,
+    stageSizeLabel: `${stageDimensions.width}m x ${stageDimensions.height}m`,
+    stageViewMode,
+    timeLabel: formatTime(sliderTime),
+    timelineContentWidth,
+    timelineBlockedEdge,
+    timelineFormationBlocks,
+    timelineScrollX,
+    timelineTicks,
+    timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
+    topActionMenu,
+    topActionSurface,
+    transitionPathCount: activeTransitionPaths.length,
+    undoDisabled: !undoStack.length,
+    visiblePositions,
+    waveformBars
+  };
+
+  const stitchEditorActions = {
+    addSection,
+    clearDrag,
+    closeMobilePanel,
+    closeTopActionMenu,
+    cycleMobilePanelSize,
+    finishActiveDrag,
+    handleMobileAction,
+    handleStageTap,
+    clearTimelineSelection: () => {
+      setSelectedSectionId("");
+      clearSelection();
+    },
+    onFormationPointerDown,
+    onFormationSelect: (section) => {
+      setSelectedSectionId(section.id);
+      setSelectedPerformerId("");
+      setSelectedPerformerIds([]);
+      setSelectedPairKey("");
+      setMobileContextSelection("formation");
+      setStitchFormationContext(true);
+    },
+    onStagePointerDown,
+    onStagePointerMove,
+    onTimelinePointerDown,
+    onTimelinePointerMove,
+    onTimelinePointerUp,
+    onTimelineWheel,
+    openTopActionMenu,
+    redoPlan,
+    renderDownloadMenu,
+    renderMobilePanelContent,
+    renderMoreMenu,
+    renderShareMenu,
+    selectPerformer,
+    setStageViewMode,
+    svgRef,
+    timelineViewportRef,
+    togglePlayback,
+    toggleStageReferences: () => setShowStageReferences((value) => !value),
+    undoPlan,
+    zoomTimelineBy
+  };
+
   return (
     <div
       className={isStageFocus ? "app stage-focus" : "app"}
@@ -4128,6 +4251,7 @@ function App() {
         </div>
       )}
 
+      {!isStitchMobileViewport && (
       <main
         className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}
         data-selection-state={selectionVisualState}
@@ -4821,8 +4945,9 @@ function App() {
           </aside>
         </div>
       </main>
+      )}
 
-      <section className="mobile-editor">
+      {!isStitchMobileViewport && <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
             {mobileActions.map((action) => {
@@ -4866,7 +4991,9 @@ function App() {
             </div>
           </div>
         )}
-      </section>
+      </section>}
+
+      {isStitchMobileViewport && <StitchMobileEditor actions={stitchEditorActions} model={stitchEditorModel} />}
 
       <section className="print-sheets">
         {sortedSections.map((section, index) => (

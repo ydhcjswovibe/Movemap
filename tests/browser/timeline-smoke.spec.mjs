@@ -92,13 +92,16 @@ async function expectNoBottomStatus(page) {
 
 function collectBrowserIssues(page) {
   const browserIssues = [];
+  const shouldIgnore = (text) => text.includes("net::ERR_NETWORK_CHANGED");
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      browserIssues.push(`${message.type()}: ${message.text()}`);
+    const text = `${message.type()}: ${message.text()}`;
+    if (message.type() === "error" && !shouldIgnore(text)) {
+      browserIssues.push(text);
     }
   });
   page.on("pageerror", (error) => {
-    browserIssues.push(`pageerror: ${error.message}`);
+    const text = `pageerror: ${error.message}`;
+    if (!shouldIgnore(text)) browserIssues.push(text);
   });
   return browserIssues;
 }
@@ -355,7 +358,7 @@ test("mobile contextual performer actions open role and alignment option sheets"
   });
 
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "역할" })).toBeVisible();
-  await page.locator(".bottom-sheet-close").click();
+  await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
   const roleAction = page.locator(".mobile-action-bar").getByRole("button", { name: "역할" });
   await roleAction.click();
   await expect(roleAction).toHaveClass(/active/);
@@ -479,8 +482,9 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   expect(actionBarInitialBox).not.toBeNull();
   expect(timelineRailBox.height).toBeLessThan(48);
   expect(stageFrameBox.y).toBeGreaterThanOrEqual(0);
-  expect(stageFrameBox.width).toBeGreaterThanOrEqual(378);
-  expect(stageFrameBox.height).toBeGreaterThanOrEqual(400);
+  expect(Math.abs(stageFrameBox.width - stageFrameBox.height)).toBeLessThanOrEqual(2);
+  expect(stageFrameBox.width).toBeGreaterThanOrEqual(320);
+  expect(stageFrameBox.height).toBeLessThanOrEqual(352);
   expect(timelineEditorBox.y + timelineEditorBox.height).toBeLessThanOrEqual(actionBarInitialBox.y);
   expect(actionBarInitialBox.y + actionBarInitialBox.height).toBeLessThanOrEqual(844);
   await expect(timelineRail.getByRole("button", { name: "되돌리기" })).toBeDisabled();
@@ -507,7 +511,7 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   expect(globalActionButtonBox).not.toBeNull();
   expect(globalActionButtonBox.width).toBeLessThanOrEqual(38);
   await expect(actionBar.getByRole("button", { name: "사람" })).toHaveCount(1);
-  await expect(actionBar.getByRole("button", { name: "음악" })).toHaveCount(1);
+  await expect(actionBar.getByRole("button", { name: "음악" })).toHaveCount(0);
   await expect(actionBar.getByRole("button", { name: "무대" })).toHaveCount(1);
   await expect(actionBar.getByRole("button", { name: "보기" })).toHaveCount(1);
   await expect(actionBar.getByRole("button", { name: "저장" })).toHaveCount(0);
@@ -701,6 +705,7 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   await expect(page.locator(".top-action-menu")).toHaveCount(1);
   await expect(page.locator(".mobile-global-actions .top-action-menu.download-action-menu")).toHaveCount(0);
   await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("계정");
+  await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu input[type='file'][accept='audio/*']")).toHaveCount(1);
   await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("프로젝트");
   await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).toContainText("불러오기");
   await expect(page.locator(".mobile-global-actions .top-action-menu.more-action-menu")).not.toContainText("스냅");

@@ -1,8 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import "./stitchMobileEditor.css";
 import App from "./App.jsx";
 import LandingPage from "./LandingPage.jsx";
+import StitchMobileEditorMock from "./StitchMobileEditorMock.jsx";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -42,7 +44,11 @@ class ErrorBoundary extends React.Component {
 }
 
 const currentPath = window.location.pathname.replace(/\/+$/, "") || "/";
-const RootComponent = currentPath === "/about" || currentPath === "/landing" ? LandingPage : App;
+const RootComponent = currentPath === "/about" || currentPath === "/landing"
+  ? LandingPage
+  : currentPath === "/stitch-mobile-mock"
+    ? StitchMobileEditorMock
+    : App;
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>

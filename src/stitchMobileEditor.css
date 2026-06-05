@@ -1,0 +1,847 @@
+.stitch-mobile-editor {
+    display: none;
+}
+
+.stitch-mobile-editor,
+.stitch-mobile-editor * {
+    box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+    .app > .desktop-editor,
+    .app > .mobile-editor {
+        display: none;
+    }
+
+    .stitch-mobile-editor {
+        --stitch-base: #131313;
+        --stitch-panel-low: #1c1b1b;
+        --stitch-panel: #201f1f;
+        --stitch-panel-high: #2a2a2a;
+        --stitch-panel-highest: #353534;
+        --stitch-outline: #434656;
+        --stitch-outline-strong: #8d90a2;
+        --stitch-blue: #2e62ff;
+        --stitch-blue-soft: #b7c4ff;
+        --stitch-green: #05e777;
+        --stitch-green-soft: #7dffa2;
+        --stitch-red: #d43237;
+        --stitch-stage-size: clamp(320px, calc(100dvw - 50px), 340px);
+        --timeline-ruler-height: 10px;
+        --timeline-lane-height: 68px;
+        --timeline-block-height: 54px;
+        --timeline-audio-height: 52px;
+        --timeline-row-label-width: 38px;
+        --timeline-workbench-height: calc(
+            var(--timeline-ruler-height) + var(--timeline-lane-height) +
+                var(--timeline-audio-height) + 14px
+        );
+        --timeline-editor-height: calc(
+            34px + 4px + var(--timeline-workbench-height) + 10px
+        );
+        --action-rail-height: 56px;
+        --mobile-bottom-padding: max(7px, env(safe-area-inset-bottom));
+        display: grid;
+        grid-template-rows: 44px calc(var(--stitch-stage-size) + 10px) var(
+                --timeline-editor-height
+            ) minmax(0, 1fr) var(--action-rail-height);
+        gap: 3px;
+        width: 100%;
+        height: calc(100dvh - 12px);
+        min-height: 0;
+        max-width: 100dvw;
+        overflow: hidden;
+        padding: 1px;
+        padding-bottom: var(--mobile-bottom-padding);
+        background: var(--stitch-base);
+        color: #f6f6f6;
+    }
+
+    .stitch-mobile-editor .mobile-status-bar {
+        position: static !important;
+        inset: auto !important;
+        transform: none !important;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr) 138px;
+        grid-template-rows: 1fr;
+        align-items: center;
+        gap: 5px;
+        min-height: 0;
+        height: 44px;
+        padding: 4px 6px;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel);
+        overflow: visible;
+    }
+
+    .stitch-mobile-editor .mobile-status-title,
+    .stitch-mobile-editor .mobile-status-meta {
+        min-width: 0;
+        display: grid;
+        gap: 1px;
+    }
+
+    .stitch-mobile-editor .mobile-status-title {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .stitch-mobile-editor .mobile-status-meta {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .stitch-mobile-editor .mobile-project-title,
+    .stitch-mobile-editor .mobile-status-meta strong {
+        overflow: hidden;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0;
+        line-height: 1.15;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .save-meta,
+    .stitch-mobile-editor .mobile-status-meta span {
+        overflow: hidden;
+        color: #b7b9c6;
+        font-size: 8.5px;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .mobile-global-actions {
+        grid-column: 3 !important;
+        grid-row: 1 !important;
+        justify-self: end !important;
+        align-self: center !important;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 3px;
+        width: 138px !important;
+        height: 32px;
+    }
+
+    .stitch-mobile-editor .top-action-group {
+        position: relative;
+    }
+
+    .stitch-mobile-editor .icon-hint-wrapper {
+        display: inline-flex;
+        flex: 0 0 auto;
+    }
+
+    .stitch-mobile-editor button,
+    .stitch-mobile-editor .file-button {
+        min-width: 0;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 4px;
+        background: var(--stitch-panel-high);
+        color: #f7f7fb;
+        font: inherit;
+    }
+
+    .stitch-mobile-editor button {
+        cursor: pointer;
+    }
+
+    .stitch-mobile-editor button:disabled {
+        cursor: not-allowed;
+        opacity: 0.46;
+    }
+
+    .stitch-mobile-editor button.primary,
+    .stitch-mobile-editor .primary {
+        border-color: rgba(5, 231, 119, 0.48);
+        background: #103720;
+        color: var(--stitch-green-soft);
+    }
+
+    .stitch-mobile-editor button.active,
+    .stitch-mobile-editor .active {
+        border-color: var(--stitch-blue);
+        background: #1c2d6f;
+        color: #fff;
+    }
+
+    .stitch-mobile-editor .danger-button {
+        border-color: rgba(212, 50, 55, 0.6);
+        color: #ffb9bd;
+    }
+
+    .stitch-mobile-editor .mobile-global-actions button,
+    .stitch-mobile-editor .stage-corner-tools button,
+    .stitch-mobile-editor .timeline-icon-button {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+    }
+
+    .stitch-mobile-editor .cool-icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    .stitch-mobile-editor .top-action-menu {
+        position: fixed;
+        top: 58px;
+        right: 4px;
+        left: auto;
+        z-index: 30;
+        width: min(222px, calc(100dvw - 12px));
+        display: grid;
+        gap: 5px;
+        padding: 7px;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel-high);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+        max-height: calc(100dvh - 112px);
+        overflow: auto;
+        pointer-events: none;
+    }
+
+    .stitch-mobile-editor .top-action-menu input {
+        pointer-events: auto;
+    }
+
+    .stitch-mobile-editor .top-action-menu button,
+    .stitch-mobile-editor .top-action-menu a,
+    .stitch-mobile-editor .top-action-menu .file-button {
+        width: 100%;
+        min-height: 30px;
+        padding: 6px 8px;
+        text-align: left;
+        text-decoration: none;
+    }
+
+    .stitch-mobile-editor .stage-area {
+        position: static !important;
+        inset: auto !important;
+        transform: none !important;
+        height: auto !important;
+        min-height: 0;
+        display: grid;
+        grid-template: none !important;
+        place-items: center;
+        padding: 5px 0;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel-low);
+        overflow: visible;
+    }
+
+    .stitch-mobile-editor .stage-frame {
+        position: relative;
+        min-height: 0;
+        width: var(--stitch-stage-size);
+        height: var(--stitch-stage-size);
+        aspect-ratio: 1 / 1;
+        max-height: 100%;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: #151515;
+        overflow: visible;
+    }
+
+    .stitch-mobile-editor .stage {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        aspect-ratio: auto !important;
+        border: 0;
+        border-radius: 0;
+        display: block;
+        touch-action: none;
+        background: #151515;
+    }
+
+    .stitch-mobile-editor .stitch-stage-base {
+        fill: #151515;
+    }
+
+    .stitch-mobile-editor .stitch-stage-front-zone {
+        fill: rgba(212, 50, 55, 0.12);
+    }
+
+    .stitch-mobile-editor .stage-grid line {
+        stroke: rgba(246, 248, 255, 0.16);
+        stroke-width: 0.12;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .stitch-mobile-editor .stage-grid line.major {
+        stroke: rgba(183, 196, 255, 0.38);
+        stroke-width: 0.34;
+    }
+
+    .stitch-mobile-editor .stage-meter-badge {
+        position: absolute;
+        z-index: 3;
+        right: 6px;
+        bottom: 6px;
+        padding: 4px 7px;
+        border: 1px solid rgba(183, 196, 255, 0.28);
+        border-radius: 7px;
+        background: rgba(10, 13, 22, 0.78);
+        color: rgba(246, 248, 255, 0.92);
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 0;
+        pointer-events: none;
+    }
+
+    .stitch-mobile-editor .stage-reference-layer line,
+    .stitch-mobile-editor .stage-reference-layer text {
+        stroke: rgba(183, 196, 255, 0.34);
+        fill: rgba(183, 196, 255, 0.58);
+        font-size: 2.55px;
+    }
+
+    .stitch-mobile-editor .transition-path-line {
+        stroke: var(--stitch-blue-soft);
+        stroke-width: 0.55;
+        stroke-linecap: round;
+        opacity: 0.82;
+    }
+
+    .stitch-mobile-editor .token {
+        cursor: grab;
+    }
+
+    .stitch-mobile-editor .token text {
+        fill: #fff;
+        font-size: 2px;
+        font-weight: 800;
+        pointer-events: none;
+    }
+
+    .stitch-mobile-editor .token circle:last-of-type {
+        stroke: #201f1f;
+        stroke-width: 0.55;
+    }
+
+    .stitch-mobile-editor .stitch-token-ring {
+        fill: rgba(46, 98, 255, 0.22);
+        stroke: var(--stitch-blue);
+        stroke-width: 0.95;
+    }
+
+    .stitch-mobile-editor .stage-corner-tools {
+        position: absolute;
+        z-index: 3;
+        top: 6px;
+        left: 6px;
+        display: none;
+        gap: 4px;
+    }
+
+    .stitch-mobile-editor .stage-view-float-toggle {
+        position: absolute;
+        z-index: 3;
+        top: 6px;
+        right: 6px;
+        display: flex;
+        overflow: hidden;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 4px;
+        background: var(--stitch-panel);
+    }
+
+    .stitch-mobile-editor .stage-view-float-toggle button {
+        width: 34px;
+        height: 28px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        font-size: 10px;
+    }
+
+    .stitch-mobile-editor .stage-3d-preview {
+        height: 100%;
+        min-height: 0;
+        border: 0;
+        border-radius: 0;
+        background: #151515;
+    }
+
+    .stitch-mobile-editor .stitch-stage-caption {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        bottom: 6px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: #dfe3ff;
+        font-size: 9px;
+        pointer-events: none;
+    }
+
+    .stitch-mobile-editor .timeline-editor {
+        position: static !important;
+        inset: auto !important;
+        transform: none !important;
+        height: 100% !important;
+        max-height: none !important;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 34px var(--timeline-workbench-height);
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel);
+        overflow: hidden;
+    }
+
+    .stitch-mobile-editor .timeline-control-rail {
+        display: grid;
+        grid-template-columns: auto minmax(48px, 1fr) auto auto;
+        align-items: center;
+        gap: 4px;
+        min-height: 34px;
+    }
+
+    .stitch-mobile-editor .timeline-transport-controls,
+    .stitch-mobile-editor .timeline-zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .stitch-mobile-editor .timeline-time-readout,
+    .stitch-mobile-editor .timeline-zoom-controls span {
+        color: #d8dcff;
+        font-size: 10px;
+        font-weight: 800;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .timeline-workbench {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: var(--timeline-ruler-height) var(
+                --timeline-lane-height
+            ) var(--timeline-audio-height);
+        gap: 5px;
+        overflow: hidden;
+    }
+
+    .stitch-mobile-editor .timeline-track-row {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: var(--timeline-row-label-width) minmax(0, 1fr);
+        align-items: stretch;
+        column-gap: 5px;
+    }
+
+    .stitch-mobile-editor .timeline-row-label {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        color: #b7b9c6;
+        font-size: 9px;
+        font-weight: 800;
+    }
+
+    .stitch-mobile-editor .timeline-viewport {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid rgba(67, 70, 86, 0.78);
+        border-radius: 4px;
+        background: #171717;
+        touch-action: pan-y;
+    }
+
+    .stitch-mobile-editor .timeline-ruler-viewport {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        overflow: visible;
+    }
+
+    .stitch-mobile-editor .timeline-content {
+        position: relative;
+        height: 100%;
+    }
+
+    .stitch-mobile-editor .audio-lane .timeline-content {
+        display: flex;
+        align-items: stretch;
+    }
+
+    .stitch-mobile-editor .audio-lane::before,
+    .stitch-mobile-editor .audio-lane::after {
+        display: none;
+        content: none;
+    }
+
+    .stitch-mobile-editor .timeline-tick,
+    .stitch-mobile-editor .timeline-playhead,
+    .stitch-mobile-editor .timeline-snapline {
+        position: absolute;
+        top: 0;
+    }
+
+    .stitch-mobile-editor .timeline-tick {
+        color: #8d90a2;
+        font-size: 8px;
+        transform: translateX(-50%);
+    }
+
+    .stitch-mobile-editor .timeline-playhead,
+    .stitch-mobile-editor .timeline-snapline {
+        bottom: 0;
+        z-index: 4;
+        width: 2px;
+        background: rgba(125, 255, 162, 0.9);
+        box-shadow: 0 0 0 1px rgba(5, 231, 119, 0.2);
+        pointer-events: none;
+    }
+
+    .stitch-mobile-editor .timeline-playhead::before {
+        display: none;
+        content: none;
+    }
+
+    .stitch-mobile-editor .timeline-snapline {
+        background: var(--stitch-blue-soft);
+    }
+
+    .stitch-mobile-editor .formation-block {
+        position: absolute;
+        left: var(--formation-left);
+        top: 50%;
+        bottom: auto;
+        width: max(92px, var(--formation-hit-width));
+        height: var(--timeline-block-height);
+        transform: translateY(-50%);
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: center;
+        column-gap: 6px;
+        row-gap: 0;
+        padding: 3px 8px;
+        border-color: rgba(183, 196, 255, 0.34);
+        background: var(--stitch-panel-high);
+        color: #f7f7fb;
+        text-align: left;
+        z-index: 2;
+    }
+
+    .stitch-mobile-editor .formation-block::before,
+    .stitch-mobile-editor .formation-block::after {
+        display: none;
+        content: none;
+    }
+
+    .stitch-mobile-editor .formation-block span {
+        grid-row: 1 / 3;
+        min-width: 0;
+        color: var(--stitch-blue-soft);
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .stitch-mobile-editor .formation-block strong {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 11px;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .formation-block em {
+        display: block;
+        grid-column: 2;
+        min-width: 0;
+        overflow: hidden;
+        color: #b7b9c6;
+        font-size: 9px;
+        font-style: normal;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .formation-block.selected {
+        border-color: var(--stitch-blue);
+        background: #1c2d6f;
+        box-shadow:
+            0 0 0 2px rgba(46, 98, 255, 0.95),
+            0 0 0 5px rgba(183, 196, 255, 0.22),
+            0 10px 22px rgba(0, 0, 0, 0.38);
+        z-index: 5;
+    }
+
+    .stitch-mobile-editor .formation-block.current:not(.selected) {
+        border-color: rgba(5, 231, 119, 0.58);
+        box-shadow: inset 0 2px 0 rgba(125, 255, 162, 0.5);
+    }
+
+    .stitch-mobile-editor .formation-resize-handle {
+        position: absolute;
+        top: 6px;
+        bottom: 6px;
+        z-index: 8;
+        width: 12px;
+        border-radius: 6px;
+        background: #f7f9ff;
+        box-shadow:
+            0 0 0 1px rgba(14, 14, 14, 0.56),
+            0 0 0 3px rgba(46, 98, 255, 0.28);
+        cursor: ew-resize;
+        touch-action: none;
+    }
+
+    .stitch-mobile-editor .formation-resize-handle.left {
+        left: 3px;
+    }
+
+    .stitch-mobile-editor .formation-resize-handle.right {
+        right: 3px;
+    }
+
+    .stitch-mobile-editor .formation-resize-handle::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 3px;
+        height: 18px;
+        border-radius: 99px;
+        background: #2e62ff;
+        transform: translate(-50%, -50%);
+    }
+
+    .stitch-mobile-editor .formation-block.blocked-left .formation-resize-handle.left,
+    .stitch-mobile-editor .formation-block.blocked-right .formation-resize-handle.right {
+        background: #ffd166;
+        box-shadow:
+            0 0 0 1px rgba(14, 14, 14, 0.56),
+            0 0 0 3px rgba(255, 209, 102, 0.28);
+    }
+
+    .stitch-mobile-editor .audio-waveform {
+        position: static;
+        inset: auto;
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex: 1 0 auto;
+        align-items: center;
+        gap: 2px;
+        padding: 5px 6px;
+        overflow: hidden;
+    }
+
+    .stitch-mobile-editor .audio-bar {
+        width: 4px;
+        border-radius: 2px 2px 0 0;
+        background: linear-gradient(
+            180deg,
+            var(--stitch-green-soft),
+            var(--stitch-green)
+        );
+        opacity: 0.78;
+    }
+
+    .stitch-mobile-editor .timeline-empty-audio {
+        display: inline-flex;
+        align-items: center;
+        height: 100%;
+        padding-left: 8px;
+        color: #8d90a2;
+        font-size: 10px;
+    }
+
+    .stitch-mobile-editor .mobile-action-bar {
+        grid-row: 5;
+        position: static !important;
+        inset: auto !important;
+        transform: none !important;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-template-columns: none;
+        grid-template-rows: 1fr;
+        gap: 4px;
+        min-height: 0;
+        height: var(--action-rail-height);
+        padding: 5px;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel);
+        overflow: hidden;
+    }
+
+    .stitch-mobile-editor .mobile-action-bar .icon-hint-wrapper,
+    .stitch-mobile-editor .mobile-action-bar button {
+        width: 100%;
+        height: 100%;
+        min-height: 44px;
+    }
+
+    .stitch-mobile-editor .mobile-action-bar button {
+        min-height: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 0 4px;
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .mobile-bottom-sheet {
+        position: fixed;
+        z-index: 60;
+        left: 4px;
+        right: 4px;
+        bottom: calc(
+            var(--action-rail-height) + var(--mobile-bottom-padding) + 12px
+        );
+        max-height: min(48dvh, 372px);
+        display: grid;
+        grid-template-rows: 34px minmax(0, 1fr);
+        border: 1px solid var(--stitch-outline);
+        border-radius: 8px;
+        background: var(--stitch-panel-high);
+        box-shadow: 0 -14px 36px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+    }
+
+    .stitch-mobile-editor .mobile-bottom-sheet.peek {
+        max-height: 38dvh;
+    }
+
+    .stitch-mobile-editor .mobile-bottom-sheet.full {
+        max-height: calc(100dvh - 12px);
+    }
+
+    .stitch-mobile-editor .bottom-sheet-head {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        border-bottom: 1px solid var(--stitch-outline);
+    }
+
+    .stitch-mobile-editor .bottom-sheet-head strong {
+        overflow: hidden;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .bottom-sheet-handle,
+    .stitch-mobile-editor .bottom-sheet-close {
+        width: 28px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+    }
+
+    .stitch-mobile-editor .bottom-sheet-handle span {
+        width: 16px;
+        height: 3px;
+        border-radius: 99px;
+        background: #8d90a2;
+    }
+
+    .stitch-mobile-editor .mobile-panel {
+        min-height: 0;
+        overflow: auto;
+        padding: 8px 8px 12px;
+    }
+
+    .stitch-mobile-editor .form-stack {
+        display: grid;
+        gap: 7px;
+    }
+
+    .stitch-mobile-editor .form-stack h2 {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.2;
+    }
+
+    .stitch-mobile-editor .performer-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 5px;
+        margin-top: 0;
+    }
+
+    .stitch-mobile-editor .performer {
+        grid-template-columns: 34px minmax(0, 1fr) 38px;
+        gap: 5px;
+        min-height: 40px;
+        padding: 4px 5px;
+        text-align: left;
+    }
+
+    .stitch-mobile-editor .performer span {
+        width: 30px;
+        height: 30px;
+        font-size: 11px;
+    }
+
+    .stitch-mobile-editor .performer input {
+        width: 100%;
+        height: 30px;
+        min-height: 0;
+        padding: 4px 7px;
+        font-size: 13px;
+    }
+
+    .stitch-mobile-editor .performer em {
+        min-width: 0;
+        padding: 4px 5px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .stitch-mobile-editor .performer.active {
+        border-color: var(--stitch-blue);
+        background: #1c2d6f;
+    }
+}
+
+@media (max-width: 420px) {
+    .stitch-mobile-editor {
+        grid-template-rows: 44px calc(var(--stitch-stage-size) + 10px) var(
+                --timeline-editor-height
+            ) minmax(0, 1fr) var(--action-rail-height);
+    }
+
+    .stitch-mobile-editor[data-selection-state="formation-selected"] .stage {
+        min-height: 0;
+    }
+}
+
+@media (min-width: 901px) {
+    .stitch-mobile-editor {
+        display: none !important;
+    }
+}

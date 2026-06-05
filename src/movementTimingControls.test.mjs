@@ -18,7 +18,7 @@ const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\
 const formationPointerDown = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?\n  \}\n\n  function onMovementKeyframePointerDown/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
-  assert.match(appSource, /label="대형 추가"/);
+  assert.match(appSource, /label="현재 시간에 대형 추가"/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
 });
 
@@ -352,15 +352,19 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(iconHintSource, /pressed,/);
   assert.match(iconHintSource, /controlProps\["aria-pressed"\] = pressed;/);
   assert.match(appSource, /\{ key: "people", icon: "users", label: "사람" \}/);
-  assert.match(appSource, /\{ key: "music", icon: "note", label: "음악" \}/);
   assert.match(appSource, /\{ key: "stage", icon: "settings", label: "무대" \}/);
   assert.match(appSource, /\{ key: "view", icon: "grid", label: "보기" \}/);
+  assert.match(appSource, /const SNAP_GRID_X = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
+  assert.match(appSource, /const SNAP_GRID_Y = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
+  assert.match(appSource, /x: nearest\(point\.x, SNAP_GRID_X\)/);
+  assert.match(appSource, /y: nearest\(point\.y, SNAP_GRID_Y\)/);
   assert.doesNotMatch(appSource, /const MOBILE_ACTIONS = \[/);
   const mobileActionGroups = appSource.match(/const MOBILE_ACTION_GROUPS = Object\.freeze\(\{[\s\S]*?\n\}\);/)?.[0] || "";
   assert.doesNotMatch(mobileActionGroups, /label: "저장"/);
   assert.doesNotMatch(mobileActionGroups, /label: "공유"/);
   assert.doesNotMatch(mobileActionGroups, /label: "다운로드"/);
   assert.doesNotMatch(mobileActionGroups, /label: "내보내기"/);
+  assert.doesNotMatch(mobileActionGroups, /label: "음악"/);
   assert.doesNotMatch(mobileActionGroups, /label: "메뉴"/);
   assert.doesNotMatch(mobileActionGroups, /label: "동선"/);
   assert.doesNotMatch(mobileActionGroups, /label: "추가"/);
@@ -425,12 +429,12 @@ test("mobile editor uses one temporary bottom sheet with explicit size presets",
 });
 
 test("mobile triggers replace panels without clearing existing stage selection", () => {
-  assert.match(appSource, /function openSelectedPerformerPanel\(performerId\)/);
-  assert.match(appSource, /selectPerformer\(performerId\);\s*openMobilePanel\(MOBILE_PANEL_KINDS\.performer, MOBILE_PANEL_SIZES\.peek\);/);
+  assert.doesNotMatch(appSource, /function openSelectedPerformerPanel\(performerId\)/);
+  assert.match(appSource, /selectPerformer\(performerId\);/);
   assert.match(appSource, /function openSelectedFormationPanel\(sectionId = selectedSectionId\)/);
   assert.match(appSource, /setSelectedSectionId\(sectionId\);\s*openMobilePanel\(MOBILE_PANEL_KINDS\.formation, MOBILE_PANEL_SIZES\.half\);/);
-  assert.match(appSource, /function openAddMobilePanel\(\)/);
-  assert.match(appSource, /openMobilePanel\(MOBILE_PANEL_KINDS\.add, MOBILE_PANEL_SIZES\.half\);/);
+  assert.doesNotMatch(appSource, /function openAddMobilePanel\(\)/);
+  assert.doesNotMatch(appSource, /MOBILE_PANEL_KINDS\.add/);
   assert.doesNotMatch(appSource, /function openMoreMobilePanel\(\)/);
   assert.doesNotMatch(appSource, /MOBILE_PANEL_KINDS\.more/);
   assert.doesNotMatch(appSource, /MOBILE_PANEL_KINDS\.share/);
