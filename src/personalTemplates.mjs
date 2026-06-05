@@ -1,3 +1,5 @@
+import { DEFAULT_STAGE_DIMENSIONS } from "./stageGeometry.mjs";
+
 export const PERSONAL_TEMPLATES_STORAGE_KEY = "movemap-personal-templates";
 
 function isPlainObject(value) {
@@ -25,8 +27,8 @@ export function normalizePersonalTemplate(template = {}) {
     source: "personal",
     createdAt,
     stage: {
-      width: Number.isFinite(template.stage?.width) ? Number(template.stage.width) : 100,
-      height: Number.isFinite(template.stage?.height) ? Number(template.stage.height) : 100
+      width: Number.isFinite(template.stage?.width) ? Number(template.stage.width) : DEFAULT_STAGE_DIMENSIONS.width,
+      height: Number.isFinite(template.stage?.height) ? Number(template.stage.height) : DEFAULT_STAGE_DIMENSIONS.height
     },
     performerIds: Array.isArray(template.performerIds) ? template.performerIds.filter(Boolean) : Object.keys(positions),
     positions
@@ -56,7 +58,7 @@ export function createPersonalTemplateFromSection(section = {}, plan = {}, optio
     id: options.id || `personal-${createdAt}`,
     label: options.label || `${section.name || "대형"} 개인 템플릿`,
     createdAt,
-    stage: plan.stage || { width: 100, height: 100 },
+    stage: plan.stage || DEFAULT_STAGE_DIMENSIONS,
     performerIds: (plan.performers || []).map((performer) => performer.id).filter(Boolean),
     positions: section.positions || {}
   });

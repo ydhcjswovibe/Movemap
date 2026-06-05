@@ -1,3 +1,5 @@
+import { DEFAULT_STAGE_DIMENSIONS } from "./stageGeometry.mjs";
+
 export function createProjectJsonDownload(plan) {
   const title = String(plan?.title || "").trim() || "movemap-project";
 
@@ -34,7 +36,7 @@ export function validateProjectImport(value) {
   }
   const stage = isPlainObject(value.stage) && Number.isFinite(value.stage.width) && Number.isFinite(value.stage.height)
     ? value.stage
-    : { width: 100, height: 100 };
+    : DEFAULT_STAGE_DIMENSIONS;
   if (!Array.isArray(value.sections) || value.sections.length === 0) {
     errors.push({ code: "invalid-sections", message: "대형 구간이 없습니다." });
   } else {

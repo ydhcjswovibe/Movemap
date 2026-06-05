@@ -72,10 +72,15 @@ function seededProject({ viewEnabled = true, editEnabled = true, editToken = "va
 }
 
 async function routeCloudProject(page, plan) {
-  await page.route(`${SUPABASE_TEST_URL}/rest/v1/movemap_projects**`, async (route) => {
+  await page.route("**/rest/v1/rpc/get_project_by_edit_token", async (route) => {
+    const payload = route.request().postDataJSON?.() || {};
+    const tokenMatches = payload.p_token === plan.shareLinks?.edit?.token;
+    await route.fulfill({ json: tokenMatches ? { id: "project-1", plan } : null });
+  });
+  await page.route("**/rest/v1/movemap_projects**", async (route) => {
     await route.fulfill({ json: [{ id: "project-1", plan }] });
   });
-  await page.route(`${SUPABASE_TEST_URL}/rest/v1/choreo_projects**`, async (route) => {
+  await page.route("**/rest/v1/choreo_projects**", async (route) => {
     await route.fulfill({ json: [] });
   });
 }
@@ -482,20 +487,25 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   expect(actionBarInitialBox).not.toBeNull();
   expect(timelineRailBox.height).toBeLessThan(48);
   expect(stageFrameBox.y).toBeGreaterThanOrEqual(0);
-  expect(Math.abs(stageFrameBox.width - stageFrameBox.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(stageFrameBox.width / stageFrameBox.height - 12 / 8)).toBeLessThan(0.05);
   expect(stageFrameBox.width).toBeGreaterThanOrEqual(320);
-  expect(stageFrameBox.height).toBeLessThanOrEqual(352);
+  expect(stageFrameBox.height).toBeLessThanOrEqual(260);
   expect(timelineEditorBox.y + timelineEditorBox.height).toBeLessThanOrEqual(actionBarInitialBox.y);
   expect(actionBarInitialBox.y + actionBarInitialBox.height).toBeLessThanOrEqual(844);
   await expect(timelineRail.getByRole("button", { name: "되돌리기" })).toBeDisabled();
   await expect(timelineRail.getByRole("button", { name: "앞으로가기" })).toBeDisabled();
   await expect(timelineRail.getByRole("button", { name: "타임라인 축소" })).toBeVisible();
   await expect(timelineRail.getByRole("button", { name: "타임라인 확대" })).toBeVisible();
-  const zoomPlusBox = await timelineRail.getByRole("button", { name: "타임라인 확대" }).boundingBox();
-  const timelineAddBox = await timelineRail.getByRole("button", { name: "현재 시간에 대형 추가" }).boundingBox();
-  expect(zoomPlusBox).not.toBeNull();
-  expect(timelineAddBox).not.toBeNull();
-  expect(timelineAddBox.x).toBeGreaterThan(zoomPlusBox.x);
+  const formsAddButton = page.locator(".forms-row .timeline-row-label").getByRole("button", { name: "대형 추가" });
+  await expect(formsAddButton).toBeVisible();
+  const formsLabelBox = await page.locator(".forms-row .timeline-row-label").boundingBox();
+  const formsAddBox = await formsAddButton.boundingBox();
+  const formationLaneBox = await page.locator(".forms-row .timeline-lane").boundingBox();
+  expect(formsLabelBox).not.toBeNull();
+  expect(formsAddBox).not.toBeNull();
+  expect(formationLaneBox).not.toBeNull();
+  expect(formsAddBox.x).toBeGreaterThanOrEqual(formsLabelBox.x);
+  expect(formsAddBox.x + formsAddBox.width).toBeLessThanOrEqual(formationLaneBox.x);
 
   const actionBar = page.locator(".mobile-action-bar");
   const globalActions = page.locator(".mobile-global-actions");
@@ -617,15 +627,17 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
 
   const mobileFormationBlocks = page.locator(".formation-block");
   await expect(mobileFormationBlocks).toHaveCount(1);
-  await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
-  await expect(mobileFormationBlocks).toHaveCount(2);
-  await expect(mobileFormationBlocks.nth(1)).toContainText("0:04.0 - 0:08.0");
+  await page.locator(".forms-row .timeline-row-label").getByRole("button", { name: "대형 추가" }).click();
+  await expect(mobileFormationBlocks).toHaveCount(3);
+  await expect(mobileFormationBlocks.nth(0)).toContainText("Hold · 4.0s");
+  await expect(mobileFormationBlocks.nth(1)).toContainText("Move · 4.0s");
+  await expect(mobileFormationBlocks.nth(2)).toContainText("Hold · 4.0s");
   await expect(timelineRail.getByRole("button", { name: "되돌리기" })).toBeEnabled();
   await timelineRail.getByRole("button", { name: "되돌리기" }).click();
   await expect(mobileFormationBlocks).toHaveCount(1);
   await expect(timelineRail.getByRole("button", { name: "앞으로가기" })).toBeEnabled();
   await timelineRail.getByRole("button", { name: "앞으로가기" }).click();
-  await expect(mobileFormationBlocks).toHaveCount(2);
+  await expect(mobileFormationBlocks).toHaveCount(3);
 
   const stageBox = await page.locator(".stage-frame").boundingBox();
   expect(stageBox).not.toBeNull();
@@ -718,7 +730,7 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
 
   await mobileFormationBlocks.nth(1).click();
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
-  await expect(page.locator(".formation-block.selected")).toContainText("0:04.0 - 0:08.0");
+  await expect(page.locator(".formation-block.selected")).toContainText("Hold · 4.0s");
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "복제" })).toHaveCount(1);
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "삭제" })).toHaveCount(1);
   await expect(page.locator(".mobile-action-bar").getByRole("button", { name: "초기화" })).toHaveCount(1);
@@ -731,6 +743,11 @@ test("mobile review and mobile toolbar routes stay usable", async ({ page }) => 
   expect(formationBlockBox).not.toBeNull();
   expect(formationBlockBox.y + formationBlockBox.height).toBeLessThanOrEqual(actionBarBox.y);
   await expect(page.locator(".selected-formation-bar")).toBeHidden();
+
+  await page.locator(".mobile-global-actions").getByRole("button", { name: "더보기" }).click();
+  await page.locator(".mobile-global-actions .more-action-menu").getByRole("button", { name: "프로젝트 선택으로 돌아가기" }).click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("button", { name: /빈 프로젝트 시작/ })).toBeVisible();
 });
 
 test("stage references templates stage size import and 3d smoke stay stable", async ({ page }) => {
@@ -751,10 +768,10 @@ test("stage references templates stage size import and 3d smoke stay stable", as
   await expect(drawer.locator("select").filter({ hasText: /개인 템플릿/ })).toHaveCount(1);
 
   await drawer.getByRole("tab", { name: "Stage" }).click();
-  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("80");
+  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("6");
   await expect(drawer.getByText(/축소할 수 없습니다/)).toBeVisible();
   await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("120");
-  await expect(page.locator(".stage")).toHaveAttribute("viewBox", "0 0 120 100");
+  await expect(page.locator(".stage")).toHaveAttribute("viewBox", "0 0 120 8");
 
   await page.getByRole("button", { name: "더보기" }).click();
   await page.locator(".desktop-command-bar .more-action-menu input[type='file'][accept='application/json']").setInputFiles({

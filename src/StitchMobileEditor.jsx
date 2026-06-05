@@ -45,6 +45,14 @@ function compactTime(seconds = 0) {
 }
 
 function blockTimeLabel(block, section) {
+  if (block?.kind === "move") {
+    const duration = Math.max(0, Number(block.displayEndTime) - Number(block.displayStartTime) || 0);
+    return `Move · ${duration.toFixed(1)}s`;
+  }
+  if (block?.kind === "hold") {
+    const duration = Math.max(0, Number(block.displayEndTime) - Number(block.displayStartTime) || 0);
+    return `Hold · ${duration.toFixed(1)}s`;
+  }
   if (Number.isFinite(block?.displayStartTime) && Number.isFinite(block?.displayEndTime)) {
     if (Math.abs(block.displayEndTime - block.displayStartTime) < 0.05) {
       return compactTime(block.displayEndTime);
@@ -110,9 +118,23 @@ function StitchStage({ model, actions }) {
   const gridX = meterTicks(stageDimensions.width);
   const gridY = meterTicks(stageDimensions.height);
   const meterLabel = model.stageSizeLabel || stageMeterLabel(stageDimensions);
+  const stageWidth = Math.max(1, Number(stageDimensions.width) || 1);
+  const stageHeight = Math.max(1, Number(stageDimensions.height) || 1);
+  const stageRatio = `${stageWidth} / ${stageHeight}`;
+  const stageFrameStyle = stageWidth >= stageHeight
+    ? {
+      "--stitch-stage-ratio": stageRatio,
+      "--stitch-stage-frame-width": "var(--stitch-stage-size)",
+      "--stitch-stage-frame-height": `calc(var(--stitch-stage-size) * ${stageHeight / stageWidth})`
+    }
+    : {
+      "--stitch-stage-ratio": stageRatio,
+      "--stitch-stage-frame-width": `calc(var(--stitch-stage-size) * ${stageWidth / stageHeight})`,
+      "--stitch-stage-frame-height": "var(--stitch-stage-size)"
+    };
 
   return (
-    <div className="stage-frame">
+    <div className="stage-frame" style={stageFrameStyle}>
       <div className="stage-corner-tools" aria-label="무대 도구">
         <IconHintButton className="icon-tool" iconName="undo" label="되돌리기" onClick={actions.undoPlan} disabled={model.undoDisabled} />
         <IconHintButton className="icon-tool" iconName="redo" label="다시 실행" onClick={actions.redoPlan} disabled={model.redoDisabled} />
@@ -238,12 +260,14 @@ function StitchTimeline({ model, actions }) {
     timelineBlockedEdge,
     timelineContentWidth,
     timelineFormationBlocks,
+    timelineVisualSegments,
     timelineScrollX,
     timelineTicks,
     waveformBars
   } = model;
   const zoomPercent = Number.parseFloat(model.timelineZoomLabel) || 100;
   const visualTimelineWidth = Math.max(timelineContentWidth, Math.round(zoomPercent * 4));
+  const visualFormationSegments = timelineVisualSegments?.length ? timelineVisualSegments : timelineFormationBlocks;
   function onPointerDown(event) {
     const bridge = pinchBridgeRef.current;
     bridge.pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
@@ -357,7 +381,6 @@ function StitchTimeline({ model, actions }) {
           <span>{model.timelineZoomLabel}</span>
           <IconHintButton className="timeline-icon-button" iconName="zoom-plus" label="타임라인 확대" onClick={() => actions.zoomTimelineBy(1.18)} />
         </div>
-        {!readonly && <IconHintButton className="secondary capture-button timeline-icon-button timeline-add-button" iconName="timer-add" label="현재 시간에 대형 추가" onClick={() => actions.addSection({ forceAppend: true })} />}
       </div>
       <div className="timeline-workbench" onClick={onWorkbenchClick}>
         <div className="timeline-track-row ruler-row" data-track-row="ruler">
@@ -371,65 +394,85 @@ function StitchTimeline({ model, actions }) {
           </div>
         </div>
         <div className="timeline-track-row forms-row" data-track-row="forms">
-          <span className="timeline-row-label">Forms</span>
+          <span className="timeline-row-label">
+            <span>Forms</span>
+            {!readonly && (
+              <button className="timeline-row-add-button" type="button" aria-label="대형 추가" title="대형 추가" onClick={() => actions.addSection({ forceAppend: true })}>
+                +
+              </button>
+            )}
+          </span>
           <div ref={formationLaneRef} className="timeline-viewport timeline-lane" {...timelineHandlers}>
             <div className="timeline-content" style={{ width: `${visualTimelineWidth}px`, transform: `translateX(${-timelineScrollX}px)` }}>
-              {sortedSections.map((section, index) => {
-                const block = timelineFormationBlocks[index];
-              if (!block) return null;
-              const selected = section.id === selectedSectionId;
-              return (
-                <button
-                  key={section.id}
-                  data-section-id={section.id}
-                  className={[
-                    "formation-block",
-                    block.isMarker ? "marker" : "segment",
-                    selected ? "selected" : "",
-                    section.id === currentSectionId ? "current" : "",
-                    timelineBlockedEdge?.sectionId === section.id ? `blocked-${timelineBlockedEdge.edge}` : ""
-                  ].filter(Boolean).join(" ")}
-                  style={{
+              {visualFormationSegments.map((block, segmentIndex) => {
+                const section = block.sectionId
+                  ? sortedSections.find((item) => item.id === block.sectionId)
+                  : sortedSections[segmentIndex];
+                if (!block || !section) return null;
+                const sectionIndex = sortedSections.findIndex((item) => item.id === section.id);
+                const isMove = block.kind === "move";
+                const isHold = block.kind === "hold" || !block.kind;
+                const canResize = block.resizable ?? (!block.isMarker && !isMove);
+                const selected = !isMove && section.id === selectedSectionId;
+                return (
+                  <button
+                    key={`${block.kind || "segment"}-${block.fromSectionId || section.id}-${block.toSectionId || section.id}-${segmentIndex}`}
+                    data-section-id={section.id}
+                    className={[
+                      "formation-block",
+                      isHold ? "hold" : "",
+                      isMove ? "move" : "",
+                      block.isMarker ? "marker" : "segment",
+                      selected ? "selected" : "",
+                      section.id === currentSectionId ? "current" : "",
+                      timelineBlockedEdge?.sectionId === section.id ? `blocked-${timelineBlockedEdge.edge}` : ""
+                    ].filter(Boolean).join(" ")}
+                    style={{
                       "--formation-left": `${block.leftPx}px`,
-                      "--formation-logical-left": `${block.logicalLeftPx}px`,
+                      "--formation-logical-left": `${block.logicalLeftPx ?? block.leftPx}px`,
                       "--formation-width": `${block.widthPx}px`,
-                      "--formation-hit-width": `${block.hitWidthPx}px`,
-                      "--formation-arrival": `${block.arrivalPx}px`
+                      "--formation-hit-width": `${block.hitWidthPx ?? block.widthPx}px`,
+                      "--formation-arrival": `${block.arrivalPx ?? block.leftPx + block.widthPx}px`
                     }}
                     onPointerDown={(event) => {
                       actions.onFormationSelect?.(section);
-                      actions.onFormationPointerDown(event, section, index, "body");
+                      if (isMove) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        return;
+                      }
+                      actions.onFormationPointerDown(event, section, sectionIndex, "body");
                     }}
                     onMouseDown={() => actions.onFormationSelect?.(section)}
-                  onClick={() => actions.onFormationSelect?.(section)}
-                >
-                  {!readonly && !block.isMarker && index > 0 && selected && (
-                    <span
-                      className="formation-resize-handle left"
-                      onPointerDown={(event) => actions.onFormationPointerDown(event, section, index, "left")}
-                      aria-label="대형 시작 트림"
-                    />
-                  )}
-                  <span>{`F${index + 1}`}</span>
-                  <strong>{section.name}</strong>
-                  <em>{blockTimeLabel(block, section)}</em>
-                  {!readonly && !block.isMarker && selected && (
-                    <span
-                      className="formation-resize-handle right"
-                      onPointerDown={(event) => actions.onFormationPointerDown(event, section, index, "right")}
-                      aria-label="대형 끝 트림"
-                    />
-                  )}
-                </button>
-              );
-            })}
+                    onClick={() => actions.onFormationSelect?.(section)}
+                  >
+                    <span>{block.label || `F${sectionIndex + 1}`}</span>
+                    <strong>{isMove ? `to ${section.name}` : section.name}</strong>
+                    <em>{blockTimeLabel(block, section)}</em>
+                    {!readonly && canResize && selected && (
+                      <span
+                        className="formation-resize-handle right"
+                        onPointerDown={(event) => actions.onFormationPointerDown(event, section, sectionIndex, "hold-right")}
+                        aria-label="대형 Hold 끝 조정"
+                      />
+                    )}
+                  </button>
+                );
+              })}
               <span className="timeline-playhead track-playhead" style={{ left: `${playheadPixel}px` }} />
               {snapPixel !== null && <span className="timeline-snapline track-snapline" style={{ left: `${snapPixel}px` }} />}
             </div>
           </div>
         </div>
         <div className="timeline-track-row audio-row" data-track-row="audio">
-          <span className="timeline-row-label">Audio</span>
+          <span className="timeline-row-label">
+            <span>Audio</span>
+            {!readonly && (
+              <button className="timeline-row-add-button" type="button" aria-label="음악 추가" title="음악 추가" onClick={actions.openAudioFilePicker}>
+                +
+              </button>
+            )}
+          </span>
           <div ref={audioLaneRef} className="timeline-viewport timeline-lane audio-lane" {...timelineHandlers}>
             <div className="timeline-content" style={{ width: `${visualTimelineWidth}px`, transform: `translateX(${-timelineScrollX}px)` }}>
               {hasUsableAudio ? (

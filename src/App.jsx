@@ -15,13 +15,13 @@ import { createEditShareUrl, createShareUrl } from "./shareUrl.mjs";
 import { LINK_TYPES, authorizeShareRoute, createEditLinkToken, linkModeFromLocation, projectWithShareLink, projectWithShareLinkEnabled } from "./shareLinks.mjs";
 import { alignSelectedPerformers, deleteSelectionTarget, duplicateSelectionTarget, moveSelectedPerformers, performerIdsForRole, togglePerformerSelection } from "./formationTools.mjs";
 import { buildTransitionPaths, longDistanceWarnings, overlapWarnings, transitionPathStyle } from "./transitionView.mjs";
-import { defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
+import { DEFAULT_FRONT_ZONE_Y, defaultStageReferences, normalizeStageReferences, renderStageReferenceSvg, stageReferenceRenderItems } from "./stageReference.mjs";
 import { FORMATION_TEMPLATES, applyTemplatePositionsToSection, buildFormationTemplatePreview } from "./formationTemplates.mjs";
 import { createPersonalTemplateFromSection, loadPersonalTemplates, personalTemplateToPreview, savePersonalTemplates } from "./personalTemplates.mjs";
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
-import { STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
 import {
   applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
@@ -32,6 +32,7 @@ import {
   clampValue,
   formationTimelineLabel,
   layoutFormationBlocks,
+  layoutTimelineVisualSegments,
   movementKeyframeTime,
   movementKeyframePositions,
   normalizeWheelDelta,
@@ -123,8 +124,8 @@ const TOKEN_RADIUS = 4.2;
 const SELECTED_RING_RADIUS = 5.35;
 const PAIR_RING_RADIUS = 4.45;
 const SELECTED_PAIR_RING_RADIUS = 4.9;
-const GRID_X = STAGE_GRID_X;
-const GRID_Y = STAGE_GRID_Y;
+const GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
+const GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const SNAP_GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const SNAP_GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 
@@ -381,8 +382,8 @@ function defaultSections(performers) {
     const col = index % Math.ceil(count / 2);
     const row = Math.floor(index / Math.ceil(count / 2));
     firstPositions[performer.id] = {
-      x: 18 + col * (64 / Math.max(1, Math.ceil(count / 2) - 1 || 1)),
-      y: row === 0 ? 70 : 42
+      x: DEFAULT_STAGE_DIMENSIONS.width * 0.18 + col * (DEFAULT_STAGE_DIMENSIONS.width * 0.64 / Math.max(1, Math.ceil(count / 2) - 1 || 1)),
+      y: row === 0 ? DEFAULT_FRONT_ZONE_Y : DEFAULT_STAGE_DIMENSIONS.height * 0.42
     };
   });
 
@@ -431,8 +432,8 @@ function createProject({ title, performanceType, groupACount, groupBCount, names
     sections: defaultSections(performers),
     partnerSets: [],
     stage: normalizeStageDimensions(),
-    frontZone: { y: 70 },
-    stageReferences: defaultStageReferences({ y: 70 }),
+    frontZone: { y: DEFAULT_FRONT_ZONE_Y },
+    stageReferences: defaultStageReferences({ y: DEFAULT_FRONT_ZONE_Y }),
     localProjectId: uid("project"),
     owner: { sessionId: "", createdAt: "" },
     account: { plan: "guest" },
@@ -818,6 +819,7 @@ function App() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const audioRef = useRef(null);
+  const stitchAudioFileInputRef = useRef(null);
   const svgRef = useRef(null);
   const timelineViewportRef = useRef(null);
   const timelineGestureRef = useRef({ pointers: new Map(), mode: "" });
@@ -828,6 +830,7 @@ function App() {
   const formationLongPressTimerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
+  const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
 
   function closeTopActionMenu() {
@@ -935,6 +938,7 @@ function App() {
       if (options.clearWhenMissing) {
         setAudioSrc("");
         setAudioUploadStatus("idle");
+        pendingServerAudioLocalUrlRef.current = "";
       }
       return false;
     }
@@ -942,6 +946,7 @@ function App() {
       URL.revokeObjectURL(localAudioUrlRef.current);
       localAudioUrlRef.current = "";
     }
+    pendingServerAudioLocalUrlRef.current = "";
     setAudioSrc(restoredAudioUrl);
     setAudioUploadStatus("uploaded");
     return true;
@@ -1014,6 +1019,7 @@ function App() {
 
   useEffect(() => () => {
     if (localAudioUrlRef.current) URL.revokeObjectURL(localAudioUrlRef.current);
+    pendingServerAudioLocalUrlRef.current = "";
   }, []);
 
   useEffect(() => {
@@ -1058,6 +1064,10 @@ function App() {
     introAsSegment: true,
     markerWidthPx: 132,
     markerGapPx: 8
+  }), [sortedSections, timelinePixelsPerSecond]);
+  const timelineVisualSegments = useMemo(() => layoutTimelineVisualSegments(sortedSections, timelinePixelsPerSecond, {
+    defaultLastHoldSeconds: 4,
+    minSegmentWidthPx: 28
   }), [sortedSections, timelinePixelsPerSecond]);
   const timelineReorderGuide = useMemo(() => {
     if (!timelineReorderPreview) return null;
@@ -1641,6 +1651,7 @@ function App() {
     const startClientX = event.clientX;
     const startArrival = pointTime(section);
     const startMoveStart = pointMoveStart(section);
+    const startHoldEnd = sortedSections[index + 1] ? pointMoveStart(sortedSections[index + 1]) : startArrival;
     const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasDragged = false;
@@ -1703,14 +1714,15 @@ function App() {
         return;
       }
 
-      if (mode === "right") {
-        const rawEnd = startArrival + deltaTime;
+      if (mode === "right" || mode === "hold-right") {
+        const rawEnd = (mode === "hold-right" ? startHoldEnd : startArrival) + deltaTime;
         const rightLimit = Math.max(timelineMax, rawEnd);
-        const snap = snapTimelineTime(rawEnd, section, startMoveStart, rightLimit);
+        const rightStart = mode === "hold-right" ? startArrival : startMoveStart;
+        const snap = snapTimelineTime(rawEnd, section, rightStart, rightLimit);
         setTimelineSnapTime(snap.snapped ? snap.time : null);
         const result = applyFormationTimelineEdit({
           sections: sortedSections,
-          action: "trim-right",
+          action: mode === "hold-right" ? "trim-hold-right" : "trim-right",
           sectionId: section.id,
           time: snap.time,
           timelineMax: Math.max(timelineMax, snap.time)
@@ -2918,6 +2930,9 @@ function App() {
         URL.revokeObjectURL(localAudioUrlRef.current);
         localAudioUrlRef.current = "";
       }
+      const localUrl = URL.createObjectURL(file);
+      localAudioUrlRef.current = localUrl;
+      pendingServerAudioLocalUrlRef.current = localUrl;
       setAudioSrc(restoredAudioUrl);
       setAudioUploadStatus("uploaded");
       setStatus(`이미 저장된 서버 음악을 다시 연결했습니다: ${plan.audio.fileName || file.name}`);
@@ -2925,13 +2940,12 @@ function App() {
       return;
     }
     let localUrl = "";
-    if (!replacingAudio) {
-      if (localAudioUrlRef.current) URL.revokeObjectURL(localAudioUrlRef.current);
-      localUrl = URL.createObjectURL(file);
-      localAudioUrlRef.current = localUrl;
-      rejectedAudioUrlsRef.current = new Set();
-      setAudioSrc(localUrl);
-    }
+    if (localAudioUrlRef.current) URL.revokeObjectURL(localAudioUrlRef.current);
+    localUrl = URL.createObjectURL(file);
+    localAudioUrlRef.current = localUrl;
+    pendingServerAudioLocalUrlRef.current = localUrl;
+    rejectedAudioUrlsRef.current = new Set();
+    setAudioSrc(localUrl);
     setAudioUploadStatus("uploading");
     setStatus(replacingAudio ? "새 음악으로 교체하는 중..." : "음악을 선택했습니다. 서버에 업로드하는 중...");
     setStatusRecovery("");
@@ -2942,10 +2956,6 @@ function App() {
       setAudioSrc(resolveAudioUrl(audio));
       setAudioUploadStatus("uploaded");
       setStatus(`음악 저장됨: ${audio.fileName}`);
-      if (localAudioUrlRef.current) {
-        URL.revokeObjectURL(localAudioUrlRef.current);
-        localAudioUrlRef.current = "";
-      }
       event.target.value = "";
     } catch (error) {
       setAudioUploadStatus("failed");
@@ -3382,16 +3392,21 @@ function App() {
             <input type="file" accept="audio/*" onChange={handleAudioFile} disabled={audioUploadStatus === "uploading"} />
           </label>
         )}
-        <button onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>
+        <button type="button" onClick={returnToProjectPicker}>프로젝트 선택으로 돌아가기</button>
         <label className="file-button tertiary">불러오기<input type="file" accept="application/json" onChange={importJson} /></label>
       </div>
     );
   }
 
   function returnToProjectPicker() {
+    if (window.location.pathname !== "/") {
+      window.history.replaceState(null, "", "/");
+    }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     setPlan(null);
+    setEditLinkAuthorized(false);
+    setShareRouteBlocked("");
     setSelectedSectionId("");
     setSelectedPerformerId("");
     setSelectedPairKey("");
@@ -3410,6 +3425,7 @@ function App() {
       URL.revokeObjectURL(localAudioUrlRef.current);
       localAudioUrlRef.current = "";
     }
+    pendingServerAudioLocalUrlRef.current = "";
     setStatus("프로젝트 선택 화면으로 돌아왔습니다.");
   }
 
@@ -4168,6 +4184,7 @@ function App() {
     timelineContentWidth,
     timelineBlockedEdge,
     timelineFormationBlocks,
+    timelineVisualSegments,
     timelineScrollX,
     timelineTicks,
     timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
@@ -4207,6 +4224,13 @@ function App() {
     onTimelinePointerMove,
     onTimelinePointerUp,
     onTimelineWheel,
+    openAudioFilePicker: () => {
+      if (audioUploadStatus === "uploading") return;
+      if (stitchAudioFileInputRef.current) {
+        stitchAudioFileInputRef.current.value = "";
+        stitchAudioFileInputRef.current.click();
+      }
+    },
     openTopActionMenu,
     redoPlan,
     renderDownloadMenu,
@@ -4876,41 +4900,6 @@ function App() {
                 {playheadPixel >= 0 && playheadPixel <= timelineViewportWidth && <span className="timeline-playhead" style={{ left: `${playheadPixel}px` }} />}
               </div>
             </div>
-            <audio
-              ref={audioRef}
-              src={audioSrc || undefined}
-              onLoadedMetadata={syncAudioTime}
-              onDurationChange={syncAudioTime}
-              onTimeUpdate={syncAudioTime}
-              onSeeking={syncAudioTime}
-              onSeeked={syncAudioTime}
-              onPlay={() => {
-                setIsPlaying(true);
-                syncAudioTime();
-              }}
-              onPause={() => {
-                setIsPlaying(false);
-                syncAudioTime();
-              }}
-              onEnded={() => {
-                setIsPlaying(false);
-                syncAudioTime();
-              }}
-              onError={() => {
-                rejectedAudioUrlsRef.current.add(audioSrc);
-                const fallbackUrl = nextAudioSourceCandidate(plan.audio, supabaseConfig(), [...rejectedAudioUrlsRef.current]);
-                if (fallbackUrl) {
-                  setAudioSrc(fallbackUrl);
-                  setAudioUploadStatus("uploaded");
-                  setStatus("저장된 Storage 경로로 음악을 다시 연결합니다.");
-                  setStatusRecovery("");
-                  return;
-                }
-                setAudioUploadStatus(plan.audio?.storagePath || plan.audio?.publicUrl ? "failed" : "idle");
-                setStatusRecovery("audio");
-                setStatus("음악 URL을 불러오지 못했습니다. 다시 음악을 불러오세요.");
-              }}
-            />
           </div>
           {selectedSection && (
             <div className="selected-formation-bar">
@@ -4992,6 +4981,69 @@ function App() {
           </div>
         )}
       </section>}
+
+      {isStitchMobileViewport && !readonly && (
+        <input
+          ref={stitchAudioFileInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleAudioFile}
+          disabled={audioUploadStatus === "uploading"}
+          hidden
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+      )}
+
+      <audio
+        ref={audioRef}
+        src={audioSrc || undefined}
+        onLoadedMetadata={() => {
+          syncAudioTime();
+          if (audioSrc && audioSrc !== pendingServerAudioLocalUrlRef.current && pendingServerAudioLocalUrlRef.current === localAudioUrlRef.current) {
+            URL.revokeObjectURL(localAudioUrlRef.current);
+            localAudioUrlRef.current = "";
+            pendingServerAudioLocalUrlRef.current = "";
+          }
+        }}
+        onDurationChange={syncAudioTime}
+        onTimeUpdate={syncAudioTime}
+        onSeeking={syncAudioTime}
+        onSeeked={syncAudioTime}
+        onPlay={() => {
+          setIsPlaying(true);
+          syncAudioTime();
+        }}
+        onPause={() => {
+          setIsPlaying(false);
+          syncAudioTime();
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          syncAudioTime();
+        }}
+        onError={() => {
+          rejectedAudioUrlsRef.current.add(audioSrc);
+          if (pendingServerAudioLocalUrlRef.current && audioSrc !== pendingServerAudioLocalUrlRef.current) {
+            setAudioSrc(pendingServerAudioLocalUrlRef.current);
+            setAudioUploadStatus("uploaded");
+            setStatus("이 브라우저에서는 로컬 음악으로 재생합니다.");
+            setStatusRecovery("");
+            return;
+          }
+          const fallbackUrl = nextAudioSourceCandidate(plan.audio, supabaseConfig(), [...rejectedAudioUrlsRef.current]);
+          if (fallbackUrl) {
+            setAudioSrc(fallbackUrl);
+            setAudioUploadStatus("uploaded");
+            setStatus("저장된 Storage 경로로 음악을 다시 연결합니다.");
+            setStatusRecovery("");
+            return;
+          }
+          setAudioUploadStatus(plan.audio?.storagePath || plan.audio?.publicUrl ? "failed" : "idle");
+          setStatusRecovery("audio");
+          setStatus("음악 URL을 불러오지 못했습니다. 다시 음악을 불러오세요.");
+        }}
+      />
 
       {isStitchMobileViewport && <StitchMobileEditor actions={stitchEditorActions} model={stitchEditorModel} />}
 

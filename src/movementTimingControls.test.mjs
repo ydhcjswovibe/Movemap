@@ -7,6 +7,7 @@ const styleSource = readFileSync(new URL("./styles.css", import.meta.url), "utf8
 const coolIconSource = readFileSync(new URL("./icons/CoolIcon.jsx", import.meta.url), "utf8");
 const iconHintSource = readFileSync(new URL("./IconHintButton.jsx", import.meta.url), "utf8");
 const topActionDropdownSource = readFileSync(new URL("./TopActionDropdown.jsx", import.meta.url), "utf8");
+const stitchSource = readFileSync(new URL("./StitchMobileEditor.jsx", import.meta.url), "utf8");
 const attributionSource = readFileSync(new URL("../docs/third-party-attribution.md", import.meta.url), "utf8");
 const selectedFormationStart = appSource.indexOf("<div className=\"selected-formation-bar\">");
 const selectedFormationEnd = appSource.indexOf("\n          )}\n        </section>", selectedFormationStart);
@@ -18,7 +19,7 @@ const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\
 const formationPointerDown = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?\n  \}\n\n  function onMovementKeyframePointerDown/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
-  assert.match(appSource, /label="현재 시간에 대형 추가"/);
+  assert.match(stitchSource, /aria-label="대형 추가"/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
 });
 
@@ -42,23 +43,51 @@ test("icon hint button centralizes icon labels and compact hints", () => {
 });
 
 test("timeline controls use a single icon rail", () => {
-  const railSource = appSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench">/)?.[0] || "";
+  const railSource = stitchSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
 
   assert.match(railSource, /IconHintButton/);
   assert.match(railSource, /iconName=\{isPlaying \? "pause" : "play"\}/);
   assert.match(railSource, /iconName="undo"/);
   assert.match(railSource, /iconName="redo"/);
-  assert.match(railSource, /iconName="timer-add"/);
   assert.match(railSource, /iconName="zoom-minus"/);
   assert.match(railSource, /iconName="zoom-plus"/);
   assert.match(railSource, /className="timeline-time-readout"/);
-  assert.match(railSource, /className="secondary capture-button timeline-icon-button timeline-add-button"/);
+  assert.doesNotMatch(railSource, /label="현재 시간에 대형 추가"/);
+  assert.doesNotMatch(railSource, /timeline-add-button/);
   assert.doesNotMatch(railSource, />대형 추가<\/button>/);
   assert.match(appSource, /function onTimelinePointerDown\(event\)/);
   assert.match(appSource, /function onTimelinePointerMove\(event\)/);
   assert.match(appSource, /function onTimelinePointerUp\(event\)/);
   assert.match(styleSource, /\.timeline-control-rail/);
   assert.match(styleSource, /flex-wrap: nowrap/);
+});
+
+test("Stitch timeline exposes row-local add buttons for forms and audio", () => {
+  const formsRowSource = stitchSource.match(/<div className="timeline-track-row forms-row"[\s\S]*?<div ref=\{formationLaneRef\}/)?.[0] || "";
+  const audioRowSource = stitchSource.match(/<div className="timeline-track-row audio-row"[\s\S]*?<div ref=\{audioLaneRef\}/)?.[0] || "";
+  const controlRailSource = stitchSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
+
+  assert.match(formsRowSource, /<span>Forms<\/span>/);
+  assert.match(formsRowSource, /className="timeline-row-add-button"/);
+  assert.match(formsRowSource, /aria-label="대형 추가"/);
+  assert.match(formsRowSource, /title="대형 추가"/);
+  assert.match(formsRowSource, /actions\.addSection\(\{ forceAppend: true \}\)/);
+  assert.match(formsRowSource, />\s*\+\s*<\/button>/);
+  assert.match(audioRowSource, /<span>Audio<\/span>/);
+  assert.match(audioRowSource, /className="timeline-row-add-button"/);
+  assert.match(audioRowSource, /aria-label="음악 추가"/);
+  assert.match(audioRowSource, /title="음악 추가"/);
+  assert.match(audioRowSource, /actions\.openAudioFilePicker/);
+  assert.doesNotMatch(controlRailSource, /현재 시간에 대형 추가/);
+  assert.doesNotMatch(controlRailSource, /timeline-add-button/);
+});
+
+test("Stitch Hold resize starts from the rendered hold end", () => {
+  const pointerSource = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?window\.addEventListener\("pointermove", onPointerMove\);/)?.[0] || "";
+
+  assert.match(pointerSource, /const startHoldEnd = sortedSections\[index \+ 1\] \? pointMoveStart\(sortedSections\[index \+ 1\]\) : startArrival;/);
+  assert.match(pointerSource, /const rawEnd = \(mode === "hold-right" \? startHoldEnd : startArrival\) \+ deltaTime;/);
+  assert.match(pointerSource, /action: mode === "hold-right" \? "trim-hold-right" : "trim-right"/);
 });
 
 test("mobile timeline keeps formation blocks compact and readable", () => {
@@ -291,7 +320,8 @@ test("top actions expose save share and tools without legacy tabs", () => {
   assert.match(topActionDropdownSource, /document\.addEventListener\("pointerdown", closeOnOutsidePointerDown\);/);
   assert.match(appSource, /const \[topActionMenu, setTopActionMenu\] = useState\(""\);/);
   assert.match(appSource, /const \[topActionSurface, setTopActionSurface\] = useState\(""\);/);
-  assert.match(appSource, /<button onClick=\{returnToProjectPicker\}>프로젝트 선택으로 돌아가기<\/button>/);
+  assert.match(appSource, /<button type="button" onClick=\{returnToProjectPicker\}>프로젝트 선택으로 돌아가기<\/button>/);
+  assert.match(appSource, /window\.history\.replaceState\(null, "", "\/"\);/);
   assert.match(appSource, /localStorage\.removeItem\(STORAGE_KEY\);/);
   assert.match(appSource, /renderShareMenu\(\)/);
   assert.match(appSource, /renderDownloadMenu\(\)/);
@@ -354,6 +384,8 @@ test("mobile compression uses Coolicons with Wanted-inspired local tokens", () =
   assert.match(appSource, /\{ key: "people", icon: "users", label: "사람" \}/);
   assert.match(appSource, /\{ key: "stage", icon: "settings", label: "무대" \}/);
   assert.match(appSource, /\{ key: "view", icon: "grid", label: "보기" \}/);
+  assert.match(appSource, /const GRID_X = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
+  assert.match(appSource, /const GRID_Y = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
   assert.match(appSource, /const SNAP_GRID_X = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
   assert.match(appSource, /const SNAP_GRID_Y = buildMeterGrid\(STAGE_DIMENSION_LIMITS\.max\);/);
   assert.match(appSource, /x: nearest\(point\.x, SNAP_GRID_X\)/);

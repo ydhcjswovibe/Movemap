@@ -6,6 +6,7 @@ import {
   applyTemplatePositionsToSection,
   buildFormationTemplatePreview
 } from "./formationTemplates.mjs";
+import { DEFAULT_STAGE_DIMENSIONS } from "./stageGeometry.mjs";
 
 const performers = [
   { id: "lead" },
@@ -15,7 +16,7 @@ const performers = [
   { id: "wing" }
 ];
 
-function assertBoundedPositions(positions, stage = { width: 100, height: 100 }) {
+function assertBoundedPositions(positions, stage = DEFAULT_STAGE_DIMENSIONS) {
   for (const position of Object.values(positions)) {
     assert.ok(position.x >= 0 && position.x <= stage.width, `x ${position.x} is bounded`);
     assert.ok(position.y >= 0 && position.y <= stage.height, `y ${position.y} is bounded`);
@@ -40,7 +41,7 @@ test("template previews are deterministic and include stable provenance", () => 
   assert.deepEqual(first.provenance, {
     kind: "template",
     templateId: "v",
-    stage: { width: 100, height: 100 },
+    stage: DEFAULT_STAGE_DIMENSIONS,
     performerCount: performers.length
   });
 });

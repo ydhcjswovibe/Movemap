@@ -77,6 +77,27 @@ function trimFormationRightEdit(normalized, sectionId, index, time) {
   return { sections: normalizeFormationSections(nextSections), selectedSectionId: sectionId, statusKind: "updated" };
 }
 
+function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
+  const nextSection = normalized[index + 1] || null;
+  if (!nextSection) return blockedFormationEdit(normalized, sectionId);
+
+  const current = normalized[index];
+  const currentArrival = quantizeTimelineTime(pointTime(current));
+  const nextArrival = quantizeTimelineTime(pointTime(nextSection));
+  const holdEnd = quantizeTimelineTime(clampValue(Number(time) || 0, currentArrival, nextArrival));
+  const nextSections = normalized.map((item) => (
+    item.id === nextSection.id ? applySectionTiming(item, holdEnd, nextArrival) : item
+  ));
+  return {
+    sections: normalizeFormationSections(nextSections),
+    selectedSectionId: sectionId,
+    statusKind: "updated",
+    start: currentArrival,
+    end: holdEnd,
+    duration: quantizeTimelineDelta(holdEnd - currentArrival)
+  };
+}
+
 function bodyDragBounds(current, previousSection, nextSection, timelineMax) {
   const duration = quantizeTimelineDelta(pointMoveDuration(current));
   const start = quantizeTimelineTime(pointMoveStart(current));
@@ -188,6 +209,10 @@ export function applyFormationTimelineEdit({
 
   if (action === "trim-right") {
     return trimFormationRightEdit(normalized, sectionId, index, time);
+  }
+
+  if (action === "trim-hold-right") {
+    return trimFormationHoldRightEdit(normalized, sectionId, index, time);
   }
 
   if (action === "move-body") {

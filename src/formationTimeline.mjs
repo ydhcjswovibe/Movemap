@@ -131,6 +131,60 @@ export function layoutFormationBlocks(sections = [], pixelsPerSecond, options = 
   });
 }
 
+export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, options = {}) {
+  const defaultLastHoldSeconds = Math.max(0, Number(options.defaultLastHoldSeconds) || 4);
+  const minSegmentWidthPx = Math.max(0, Number(options.minSegmentWidthPx) || 0);
+  const sortedSections = sortFormationSections(sections);
+  const scale = Math.max(0, Number(pixelsPerSecond) || 0);
+  const segments = [];
+
+  sortedSections.forEach((section, index) => {
+    const nextSection = sortedSections[index + 1] || null;
+    const arrivalTime = pointTime(section);
+    const holdStartTime = index === 0 ? pointMoveStart(section) : arrivalTime;
+    const holdEndTime = nextSection
+      ? Math.max(holdStartTime, pointMoveStart(nextSection))
+      : quantizeTimelineTime(holdStartTime + defaultLastHoldSeconds);
+    const holdWidthPx = timeToPixels(holdEndTime - holdStartTime, scale);
+    segments.push({
+      kind: "hold",
+      sectionId: section.id,
+      fromSectionId: section.id,
+      toSectionId: section.id,
+      displayStartTime: holdStartTime,
+      displayEndTime: holdEndTime,
+      leftPx: timeToPixels(holdStartTime, scale),
+      widthPx: holdWidthPx,
+      hitWidthPx: Math.max(holdWidthPx, minSegmentWidthPx),
+      label: formationTimelineLabel(index),
+      isLastHold: !nextSection,
+      resizable: Boolean(nextSection)
+    });
+
+    if (!nextSection) return;
+
+    const moveStartTime = holdEndTime;
+    const moveEndTime = Math.max(moveStartTime, pointTime(nextSection));
+    const moveWidthPx = timeToPixels(moveEndTime - moveStartTime, scale);
+    segments.push({
+      kind: "move",
+      sectionId: nextSection.id,
+      fromSectionId: section.id,
+      toSectionId: nextSection.id,
+      displayStartTime: moveStartTime,
+      displayEndTime: moveEndTime,
+      leftPx: timeToPixels(moveStartTime, scale),
+      widthPx: moveWidthPx,
+      hitWidthPx: Math.max(moveWidthPx, minSegmentWidthPx),
+      label: "Move",
+      isLastHold: false,
+      resizable: false
+    });
+  });
+
+  return segments;
+}
+
 export function resolveFormationAddTarget(sections, captureTime, options = {}) {
   const existingTolerance = Math.max(0, Number(options.existingTolerance) || 0.15);
   const sortedSections = [...(sections || [])].sort((a, b) => pointTime(a) - pointTime(b));

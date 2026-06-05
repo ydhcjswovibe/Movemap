@@ -72,3 +72,19 @@ test("keeps local audio usable when server upload fails", () => {
   assert.match(uploadFailure, /setStatusRecovery\(replacingAudio \? "audio" : ""\);/);
   assert.match(uploadFailure, /서버 저장은 실패했지만 이 브라우저에서는 음악을 들으며 편집할 수 있습니다/);
 });
+
+test("keeps selected local audio as fallback until uploaded server audio loads", () => {
+  const handleAudioFile = appSource.match(/async function handleAudioFile\(event\) \{[\s\S]*?\n  \}/)?.[0] || "";
+  const uploadSuccess = handleAudioFile.match(/const audio = await uploadAudioToSupabase[\s\S]*?event\.target\.value = "";/)?.[0] || "";
+  const audioElementIndex = appSource.indexOf("<audio");
+  const stitchEditorIndex = appSource.indexOf("<StitchMobileEditor");
+
+  assert.match(handleAudioFile, /localUrl = URL\.createObjectURL\(file\);/);
+  assert.match(handleAudioFile, /pendingServerAudioLocalUrlRef\.current = localUrl;/);
+  assert.match(handleAudioFile, /audioMatchesFile\(plan\.audio, file, fingerprint\)[\s\S]*?const localUrl = URL\.createObjectURL\(file\);[\s\S]*?pendingServerAudioLocalUrlRef\.current = localUrl;[\s\S]*?setAudioSrc\(restoredAudioUrl\);/);
+  assert.doesNotMatch(uploadSuccess, /URL\.revokeObjectURL\(localAudioUrlRef\.current\);/);
+  assert.match(appSource, /onLoadedMetadata=\{\(\) => \{[\s\S]*?pendingServerAudioLocalUrlRef\.current === localAudioUrlRef\.current[\s\S]*?URL\.revokeObjectURL\(localAudioUrlRef\.current\);/);
+  assert.match(appSource, /onError=\{\(\) => \{[\s\S]*?setAudioSrc\(pendingServerAudioLocalUrlRef\.current\);[\s\S]*?이 브라우저에서는 로컬 음악으로 재생합니다/);
+  assert.ok(audioElementIndex >= 0, "shared audio element should render in the app root");
+  assert.ok(audioElementIndex < stitchEditorIndex, "shared audio element should be available before the Stitch mobile editor");
+});

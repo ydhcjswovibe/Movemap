@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_STAGE_DIMENSIONS,
   canResizeStage,
   clientPointToStage,
   collectOutOfBoundsStageItems,
@@ -10,9 +11,14 @@ import {
 } from "./stageGeometry.mjs";
 
 test("normalizes stage dimensions and builds the svg viewBox", () => {
+  assert.deepEqual(DEFAULT_STAGE_DIMENSIONS, { width: 12, height: 8 });
+  assert.deepEqual(normalizeStageDimensions(), { width: 12, height: 8 });
+  assert.equal(stageViewBox(), "0 0 12 8");
   assert.deepEqual(normalizeStageDimensions({ width: 128, height: 84 }), { width: 128, height: 84 });
-  assert.deepEqual(normalizeStageDimensions({ width: 4, height: 999 }), { width: 40, height: 200 });
+  assert.deepEqual(normalizeStageDimensions({ width: 5, height: 6 }), { width: 5, height: 6 });
+  assert.deepEqual(normalizeStageDimensions({ width: 0, height: 999 }), { width: 1, height: 200 });
   assert.equal(stageViewBox({ width: 128, height: 84 }), "0 0 128 84");
+  assert.equal(stageViewBox({ width: 5, height: 6 }), "0 0 5 6");
 });
 
 test("stage shrink blocks performers and references outside the new bounds", () => {

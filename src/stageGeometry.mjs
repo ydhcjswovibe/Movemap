@@ -1,9 +1,9 @@
-export const DEFAULT_STAGE_DIMENSIONS = Object.freeze({ width: 100, height: 100 });
+export const DEFAULT_STAGE_DIMENSIONS = Object.freeze({ width: 12, height: 8 });
 
 export const STAGE_DIMENSION_LIMITS = Object.freeze({
-  min: 40,
+  min: 1,
   max: 200,
-  step: 5
+  step: 1
 });
 
 function finiteNumber(value, fallback) {

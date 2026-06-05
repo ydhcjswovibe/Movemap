@@ -30,6 +30,7 @@ export {
   formationTimelineLabel,
   formationTimelinePixels,
   layoutFormationBlocks,
+  layoutTimelineVisualSegments,
   resolveFormationAddTarget,
   snapFormationTime
 } from "./formationTimeline.mjs";

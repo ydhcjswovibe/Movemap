@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_FRONT_ZONE_Y,
   defaultStageReferences,
   normalizeStageReferences,
   renderStageReferenceSvg,
@@ -10,8 +11,12 @@ import {
 } from "./stageReference.mjs";
 
 test("creates default fixed stage reference marks from the front zone", () => {
+  const defaultReferences = defaultStageReferences();
   const references = defaultStageReferences({ y: 64 });
 
+  assert.equal(DEFAULT_FRONT_ZONE_Y, 5.6);
+  assert.equal(defaultReferences.find((reference) => reference.id === "center-line").x1, 6);
+  assert.equal(defaultReferences.find((reference) => reference.id === "front-line").y1, 5.6);
   assert.equal(references.length, 4);
   assert.equal(references.find((reference) => reference.id === "front-line").y1, 64);
   assert.equal(references.find((reference) => reference.id === "left-hash").y, 64);

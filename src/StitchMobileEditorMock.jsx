@@ -26,12 +26,12 @@ export default function StitchMobileEditorMock() {
     activeMobilePanelActionKey: panelOpen ? "people" : "",
     activeSection: selectedSection,
     activeSectionName: selectedSection.name,
-    activeTransitionPaths: [{ context: "next", performerId: "p1", from: { x: 20, y: 24 }, to: { x: 72, y: 64 } }],
+    activeTransitionPaths: [{ context: "next", performerId: "p1", from: { x: 1, y: 1.5 }, to: { x: 4, y: 4.5 } }],
     arrivalLabel: "0:16.0",
     currentSectionId: selectedSection.id,
     dragPositions: null,
     focusedPerformerIds: selectedPerformerId ? [selectedPerformerId] : [],
-    frontZone: { y: 70 },
+    frontZone: { y: 4.2 },
     globalActions: [
       { key: "save", icon: "save", label: "저장" },
       { key: "share", icon: "share", label: "공유" },
@@ -63,9 +63,9 @@ export default function StitchMobileEditorMock() {
     snapPixel: null,
     sortedSections: sections,
     stage3dProjection: null,
-    stageDimensions: { width: 100, height: 100 },
+    stageDimensions: { width: 5, height: 6 },
     stageReferences: [],
-    stageSizeLabel: "100m x 100m",
+    stageSizeLabel: "5m x 6m",
     stageViewMode: "2d",
     timeLabel: "0:08.0",
     timelineContentWidth: 620,
@@ -84,10 +84,10 @@ export default function StitchMobileEditorMock() {
     transitionPathCount: 1,
     undoDisabled: true,
     visiblePositions: {
-      p1: { x: 20, y: 24 },
-      p2: { x: 42, y: 42 },
-      p3: { x: 62, y: 40 },
-      p4: { x: 78, y: 62 }
+      p1: { x: 1, y: 1.5 },
+      p2: { x: 2.2, y: 2.5 },
+      p3: { x: 3.3, y: 2.4 },
+      p4: { x: 4.1, y: 4.4 }
     },
     waveformBars: Array.from({ length: 32 }, (_, index) => 0.35 + (index % 5) * 0.12)
   }), [panelOpen, selectedPerformerId, selectedSection, selectedSectionId]);
@@ -118,6 +118,7 @@ export default function StitchMobileEditorMock() {
     onTimelinePointerMove: () => {},
     onTimelinePointerUp: () => {},
     onTimelineWheel: () => {},
+    openAudioFilePicker: () => {},
     openTopActionMenu: () => {},
     redoPlan: () => {},
     renderDownloadMenu: () => <div className="top-action-menu download-action-menu"><button>현재 PNG</button></div>,

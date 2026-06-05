@@ -55,8 +55,8 @@ async function expectVisibleMeterGrid(page) {
   await expect(editor.locator(".stage-meter-badge")).toHaveText(/\d+m x \d+m/);
   const grid = editor.locator(".stage-grid line");
   const major = editor.locator(".stage-grid line.major");
-  expect(await grid.count()).toBeGreaterThanOrEqual(120);
-  expect(await major.count()).toBeGreaterThanOrEqual(20);
+  expect(await grid.count()).toBeGreaterThanOrEqual(20);
+  expect(await major.count()).toBeGreaterThanOrEqual(4);
   const strokeMetrics = await editor.locator(".stage-grid").evaluate((gridNode) => {
     const minor = gridNode.querySelector("line.minor");
     const majorLine = gridNode.querySelector("line.major");
@@ -73,6 +73,34 @@ async function expectVisibleMeterGrid(page) {
   expect(strokeMetrics.majorStroke).not.toBe("none");
   expect(strokeMetrics.minorWidth).toBeGreaterThan(0);
   expect(strokeMetrics.majorWidth).toBeGreaterThan(strokeMetrics.minorWidth);
+}
+
+async function expectPortraitMeterStage(page) {
+  const editor = page.locator("[data-stitch-mobile-editor]");
+  await expect(editor.locator(".stage-meter-badge")).toHaveText("5m x 6m");
+  await expect(editor.locator(".stage")).toHaveAttribute("viewBox", "0 0 5 6");
+
+  const metrics = await editor.locator(".stage-frame").evaluate((frame) => {
+    const svg = frame.querySelector(".stage");
+    const grid = frame.querySelectorAll(".stage-grid line");
+    const major = frame.querySelectorAll(".stage-grid line.major");
+    const rect = frame.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      aspectRatio: window.getComputedStyle(frame).aspectRatio,
+      gridCount: grid.length,
+      majorCount: major.length,
+      svgViewBox: svg?.getAttribute("viewBox") || ""
+    };
+  });
+
+  expect(metrics.width).toBeGreaterThan(260);
+  expect(metrics.height).toBeGreaterThan(metrics.width);
+  expect(metrics.aspectRatio).toBe("5 / 6");
+  expect(metrics.gridCount).toBe(13);
+  expect(metrics.majorCount).toBe(4);
+  expect(metrics.svgViewBox).toBe("0 0 5 6");
 }
 
 async function expectOrderedMobileBands(page) {
@@ -107,7 +135,7 @@ async function expectTimelineTrimSpace(page) {
   const workbenchBox = await page.locator("[data-stitch-mobile-editor] .timeline-workbench").boundingBox();
   const formationLaneBox = await page.locator("[data-stitch-mobile-editor] .timeline-lane").first().boundingBox();
   const audioLaneBox = await page.locator("[data-stitch-mobile-editor] .audio-lane").boundingBox();
-  const formationBlockBox = await page.locator("[data-stitch-mobile-editor] .formation-block.segment").first().boundingBox();
+  const formationBlockBox = await page.locator("[data-stitch-mobile-editor] .formation-block").first().boundingBox();
   const timelineBox = await page.locator("[data-stitch-mobile-editor] .timeline-editor").boundingBox();
   const actionRailBox = await page.locator("[data-stitch-mobile-editor] .mobile-action-bar").boundingBox();
   expect(workbenchBox).not.toBeNull();
@@ -184,7 +212,7 @@ async function expectTimelineContentUnclipped(page) {
     if (rulerLane && !within(workbench, rulerLane)) violations.push("ruler lane");
     if (formationLane && !within(workbench, formationLane)) violations.push("formation lane");
     if (audioLane && !within(workbench, audioLane)) violations.push("audio lane");
-    if (formationLane && formationBlock && !within(formationLane, formationBlock)) violations.push("formation block");
+    if (formationLane && formationBlock && !withinY(formationLane, formationBlock)) violations.push("formation block");
     if (audioLane && audioContent && !withinY(audioLane, audioContent)) violations.push("audio content");
     for (const child of formationBlock?.children || []) {
       if (!within(formationBlock, child)) violations.push(`block child ${child.tagName}`);
@@ -260,7 +288,7 @@ async function expectPlayheadExtendsAcrossTracks(page) {
 }
 
 async function expectFormationBlockTextVisible(page) {
-  const blockPseudoMetrics = await page.locator("[data-stitch-mobile-editor] .formation-block.segment").first().evaluate((block) => {
+  const blockPseudoMetrics = await page.locator("[data-stitch-mobile-editor] .formation-block.hold").first().evaluate((block) => {
     const before = window.getComputedStyle(block, "::before");
     const after = window.getComputedStyle(block, "::after");
     return {
@@ -275,7 +303,7 @@ async function expectFormationBlockTextVisible(page) {
   expect(blockPseudoMetrics.afterDisplay).toBe("none");
   expect(blockPseudoMetrics.afterContent).toBe("none");
 
-  const blockTextMetrics = await page.locator("[data-stitch-mobile-editor] .formation-block.segment").evaluateAll((blocks) =>
+  const blockTextMetrics = await page.locator("[data-stitch-mobile-editor] .formation-block.hold").evaluateAll((blocks) =>
     blocks.slice(0, 3).map((block) => {
       const metrics = {};
       for (const selector of ["span", "strong", "em"]) {
@@ -323,12 +351,12 @@ async function expectFormationBlockTextVisible(page) {
 }
 
 async function expectFormationSelectionControls(page) {
-  const firstBlock = page.locator("[data-stitch-mobile-editor] .formation-block.segment").first();
+  const firstBlock = page.locator("[data-stitch-mobile-editor] .formation-block.hold").first();
   await firstBlock.click();
   await expect(firstBlock).toHaveClass(/selected/);
   await expect(firstBlock.locator(".formation-resize-handle.right")).toBeVisible();
 
-  const secondBlock = page.locator("[data-stitch-mobile-editor] .formation-block.segment").nth(1);
+  const secondBlock = page.locator("[data-stitch-mobile-editor] .formation-block.hold").nth(1);
   if (await secondBlock.count()) {
     await secondBlock.click();
     await expect(secondBlock).toHaveClass(/selected/);
@@ -341,11 +369,10 @@ async function expectFormationSelectionControls(page) {
   await expect(page.locator("[data-stitch-mobile-editor] .formation-block.selected")).toHaveCount(0);
 }
 
-async function expectCompactSquareStage(page) {
+async function expectCompactStage(page) {
   await expect(page.locator("[data-stitch-mobile-editor] .stage-toolbar")).toHaveCount(0);
   const frameBox = await page.locator("[data-stitch-mobile-editor] .stage-frame").boundingBox();
   expect(frameBox).not.toBeNull();
-  expect(Math.abs(frameBox.width - frameBox.height)).toBeLessThanOrEqual(2);
   expect(frameBox.height).toBeLessThanOrEqual(352);
   const tokenRadius = await page.locator("[data-stitch-mobile-editor] .token circle").last().getAttribute("r");
   expect(Number(tokenRadius)).toBeGreaterThanOrEqual(3.3);
@@ -356,7 +383,7 @@ test.describe("Stitch main editor visual states", () => {
     let page = await openSampleEditor(browser);
     await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "idle");
     await expect(page.locator(".app")).toHaveAttribute("data-timeline-state", "visible");
-    await expectCompactSquareStage(page);
+    await expectCompactStage(page);
     await expectOrderedMobileBands(page);
     await expectTimelineTrimSpace(page);
     await expectTimelineContentUnclipped(page);
@@ -418,7 +445,8 @@ test.describe("Stitch main editor visual states", () => {
     await page.close();
 
     page = await openStitchMock(browser);
-    await expectCompactSquareStage(page);
+    await expectCompactStage(page);
+    await expectPortraitMeterStage(page);
     await expectOrderedMobileBands(page);
     await expectTimelineTrimSpace(page);
     await expectTimelineContentUnclipped(page);

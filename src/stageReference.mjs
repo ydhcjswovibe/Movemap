@@ -1,12 +1,16 @@
+import { DEFAULT_STAGE_DIMENSIONS } from "./stageGeometry.mjs";
+
+export const DEFAULT_FRONT_ZONE_Y = DEFAULT_STAGE_DIMENSIONS.height * 0.7;
+
 export const DEFAULT_STAGE_REFERENCES = Object.freeze([
   {
     id: "center-line",
     type: "line",
     label: "센터",
-    x1: 50,
-    y1: 8,
-    x2: 50,
-    y2: 92,
+    x1: DEFAULT_STAGE_DIMENSIONS.width / 2,
+    y1: DEFAULT_STAGE_DIMENSIONS.height * 0.08,
+    x2: DEFAULT_STAGE_DIMENSIONS.width / 2,
+    y2: DEFAULT_STAGE_DIMENSIONS.height * 0.92,
     tone: "neutral",
     locked: true,
     visible: true
@@ -15,10 +19,10 @@ export const DEFAULT_STAGE_REFERENCES = Object.freeze([
     id: "front-line",
     type: "line",
     label: "앞줄 기준",
-    x1: 8,
-    y1: 70,
-    x2: 92,
-    y2: 70,
+    x1: DEFAULT_STAGE_DIMENSIONS.width * 0.08,
+    y1: DEFAULT_FRONT_ZONE_Y,
+    x2: DEFAULT_STAGE_DIMENSIONS.width * 0.92,
+    y2: DEFAULT_FRONT_ZONE_Y,
     tone: "front",
     locked: true,
     visible: true
@@ -27,8 +31,8 @@ export const DEFAULT_STAGE_REFERENCES = Object.freeze([
     id: "left-hash",
     type: "point",
     label: "L",
-    x: 20,
-    y: 70,
+    x: DEFAULT_STAGE_DIMENSIONS.width * 0.2,
+    y: DEFAULT_FRONT_ZONE_Y,
     tone: "side",
     locked: true,
     visible: true
@@ -37,8 +41,8 @@ export const DEFAULT_STAGE_REFERENCES = Object.freeze([
     id: "right-hash",
     type: "point",
     label: "R",
-    x: 80,
-    y: 70,
+    x: DEFAULT_STAGE_DIMENSIONS.width * 0.8,
+    y: DEFAULT_FRONT_ZONE_Y,
     tone: "side",
     locked: true,
     visible: true
@@ -91,7 +95,7 @@ function normalizeReference(reference, index = 0) {
   };
 }
 
-export function defaultStageReferences(frontZone = { y: 70 }) {
+export function defaultStageReferences(frontZone = { y: DEFAULT_FRONT_ZONE_Y }) {
   return DEFAULT_STAGE_REFERENCES.map((reference) => normalizeReference({
     ...reference,
     ...(reference.id === "front-line" ? { y1: frontZone?.y, y2: frontZone?.y } : {}),
@@ -99,7 +103,7 @@ export function defaultStageReferences(frontZone = { y: 70 }) {
   }));
 }
 
-export function normalizeStageReferences(references, frontZone = { y: 70 }) {
+export function normalizeStageReferences(references, frontZone = { y: DEFAULT_FRONT_ZONE_Y }) {
   const source = Array.isArray(references) && references.length ? references : defaultStageReferences(frontZone);
   return source.map(normalizeReference);
 }

@@ -15,6 +15,7 @@ import {
   formationTimelinePixels,
   formationTimelineLabel,
   layoutFormationBlocks,
+  layoutTimelineVisualSegments,
   movementKeyframeTime,
   movementKeyframePositions,
   normalizeWheelDelta,
@@ -883,6 +884,81 @@ test("formation block layout can render intro as an editable segment with truthf
       { id: "a", left: 0, logicalLeft: 0, width: 40, hit: 40, marker: false, start: 0, end: 4 },
       { id: "b", left: 40, logicalLeft: 40, width: 40, hit: 40, marker: false, start: 4, end: 8 },
       { id: "c", left: 100, logicalLeft: 100, width: 20, hit: 20, marker: false, start: 10, end: 12 }
+    ]
+  );
+});
+
+test("timeline visual segments split formation holds from automatic moves", () => {
+  const segments = layoutTimelineVisualSegments([
+    { id: "a", time: 0, moveDuration: 0 },
+    { id: "b", time: 8, moveDuration: 4 }
+  ], 10);
+
+  assert.deepEqual(
+    segments.map((segment) => ({
+      kind: segment.kind,
+      sectionId: segment.sectionId,
+      from: segment.fromSectionId,
+      to: segment.toSectionId,
+      start: segment.displayStartTime,
+      end: segment.displayEndTime,
+      left: segment.leftPx,
+      width: segment.widthPx,
+      label: segment.label,
+      resizable: segment.resizable
+    })),
+    [
+      { kind: "hold", sectionId: "a", from: "a", to: "a", start: 0, end: 4, left: 0, width: 40, label: "F1", resizable: true },
+      { kind: "move", sectionId: "b", from: "a", to: "b", start: 4, end: 8, left: 40, width: 40, label: "Move", resizable: false },
+      { kind: "hold", sectionId: "b", from: "b", to: "b", start: 8, end: 12, left: 80, width: 40, label: "F2", resizable: false }
+    ]
+  );
+});
+
+test("timeline visual segments render the first intro hold from its movement start", () => {
+  const segments = layoutTimelineVisualSegments([
+    { id: "intro", time: 4, moveDuration: 4 },
+    { id: "next", time: 8, moveDuration: 4 }
+  ], 10);
+
+  assert.deepEqual(
+    segments.map((segment) => ({
+      kind: segment.kind,
+      sectionId: segment.sectionId,
+      start: segment.displayStartTime,
+      end: segment.displayEndTime
+    })),
+    [
+      { kind: "hold", sectionId: "intro", start: 0, end: 4 },
+      { kind: "move", sectionId: "next", start: 4, end: 8 },
+      { kind: "hold", sectionId: "next", start: 8, end: 12 }
+    ]
+  );
+});
+
+test("hold right trim preserves next arrival and absorbs the automatic move", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 8, moveDuration: 4 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "a",
+    time: 5
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(
+    result.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end
+    })),
+    [
+      { id: "a", time: 0, moveDuration: 0, start: 0, end: 0 },
+      { id: "b", time: 8, moveDuration: 3, start: 5, end: 8 }
     ]
   );
 });
