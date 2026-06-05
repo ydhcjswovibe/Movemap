@@ -375,7 +375,8 @@ async function expectCompactStage(page) {
   expect(frameBox).not.toBeNull();
   expect(frameBox.height).toBeLessThanOrEqual(352);
   const tokenRadius = await page.locator("[data-stitch-mobile-editor] .token circle").last().getAttribute("r");
-  expect(Number(tokenRadius)).toBeGreaterThanOrEqual(3.3);
+  expect(Number(tokenRadius)).toBeGreaterThanOrEqual(0.35);
+  expect(Number(tokenRadius)).toBeLessThanOrEqual(0.6);
 }
 
 test.describe("Stitch main editor visual states", () => {

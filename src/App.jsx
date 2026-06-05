@@ -21,7 +21,7 @@ import { createPersonalTemplateFromSection, loadPersonalTemplates, personalTempl
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
-import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageTokenMetrics, stageViewBox } from "./stageGeometry.mjs";
 import {
   applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
@@ -120,10 +120,6 @@ const MOVE_MODES = {
 const HISTORY_LIMIT = 50;
 const MAGNET_DISTANCE = 4.8;
 const LONG_PRESS_MS = 450;
-const TOKEN_RADIUS = 4.2;
-const SELECTED_RING_RADIUS = 5.35;
-const PAIR_RING_RADIUS = 4.45;
-const SELECTED_PAIR_RING_RADIUS = 4.9;
 const GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const SNAP_GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
@@ -281,11 +277,11 @@ function tokenShortName(performer) {
   return Array.from(value.replace(/\s+/g, "")).slice(0, hasKorean ? 2 : 3).join("");
 }
 
-function tokenFontSize(performer) {
+function tokenFontSize(performer, baseSize = 3.35) {
   const length = Array.from(tokenShortName(performer)).length;
-  if (length <= 1) return 3.8;
-  if (length === 2) return 3.35;
-  return 2.85;
+  if (length <= 1) return baseSize * 1.14;
+  if (length === 2) return baseSize;
+  return baseSize * 0.85;
 }
 
 function hexToRgb(hex) {
@@ -623,6 +619,7 @@ async function uploadAudioToSupabase(file, projectKey, fingerprint = audioFinger
 
 function buildStageSvg(plan, sectionIndex, options = {}) {
   const stage = normalizeStageDimensions(plan.stage);
+  const tokenMetrics = stageTokenMetrics(stage);
   const section = plan.sections[sectionIndex];
   const prev = plan.sections[sectionIndex - 1];
   const positions = section?.positions || {};
@@ -646,12 +643,12 @@ function buildStageSvg(plan, sectionIndex, options = {}) {
     const pairColor = performerPair ? performerColorForPair(plan, performerPair) : "";
     const shortName = escapeSvgText(tokenShortName(performer));
     const fullName = escapeSvgText(tokenName(performer));
-    const fontSize = tokenFontSize(performer);
+    const fontSize = tokenFontSize(performer, tokenMetrics.labelFontSize);
     return `
       <g opacity="${ghost ? 0.22 : dim ? 0.35 : 1}">
         <title>${fullName}</title>
-        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${PAIR_RING_RADIUS}" fill="none" stroke="${pairColor}" stroke-width="0.65" opacity="0.62" />` : ""}
-        <circle cx="${pos.x}" cy="${pos.y}" r="${ghost ? 2.5 : TOKEN_RADIUS}" fill="${ghost ? "#475569" : performer.color}" stroke="#f8fafc" stroke-width="0.8" />
+        ${performerPair ? `<circle cx="${pos.x}" cy="${pos.y}" r="${tokenMetrics.pairRingRadius}" fill="none" stroke="${pairColor}" stroke-width="${tokenMetrics.strokeWidth}" opacity="0.62" />` : ""}
+        <circle cx="${pos.x}" cy="${pos.y}" r="${ghost ? tokenMetrics.ghostRadius : tokenMetrics.tokenRadius}" fill="${ghost ? "#475569" : performer.color}" stroke="#f8fafc" stroke-width="${tokenMetrics.strokeWidth}" />
         ${ghost ? "" : `<text x="${pos.x}" y="${pos.y + fontSize * 0.34}" text-anchor="middle" font-size="${fontSize}" fill="#ffffff" font-family="Arial" font-weight="700" pointer-events="none" style="user-select:none">${shortName}</text>`}
       </g>`;
   };
@@ -1141,6 +1138,7 @@ function App() {
       : buildFormationTemplatePreview(selectedTemplateId, plan.performers, plan.stage)
     : null, [plan, selectedTemplateId, personalTemplates]);
   const stageDimensions = useMemo(() => normalizeStageDimensions(plan?.stage), [plan?.stage]);
+  const tokenMetrics = useMemo(() => stageTokenMetrics(stageDimensions), [stageDimensions]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -4601,8 +4599,8 @@ function App() {
                     if (!pos) return null;
                     return (
                       <g key={`preview-${performer.id}`}>
-                        <circle cx={pos.x} cy={pos.y} r="3.1" fill="none" stroke={performer.color} strokeWidth="1.05" strokeDasharray="1.6 1.2" opacity="0.86" />
-                        <text x={pos.x} y={pos.y + 1.05} textAnchor="middle" fontSize="2.7" fill={performer.color} fontWeight="700">{tokenShortName(performer)}</text>
+                        <circle cx={pos.x} cy={pos.y} r={tokenMetrics.previewRadius} fill="none" stroke={performer.color} strokeWidth={tokenMetrics.strokeWidth * 1.3} strokeDasharray={`${tokenMetrics.strokeWidth * 1.8} ${tokenMetrics.strokeWidth * 1.2}`} opacity="0.86" />
+                        <text x={pos.x} y={pos.y + tokenMetrics.labelFontSize * 0.34} textAnchor="middle" fontSize={tokenFontSize(performer, tokenMetrics.labelFontSize)} fill={performer.color} fontWeight="700">{tokenShortName(performer)}</text>
                       </g>
                     );
                   })}
@@ -4611,7 +4609,7 @@ function App() {
               {sortedSections[activeSectionIndex - 1] && plan.performers.map((performer) => {
                 const pos = sortedSections[activeSectionIndex - 1].positions?.[performer.id];
                 if (!pos) return null;
-                return <circle key={`ghost-${performer.id}`} cx={pos.x} cy={pos.y} r="2.5" fill="#475569" opacity="0.2" />;
+                return <circle key={`ghost-${performer.id}`} cx={pos.x} cy={pos.y} r={tokenMetrics.ghostRadius} fill="#475569" opacity="0.2" />;
               })}
               {buildTransitionPaths({
                 performers: plan.performers,
@@ -4644,9 +4642,9 @@ function App() {
                       event.stopPropagation();
                     }}
                   >
-                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="transparent" strokeWidth="9" strokeLinecap="round" />
-                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#ffffff" strokeWidth={selected ? "5.4" : "4.8"} opacity="0.9" strokeLinecap="round" pointerEvents="none" />
-                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : bridgeColor} strokeWidth={selected ? "2.8" : "2.1"} opacity={selected ? "0.92" : "0.74"} strokeLinecap="round" pointerEvents="none" />
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="transparent" strokeWidth={Math.max(tokenMetrics.hitRadius, tokenMetrics.tokenRadius * 2.4)} strokeLinecap="round" />
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#ffffff" strokeWidth={selected ? tokenMetrics.tokenRadius * 1.28 : tokenMetrics.tokenRadius * 1.14} opacity="0.9" strokeLinecap="round" pointerEvents="none" />
+                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={selected ? "#b4234f" : bridgeColor} strokeWidth={selected ? tokenMetrics.tokenRadius * 0.67 : tokenMetrics.tokenRadius * 0.5} opacity={selected ? "0.92" : "0.74"} strokeLinecap="round" pointerEvents="none" />
                   </g>
                 );
               })}
@@ -4674,7 +4672,7 @@ function App() {
                 const pairColor = performerPair ? performerColorForPair(plan, performerPair) : "";
                 const shortName = tokenShortName(performer);
                 const fullName = tokenName(performer);
-                const fontSize = tokenFontSize(performer);
+                const fontSize = tokenFontSize(performer, tokenMetrics.labelFontSize);
                 return (
                   <g
                     key={performer.id}
@@ -4691,12 +4689,12 @@ function App() {
                     }}
                   >
                     <title>{fullName}</title>
-                    <circle cx={pos.x} cy={pos.y} r="7.4" fill="transparent" />
-                    {(selectedPerformerId === performer.id || isMultiSelected || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r="1.1" fill="#b7c4ff" opacity="0.6" pointerEvents="none" />}
-                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? SELECTED_PAIR_RING_RADIUS : PAIR_RING_RADIUS} fill="none" stroke={isSelectedPairMember ? "#b7c4ff" : pairColor} strokeWidth={isSelectedPairMember ? "0.85" : "0.65"} opacity={isSelectedPairMember ? "0.9" : "0.62"} pointerEvents="none" />}
-                    {isCandidate && <circle cx={pos.x} cy={pos.y} r="7.1" fill="none" stroke="#d43237" strokeWidth="1.1" strokeDasharray="1.5 1" />}
-                    {(selectedPerformerId === performer.id || isMultiSelected) && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} fill="none" stroke="#2e62ff" strokeWidth="0.9" pointerEvents="none" />}
-                    <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color} stroke="#201f1f" strokeWidth="0.7" />
+                    <circle cx={pos.x} cy={pos.y} r={tokenMetrics.hitRadius} fill="transparent" />
+                    {(selectedPerformerId === performer.id || isMultiSelected || dragPositions?.[performer.id]) && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.centerDotRadius} fill="#b7c4ff" opacity="0.6" pointerEvents="none" />}
+                    {performerPair && <circle cx={pos.x} cy={pos.y} r={isSelectedPairMember ? tokenMetrics.selectedPairRingRadius : tokenMetrics.pairRingRadius} fill="none" stroke={isSelectedPairMember ? "#b7c4ff" : pairColor} strokeWidth={isSelectedPairMember ? tokenMetrics.strokeWidth * 1.3 : tokenMetrics.strokeWidth} opacity={isSelectedPairMember ? "0.9" : "0.62"} pointerEvents="none" />}
+                    {isCandidate && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.candidateRadius} fill="none" stroke="#d43237" strokeWidth={tokenMetrics.strokeWidth * 1.35} strokeDasharray={`${tokenMetrics.strokeWidth * 1.8} ${tokenMetrics.strokeWidth * 1.2}`} />}
+                    {(selectedPerformerId === performer.id || isMultiSelected) && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.selectedRingRadius} fill="none" stroke="#2e62ff" strokeWidth={tokenMetrics.strokeWidth * 1.1} pointerEvents="none" />}
+                    <circle cx={pos.x} cy={pos.y} r={tokenMetrics.tokenRadius} fill={performer.color} stroke="#201f1f" strokeWidth={tokenMetrics.strokeWidth} />
                     <text x={pos.x} y={pos.y + fontSize * 0.34} textAnchor="middle" fontSize={fontSize} fill="#fff" fontWeight="800" pointerEvents="none">{shortName}</text>
                   </g>
                 );

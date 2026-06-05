@@ -2,11 +2,9 @@ import React, { useEffect, useRef } from "react";
 import Stage3dPreview from "./Stage3dPreview.jsx";
 import IconHintButton from "./IconHintButton.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
-import { stageViewBox } from "./stageGeometry.mjs";
+import { stageTokenMetrics, stageViewBox } from "./stageGeometry.mjs";
 
 const GRID_MAJOR_STEP = 5;
-const TOKEN_RADIUS = 3.4;
-const SELECTED_RING_RADIUS = 5.6;
 
 function meterTicks(size = 0) {
   const rounded = Math.max(0, Math.floor(Number(size) || 0));
@@ -121,6 +119,7 @@ function StitchStage({ model, actions }) {
   const stageWidth = Math.max(1, Number(stageDimensions.width) || 1);
   const stageHeight = Math.max(1, Number(stageDimensions.height) || 1);
   const stageRatio = `${stageWidth} / ${stageHeight}`;
+  const tokenMetrics = stageTokenMetrics(stageDimensions);
   const stageFrameStyle = stageWidth >= stageHeight
     ? {
       "--stitch-stage-ratio": stageRatio,
@@ -224,10 +223,10 @@ function StitchStage({ model, actions }) {
                   }}
                 >
                   <title>{performer.name}</title>
-                  <circle cx={pos.x} cy={pos.y} r="7.2" fill="transparent" />
-                  {selected && <circle cx={pos.x} cy={pos.y} r={SELECTED_RING_RADIUS} className="stitch-token-ring" />}
-                  <circle cx={pos.x} cy={pos.y} r={TOKEN_RADIUS} fill={performer.color || "#2e62ff"} />
-                  <text x={pos.x} y={pos.y + 1.1} textAnchor="middle">{shortTokenName(performer.name)}</text>
+                  <circle cx={pos.x} cy={pos.y} r={tokenMetrics.hitRadius} fill="transparent" />
+                  {selected && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.selectedRingRadius} className="stitch-token-ring" />}
+                  <circle cx={pos.x} cy={pos.y} r={tokenMetrics.tokenRadius} fill={performer.color || "#2e62ff"} />
+                  <text x={pos.x} y={pos.y + tokenMetrics.labelFontSize * 0.34} textAnchor="middle" fontSize={tokenMetrics.labelFontSize}>{shortTokenName(performer.name)}</text>
                 </g>
               );
             })}

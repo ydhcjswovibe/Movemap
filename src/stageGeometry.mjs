@@ -32,6 +32,25 @@ export function stageViewBox(stage = DEFAULT_STAGE_DIMENSIONS) {
   return `0 0 ${dimensions.width} ${dimensions.height}`;
 }
 
+export function stageTokenMetrics(stage = DEFAULT_STAGE_DIMENSIONS) {
+  const dimensions = normalizeStageDimensions(stage);
+  const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
+  const tokenRadius = roundDimension(Math.max(0.36, Math.min(4.2, shortSide * 0.0525)));
+  return {
+    tokenRadius,
+    selectedRingRadius: roundDimension(Math.max(tokenRadius * 1.35, tokenRadius + 0.16)),
+    pairRingRadius: roundDimension(Math.max(tokenRadius * 1.12, tokenRadius + 0.08)),
+    selectedPairRingRadius: roundDimension(Math.max(tokenRadius * 1.22, tokenRadius + 0.14)),
+    hitRadius: roundDimension(Math.max(tokenRadius * 2.15, 0.9)),
+    candidateRadius: roundDimension(Math.max(tokenRadius * 1.7, 0.75)),
+    centerDotRadius: roundDimension(Math.max(tokenRadius * 0.26, 0.12)),
+    ghostRadius: roundDimension(Math.max(tokenRadius * 0.6, 0.24)),
+    previewRadius: roundDimension(Math.max(tokenRadius * 0.74, 0.3)),
+    labelFontSize: roundDimension(Math.max(tokenRadius * 0.82, 0.3)),
+    strokeWidth: roundDimension(Math.max(tokenRadius * 0.17, 0.08))
+  };
+}
+
 export function clampStagePoint(point = {}, stage = DEFAULT_STAGE_DIMENSIONS) {
   const dimensions = normalizeStageDimensions(stage);
   return {
