@@ -3,19 +3,13 @@ import CoolIcon from "./icons/CoolIcon.jsx";
 import "./v2VisualEditor.css";
 
 const performers = [
-  { id: "A3", group: "a", x: 20, y: 18 },
-  { id: "A2", group: "a", x: 60, y: 28 },
-  { id: "A1", group: "a", x: 30, y: 40, selected: true },
-  { id: "A4", group: "a", x: 72, y: 50 },
-  { id: "B2", group: "b", x: 24, y: 66 },
-  { id: "B1", group: "b", x: 40, y: 74 },
+  { id: "A3", group: "a", x: 20, y: 20 },
+  { id: "A2", group: "a", x: 60, y: 29 },
+  { id: "A1", group: "a", x: 30, y: 40 },
+  { id: "A4", group: "a", x: 72, y: 51 },
+  { id: "B2", group: "b", x: 24, y: 67 },
+  { id: "B1", group: "b", x: 39, y: 75 },
   { id: "B3", group: "b", x: 55, y: 80 }
-];
-
-const topActions = [
-  { icon: "save", label: "저장" },
-  { icon: "share", label: "공유" },
-  { icon: "download", label: "다운로드" }
 ];
 
 const bottomActions = [
@@ -47,11 +41,6 @@ function V2VisualEditor() {
               Saved
             </span>
           </div>
-          <div className="v2-top-actions" aria-label="Project actions">
-            {topActions.map((action) => (
-              <IconButton key={action.label} icon={action.icon} label={action.label} />
-            ))}
-          </div>
           <IconButton icon="more" label="더보기" />
         </header>
 
@@ -66,7 +55,7 @@ function V2VisualEditor() {
             {performers.map((performer) => (
               <button
                 key={performer.id}
-                className={`v2-token v2-token-${performer.group} ${performer.selected ? "is-selected" : ""}`}
+                className={`v2-token v2-token-${performer.group} ${performer.id === "A1" ? "is-selected" : ""}`}
                 style={{ "--token-x": `${performer.x}%`, "--token-y": `${performer.y}%` }}
                 type="button"
                 aria-label={`${performer.id} performer`}
@@ -86,6 +75,7 @@ function V2VisualEditor() {
         <section className="v2-transport" aria-label="Playback controls">
           <IconButton icon="play" label="재생" className="v2-play-button" />
           <div className="v2-timecode" aria-label="Current timecode">00 : 01 : 14 .23</div>
+          <div className="v2-transport-spacer" aria-hidden="true" />
           <IconButton icon="settings" label="타임라인 설정" />
         </section>
 
@@ -114,8 +104,8 @@ function V2VisualEditor() {
               <CoolIcon name="share" />
             </div>
             <div className="v2-waveform" aria-hidden="true">
-              {Array.from({ length: 34 }, (_, index) => (
-                <span key={index} style={{ "--bar-height": `${18 + ((index * 13) % 38)}%` }} />
+              {Array.from({ length: 42 }, (_, index) => (
+                <span key={index} style={{ "--bar-height": `${8 + ((index * 17) % 46)}px` }} />
               ))}
             </div>
           </div>
