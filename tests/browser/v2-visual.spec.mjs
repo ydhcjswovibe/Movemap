@@ -31,13 +31,15 @@ test.describe("visual-only v2 editor prototype", () => {
     const boxes = await root.evaluate((node) => {
       const rectFor = (selector) => {
         const rect = node.querySelector(selector)?.getBoundingClientRect();
-        return rect ? { y: rect.y, height: rect.height, bottom: rect.bottom } : null;
+        return rect ? { y: rect.y, height: rect.height, bottom: rect.bottom, center: rect.y + rect.height / 2 } : null;
       };
       return {
         stage: rectFor("[data-v2-stage]"),
         timeline: rectFor("[data-v2-timeline]"),
         formationLane: rectFor(".v2-lane-row"),
         musicLane: rectFor(".v2-audio-row"),
+        introBlock: rectFor(".v2-intro-block"),
+        waveform: rectFor("[data-v2-waveform]"),
         rail: rectFor("[data-v2-bottom-rail]"),
         viewportHeight: window.innerHeight
       };
@@ -47,7 +49,9 @@ test.describe("visual-only v2 editor prototype", () => {
     expect(boxes.stage.height).toBeGreaterThanOrEqual(460);
     expect(boxes.timeline.height).toBeGreaterThanOrEqual(220);
     expect(boxes.timeline.height).toBeLessThanOrEqual(260);
-    expect(boxes.formationLane.height).toBeGreaterThan(boxes.musicLane.height);
+    expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.introBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.waveform.center - boxes.musicLane.center)).toBeLessThanOrEqual(1);
     expect(boxes.timeline.bottom).toBeLessThanOrEqual(boxes.rail.y + 1);
     expect(boxes.rail.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
 

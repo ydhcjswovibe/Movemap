@@ -372,7 +372,7 @@
 .v2-lane-row {
   display: grid;
   grid-template-columns: 64px 1fr;
-  min-height: 126px;
+  min-height: 105px;
   border-bottom: 1px solid rgba(185, 198, 219, 0.2);
 }
 
@@ -425,8 +425,8 @@
 
 .v2-formation-block {
   position: absolute;
-  top: 20px;
-  height: 58px;
+  top: 50%;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -441,6 +441,7 @@
   line-height: 1.1;
   letter-spacing: 0;
   text-overflow: ellipsis;
+  transform: translateY(-50%);
   white-space: nowrap;
 }
 
@@ -466,7 +467,7 @@
 .v2-audio-row {
   display: grid;
   grid-template-columns: 64px 1fr;
-  height: 85px;
+  height: 105px;
   min-height: 0;
 }
 
