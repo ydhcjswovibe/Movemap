@@ -21,25 +21,32 @@ function shortTokenName(name = "") {
 }
 
 export default function EditorV2Stage({ model, actions }) {
+  const shell = model.shell || model;
+  const stage = model.stage || model;
+  const selection = model.selection || model;
+  const actionModel = model.actions || model;
   const {
     activeSection,
     activeTransitionPaths,
     dragPositions,
     focusedPerformerIds,
     performers,
-    readonly,
-    selectedPerformerId,
-    selectedPerformerIds,
     stage3dProjection,
     stageDimensions,
     stageReferences,
     stageViewMode,
     visiblePositions
-  } = model;
+  } = stage;
+  const { readonly } = shell;
+  const {
+    selectedPerformerId,
+    selectedPerformerIds,
+    selectedStateText
+  } = selection;
   const selectedSet = new Set(selectedPerformerIds || []);
   const gridX = meterTicks(stageDimensions.width);
   const gridY = meterTicks(stageDimensions.height);
-  const meterLabel = model.stageSizeLabel || stageMeterLabel(stageDimensions);
+  const meterLabel = stage.stageSizeLabel || stageMeterLabel(stageDimensions);
   const stageWidth = Math.max(1, Number(stageDimensions.width) || 1);
   const stageHeight = Math.max(1, Number(stageDimensions.height) || 1);
   const stageRatio = `${stageWidth} / ${stageHeight}`;
@@ -59,8 +66,8 @@ export default function EditorV2Stage({ model, actions }) {
   return (
     <div className="stage-frame" style={stageFrameStyle}>
       <div className="stage-corner-tools" aria-label="무대 도구">
-        <IconHintButton className="icon-tool" iconName="undo" label="되돌리기" onClick={actions.undoPlan} disabled={model.undoDisabled} />
-        <IconHintButton className="icon-tool" iconName="redo" label="다시 실행" onClick={actions.redoPlan} disabled={model.redoDisabled} />
+        <IconHintButton className="icon-tool" iconName="undo" label="되돌리기" onClick={actions.undoPlan} disabled={actionModel.undoDisabled} />
+        <IconHintButton className="icon-tool" iconName="redo" label="다시 실행" onClick={actions.redoPlan} disabled={actionModel.redoDisabled} />
         <IconHintButton className="icon-tool active" iconName="layer" label="참조선" onClick={actions.toggleStageReferences} />
       </div>
       <div className="stage-view-float-toggle" role="group" aria-label="무대 보기">
@@ -85,7 +92,7 @@ export default function EditorV2Stage({ model, actions }) {
             </marker>
           </defs>
           <rect className="stitch-stage-base" x="0" y="0" width={stageDimensions.width} height={stageDimensions.height} rx="2" />
-          <rect className="stitch-stage-front-zone" x="0" y={model.frontZone?.y || stageDimensions.height * 0.72} width={stageDimensions.width} height={stageDimensions.height - (model.frontZone?.y || stageDimensions.height * 0.72)} />
+          <rect className="stitch-stage-front-zone" x="0" y={stage.frontZone?.y || stageDimensions.height * 0.72} width={stageDimensions.width} height={stageDimensions.height - (stage.frontZone?.y || stageDimensions.height * 0.72)} />
           <g className="stage-grid">
             {gridX.map((x) => (
               <line
@@ -159,7 +166,7 @@ export default function EditorV2Stage({ model, actions }) {
       )}
       <div className="stitch-stage-caption">
         <span>{activeSection?.name || "대형 없음"}</span>
-        <strong>{model.selectedStateText}</strong>
+        <strong>{selectedStateText}</strong>
       </div>
     </div>
   );

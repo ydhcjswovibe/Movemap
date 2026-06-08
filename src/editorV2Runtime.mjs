@@ -218,8 +218,10 @@ export function createEditorV2Runtime(input = {}) {
   const actionModel = {
     globalActions: input.globalActions,
     mobileActions: input.mobileActions,
+    redoDisabled: input.redoDisabled,
     topActionMenu: input.topActionMenu,
-    topActionSurface: input.topActionSurface
+    topActionSurface: input.topActionSurface,
+    undoDisabled: input.undoDisabled
   };
   const model = {
     actions: actionModel,

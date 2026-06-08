@@ -44,15 +44,15 @@ export default function EditorV2Timeline({ model, actions }) {
   const pinchBridgeRef = useRef({ pointers: new Map(), zoomed: false });
   const audioLaneRef = useRef(null);
   const formationLaneRef = useRef(null);
+  const shell = model.shell || model;
+  const selection = model.selection || model;
+  const timeline = model.timeline || model;
+  const actionModel = model.actions || model;
   const {
     currentSectionId,
     hasUsableAudio,
     isPlaying,
     playheadPixel,
-    readonly,
-    selectedSectionId,
-    selectedPerformerId,
-    selectedPerformerIds,
     snapPixel,
     sortedSections,
     timelineBlockedEdge,
@@ -62,8 +62,14 @@ export default function EditorV2Timeline({ model, actions }) {
     timelineScrollX,
     timelineTicks,
     waveformBars
-  } = model;
-  const zoomPercent = Number.parseFloat(model.timelineZoomLabel) || 100;
+  } = timeline;
+  const {
+    selectedPerformerId,
+    selectedPerformerIds,
+    selectedSectionId
+  } = selection;
+  const { readonly, timeLabel } = shell;
+  const zoomPercent = Number.parseFloat(timeline.timelineZoomLabel) || 100;
   const visualTimelineWidth = Math.max(timelineContentWidth, Math.round(zoomPercent * 4));
   const visualFormationSegments = timelineVisualSegments?.length ? timelineVisualSegments : timelineFormationBlocks;
   function onPointerDown(event) {
@@ -168,15 +174,15 @@ export default function EditorV2Timeline({ model, actions }) {
           <IconHintButton className="primary playback-button timeline-icon-button" iconName={isPlaying ? "pause" : "play"} label={isPlaying ? "정지" : "재생"} onClick={actions.togglePlayback} disabled={!hasUsableAudio} />
           {!readonly && (
             <>
-              <IconHintButton className="timeline-icon-button" iconName="undo" label="되돌리기" onClick={actions.undoPlan} disabled={model.undoDisabled} />
-              <IconHintButton className="timeline-icon-button" iconName="redo" label="앞으로가기" onClick={actions.redoPlan} disabled={model.redoDisabled} />
+              <IconHintButton className="timeline-icon-button" iconName="undo" label="되돌리기" onClick={actions.undoPlan} disabled={actionModel.undoDisabled} />
+              <IconHintButton className="timeline-icon-button" iconName="redo" label="앞으로가기" onClick={actions.redoPlan} disabled={actionModel.redoDisabled} />
             </>
           )}
         </div>
-        <span className="timeline-time-readout">{model.timeLabel}</span>
+        <span className="timeline-time-readout">{timeLabel}</span>
         <div className="timeline-zoom-controls">
           <IconHintButton className="timeline-icon-button" iconName="zoom-minus" label="타임라인 축소" onClick={() => actions.zoomTimelineBy(0.82)} />
-          <span>{model.timelineZoomLabel}</span>
+          <span>{timeline.timelineZoomLabel}</span>
           <IconHintButton className="timeline-icon-button" iconName="zoom-plus" label="타임라인 확대" onClick={() => actions.zoomTimelineBy(1.18)} />
         </div>
       </div>

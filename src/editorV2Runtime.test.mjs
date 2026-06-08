@@ -27,6 +27,7 @@ test("editor v2 runtime exposes Stitch-ready model and command contracts", () =>
     onStagePointerDown,
     performers: [{ id: "p1", name: "Ari" }],
     projectTitle: "Movemap Pro Editor",
+    redoDisabled: true,
     renderMobilePanelContent,
     selectedSectionId: "s1",
     selectionVisualState: "formation-selected",
@@ -34,6 +35,7 @@ test("editor v2 runtime exposes Stitch-ready model and command contracts", () =>
     stageDimensions: { width: 12, height: 8 },
     timelineContentWidth: 720,
     timeLabel: "0:04.0",
+    undoDisabled: false,
     visiblePositions: { p1: { x: 1, y: 2 } }
   });
 
@@ -46,6 +48,8 @@ test("editor v2 runtime exposes Stitch-ready model and command contracts", () =>
   assert.equal(model.selection.selectionVisualState, "formation-selected");
   assert.equal(model.inspector.isMobilePanelOpen, undefined);
   assert.deepEqual(model.actions.globalActions.map((action) => action.key), ["save", "share", "download", "more"]);
+  assert.equal(model.actions.undoDisabled, false);
+  assert.equal(model.actions.redoDisabled, true);
   assert.deepEqual(model.globalActions.map((action) => action.key), ["save", "share", "download", "more"]);
   assert.deepEqual(model.mobileActions.map((action) => action.key), ["people", "stage"]);
   assert.equal(actions.addSection, addSection);

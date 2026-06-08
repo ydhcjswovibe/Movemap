@@ -39,18 +39,20 @@ function renderGlobalDropdown({ action, topActionMenu, topActionSurface, openTop
 }
 
 export default function EditorV2TopBar({ model, actions }) {
-  const globalActions = model.globalActions || [];
+  const shell = model.shell || model;
+  const actionModel = model.actions || model;
+  const globalActions = actionModel.globalActions || [];
   return (
     <header className="mobile-status-bar stitch-utility-bar">
       <div className="mobile-status-title">
-        <span className="mobile-project-title">{model.projectTitle}</span>
-        <span className="save-meta">{model.localSaveLabel}</span>
+        <span className="mobile-project-title">{shell.projectTitle}</span>
+        <span className="save-meta">{shell.localSaveLabel}</span>
       </div>
       <div className="mobile-status-meta">
-        <strong>{model.activeSectionName}</strong>
-        <span>{model.timeLabel} · 도착 {model.arrivalLabel}</span>
+        <strong>{shell.activeSectionName}</strong>
+        <span>{shell.timeLabel} · 도착 {shell.arrivalLabel}</span>
       </div>
-      {!model.readonly && (
+      {!shell.readonly && (
         <div className="mobile-global-actions" aria-label="모바일 전역 명령">
           {globalActions.map((action) => {
             if (action.key === "save") {
@@ -60,8 +62,8 @@ export default function EditorV2TopBar({ model, actions }) {
               <Fragment key={action.key}>
                 {renderGlobalDropdown({
                   action,
-                  topActionMenu: model.topActionMenu,
-                  topActionSurface: model.topActionSurface,
+                  topActionMenu: actionModel.topActionMenu,
+                  topActionSurface: actionModel.topActionSurface,
                   openTopActionMenu: actions.openTopActionMenu,
                   closeTopActionMenu: actions.closeTopActionMenu,
                   renderShareMenu: actions.renderShareMenu,
