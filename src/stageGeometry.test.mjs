@@ -7,7 +7,6 @@ import {
   clientPointToStage,
   collectOutOfBoundsStageItems,
   normalizeStageDimensions,
-  stageTokenMetrics,
   stageViewBox
 } from "./stageGeometry.mjs";
 
@@ -20,22 +19,6 @@ test("normalizes stage dimensions and builds the svg viewBox", () => {
   assert.deepEqual(normalizeStageDimensions({ width: 0, height: 999 }), { width: 1, height: 200 });
   assert.equal(stageViewBox({ width: 128, height: 84 }), "0 0 128 84");
   assert.equal(stageViewBox({ width: 5, height: 6 }), "0 0 5 6");
-});
-
-test("stage token metrics scale to the current stage size", () => {
-  const defaultMetrics = stageTokenMetrics();
-  const compactMetrics = stageTokenMetrics({ width: 5, height: 6 });
-  const largeMetrics = stageTokenMetrics({ width: 100, height: 100 });
-
-  assert.equal(defaultMetrics.tokenRadius, 0.32);
-  assert.equal(defaultMetrics.hitRadius, 0.72);
-  assert.ok(defaultMetrics.selectedRingRadius < 0.45);
-  assert.equal(compactMetrics.tokenRadius, 0.19);
-  assert.equal(compactMetrics.labelFontSize, 0.2);
-  assert.equal(compactMetrics.strokeWidth, 0.04);
-  assert.ok(compactMetrics.hitRadius > compactMetrics.tokenRadius * 2);
-  assert.equal(largeMetrics.tokenRadius, 4);
-  assert.ok(largeMetrics.hitRadius > defaultMetrics.hitRadius);
 });
 
 test("stage shrink blocks performers and references outside the new bounds", () => {

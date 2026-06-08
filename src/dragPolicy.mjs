@@ -1,4 +1,5 @@
-import { normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
+import { normalizeStageDimensions } from "./stageGeometry.mjs";
+import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
 
 export const PAIR_MERGE_DISTANCE = 7.0;
 export const PULL_OUT_MOVE_THRESHOLD = 0.8;

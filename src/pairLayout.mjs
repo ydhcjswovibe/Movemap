@@ -1,4 +1,5 @@
-import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions } from "./stageGeometry.mjs";
+import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
 
 export const PAIR_GRID_SPACING = 8.8;
 export const TOKEN_COLLISION_DISTANCE = 8.4;

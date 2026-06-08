@@ -1,4 +1,5 @@
-import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions, stageTokenMetrics } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, normalizeStageDimensions } from "./stageGeometry.mjs";
+import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
 
 export const DEFAULT_FRONT_ZONE_Y = DEFAULT_STAGE_DIMENSIONS.height * 0.7;
 
