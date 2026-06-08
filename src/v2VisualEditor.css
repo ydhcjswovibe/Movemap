@@ -373,32 +373,46 @@
   display: grid;
   grid-template-columns: 64px 1fr;
   min-height: 61px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(185, 198, 219, 0.2);
 }
 
 .v2-lane-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-right: 1px solid rgba(185, 198, 219, 0.24);
+  background: #0a0d12;
   color: #c4ccd8;
   font-size: 9px;
   font-weight: 850;
 }
 
-.v2-lane-label button {
-  width: 18px;
-  height: 18px;
+.v2-lane-label svg {
+  width: 15px;
+  height: 15px;
+}
+
+.v2-track-add-button {
+  position: absolute;
+  right: -11px;
+  top: 50%;
+  z-index: 8;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(185, 198, 219, 0.22);
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #aeb8c6;
+  background: #151a22;
+  color: #dbe4f2;
   font-size: 13px;
   font-weight: 850;
   line-height: 1;
+  transform: translateY(-50%);
+  appearance: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
 }
 
 .v2-formation-lane {
@@ -457,12 +471,12 @@
 }
 
 .v2-audio-tools {
+  position: relative;
   display: grid;
-  align-content: start;
+  align-content: center;
   justify-items: center;
-  gap: 12px;
-  padding-top: 40px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(185, 198, 219, 0.24);
+  background: #0a0d12;
   color: #8c96a6;
 }
 
@@ -520,9 +534,6 @@
     padding-top: 36px;
   }
 
-  .v2-audio-tools {
-    padding-top: 36px;
-  }
 }
 
 @media (min-width: 720px) {

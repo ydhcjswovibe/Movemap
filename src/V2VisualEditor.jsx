@@ -89,8 +89,8 @@ function V2VisualEditor() {
 
           <div className="v2-lane-row">
             <div className="v2-lane-label">
-              <span>대형</span>
-              <button type="button" aria-label="대형 추가">+</button>
+              <CoolIcon name="users" />
+              <button className="v2-track-add-button" type="button" aria-label="대형 추가">+</button>
             </div>
             <div className="v2-formation-lane">
               <button className="v2-formation-block v2-intro-block" type="button">Intro V</button>
@@ -100,8 +100,8 @@ function V2VisualEditor() {
 
           <div className="v2-audio-row" aria-label="Audio reference lane">
             <div className="v2-audio-tools">
-              <CoolIcon name="settings" />
-              <CoolIcon name="share" />
+              <CoolIcon name="note" />
+              <button className="v2-track-add-button" type="button" aria-label="음악 추가">+</button>
             </div>
             <div className="v2-waveform" aria-hidden="true">
               {Array.from({ length: 42 }, (_, index) => (
