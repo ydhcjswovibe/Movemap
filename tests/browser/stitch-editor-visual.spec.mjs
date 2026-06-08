@@ -1,5 +1,70 @@
 import { expect, test } from "@playwright/test";
 
+function seededRouteProject({ viewEnabled = true, editEnabled = true, editToken = "valid" } = {}) {
+  const performers = [
+    { id: "a1", label: "A1", name: "A1", role: "groupA", color: "#2457c5" },
+    { id: "a2", label: "A2", name: "A2", role: "groupA", color: "#3478f6" },
+    { id: "b1", label: "B1", name: "B1", role: "groupB", color: "#c0265f" }
+  ];
+  return {
+    title: "Editor v2 Route Fixture",
+    performanceType: "mixed",
+    performers,
+    partnerSets: [],
+    stage: { width: 12, height: 8 },
+    frontZone: { y: 5.6 },
+    owner: { sessionId: "owner_fixture", createdAt: "2026-06-08T00:00:00.000Z" },
+    account: { plan: "free" },
+    cloudProjectId: "project-1",
+    shareLinks: {
+      view: { projectId: "project-1", token: "", enabled: viewEnabled },
+      edit: { projectId: "project-1", token: editToken, enabled: editEnabled }
+    },
+    sections: [
+      {
+        id: "s1",
+        name: "Intro",
+        time: 4,
+        moveDuration: 0,
+        start: 4,
+        end: 4,
+        moveMode: "hold",
+        notes: "시작",
+        frontFocus: [],
+        partnerSetId: "",
+        positions: { a1: { x: 2, y: 2 }, a2: { x: 4, y: 2 }, b1: { x: 6, y: 2 } }
+      },
+      {
+        id: "s2",
+        name: "Cross",
+        time: 12,
+        moveDuration: 4,
+        start: 8,
+        end: 12,
+        moveMode: "smooth",
+        notes: "교차",
+        frontFocus: [],
+        partnerSetId: "",
+        positions: { a1: { x: 8, y: 6 }, a2: { x: 5, y: 4 }, b1: { x: 7, y: 5 } }
+      }
+    ],
+    updatedAt: "2026-06-08T00:00:00.000Z"
+  };
+}
+
+async function routeCloudProject(page, plan) {
+  await page.route("**/rest/v1/rpc/get_project_by_edit_token", async (route) => {
+    const payload = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: payload.p_token === plan.shareLinks?.edit?.token ? { id: "project-1", plan } : null });
+  });
+  await page.route("**/rest/v1/movemap_projects**", async (route) => {
+    await route.fulfill({ json: [{ id: "project-1", plan }] });
+  });
+  await page.route("**/rest/v1/choreo_projects**", async (route) => {
+    await route.fulfill({ json: [] });
+  });
+}
+
 async function openSampleEditor(browser) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.addInitScript(() => {
@@ -548,6 +613,15 @@ async function expectTopMenuAvoidsStageCore(page) {
   await expect(page.locator("[data-stitch-mobile-editor] .mobile-global-actions .more-action-menu")).toHaveCount(0);
 }
 
+async function dragElementHorizontally(page, locator, deltaX) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + deltaX, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+}
+
 test.describe("Stitch main editor visual states", () => {
   test("editor v2 supports core parity workflows", async ({ browser }) => {
     const page = await openEditorV2Desktop(browser);
@@ -641,6 +715,103 @@ test.describe("Stitch main editor visual states", () => {
 
     await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
     expect(browserIssues).toEqual([]);
+    await page.close();
+  });
+
+  test("editor v2 covers formation timeline menu and audio parity surfaces", async ({ browser }) => {
+    const page = await openEditorV2Desktop(browser);
+    const browserIssues = collectBrowserIssues(page);
+    const editor = page.locator("[data-stitch-mobile-editor][data-editor-v2='true']");
+    const formationBlocks = editor.locator(".formation-block");
+    const initialBlockCount = await formationBlocks.count();
+    expect(initialBlockCount).toBeGreaterThan(0);
+
+    const trimHold = editor.locator(".formation-block.hold.segment").first();
+    await trimHold.click();
+    await expect(trimHold).toHaveClass(/selected/);
+    const trimHandle = trimHold.locator(".formation-resize-handle.right");
+    await expect(trimHandle).toBeVisible();
+    await expect(trimHandle).toHaveAttribute("aria-label", "대형 Hold 끝 조정");
+
+    const formsAdd = editor.locator(".forms-row .timeline-row-label").getByRole("button", { name: "대형 추가" });
+    await formsAdd.click();
+    await expect.poll(() => formationBlocks.count()).toBeGreaterThan(initialBlockCount);
+    const afterAddCount = await formationBlocks.count();
+
+    const lastHold = editor.locator(".formation-block.hold.segment").last();
+    await lastHold.click();
+    await expect(lastHold).toHaveClass(/selected/);
+
+    const duplicateAction = editor.locator(".mobile-action-bar").getByRole("button", { name: "복제" });
+    await expect(duplicateAction).toBeVisible();
+    await duplicateAction.click();
+    await expect.poll(() => formationBlocks.count()).toBeGreaterThan(afterAddCount);
+    const afterDuplicateCount = await formationBlocks.count();
+
+    const deleteAction = editor.locator(".mobile-action-bar").getByRole("button", { name: "삭제" });
+    await expect(deleteAction).toBeVisible();
+    await deleteAction.click();
+    await expect.poll(() => formationBlocks.count()).toBeLessThan(afterDuplicateCount);
+
+    const timelineContent = editor.locator(".audio-lane .timeline-content");
+    const beforeZoomWidth = await timelineContent.evaluate((node) => Number.parseFloat(node.style.width));
+    await editor.getByRole("button", { name: "타임라인 확대" }).click();
+    await expect.poll(() => timelineContent.evaluate((node) => Number.parseFloat(node.style.width))).toBeGreaterThan(beforeZoomWidth);
+    const scrollMetrics = await editor.locator(".audio-lane").evaluate((lane) => {
+      const content = lane.querySelector(".timeline-content");
+      return {
+        laneWidth: lane.getBoundingClientRect().width,
+        contentWidth: Number.parseFloat(content?.style.width || "0"),
+        transform: content?.style.transform || ""
+      };
+    });
+    expect(scrollMetrics.contentWidth).toBeGreaterThan(scrollMetrics.laneWidth);
+    expect(scrollMetrics.transform).toMatch(/translateX\(-?\d/);
+
+    const globalActions = editor.locator(".mobile-global-actions");
+    await globalActions.getByRole("button", { name: "저장" }).click();
+    await expect(editor.locator(".mobile-bottom-sheet")).toHaveCount(0);
+    await globalActions.getByRole("button", { name: "공유" }).click();
+    await expect(globalActions.locator(".share-action-menu")).toBeVisible();
+    await expect(globalActions.locator(".share-action-menu")).toContainText("보기 링크");
+    await globalActions.getByRole("button", { name: "다운로드" }).click();
+    await expect(globalActions.locator(".share-action-menu")).toHaveCount(0);
+    await expect(globalActions.locator(".download-action-menu")).toContainText("프로젝트 파일");
+    await expect(globalActions.locator(".download-action-menu")).toContainText("현재 PNG");
+    await globalActions.getByRole("button", { name: "더보기" }).click();
+    await expect(globalActions.locator(".download-action-menu")).toHaveCount(0);
+    await expect(globalActions.locator(".more-action-menu input[type='file'][accept='audio/*']")).toHaveCount(1);
+    await expect(globalActions.locator(".more-action-menu")).toContainText("음악");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".top-action-menu")).toHaveCount(0);
+
+    expect(browserIssues).toEqual([]);
+    await page.close();
+  });
+
+  test("share and edit link routes keep review fallback behavior during editor v2 buildout", async ({ browser }) => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await routeCloudProject(page, seededRouteProject());
+    await page.goto("/share/project-1");
+    await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
+    await expect(page.getByRole("button", { name: "저장" })).toHaveCount(0);
+    await expect(page.locator(".formation-block")).toHaveCount(3);
+
+    await page.goto("/edit/project-1?token=valid");
+    await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
+    await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
+    await expect(page.locator(".mobile-global-actions").getByRole("button", { name: "저장" })).toBeVisible();
+    await expect(page.locator(".forms-row .timeline-row-label").getByRole("button", { name: "대형 추가" })).toBeVisible();
+
+    await page.goto("/edit/project-1?token=bad");
+    await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toBeVisible();
+    await expect(page.locator(".mobile-global-actions").getByRole("button", { name: "저장" })).toHaveCount(0);
+
+    await routeCloudProject(page, seededRouteProject({ viewEnabled: false }));
+    await page.goto("/share/project-1");
+    await expect(page.getByText(/소유자가 이 보기 링크를 꺼두었습니다/)).toBeVisible();
+    await expect(page.locator(".mobile-global-actions").getByRole("button", { name: "저장" })).toHaveCount(0);
     await page.close();
   });
 
