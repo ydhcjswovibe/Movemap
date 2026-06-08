@@ -224,8 +224,8 @@ function StitchStage({ model, actions }) {
                 >
                   <title>{performer.name}</title>
                   <circle cx={pos.x} cy={pos.y} r={tokenMetrics.hitRadius} fill="transparent" />
-                  {selected && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.selectedRingRadius} className="stitch-token-ring" />}
-                  <circle cx={pos.x} cy={pos.y} r={tokenMetrics.tokenRadius} fill={performer.color || "#2e62ff"} />
+                  {selected && <circle cx={pos.x} cy={pos.y} r={tokenMetrics.selectedRingRadius} className="stitch-token-ring" strokeWidth={tokenMetrics.strokeWidth * 1.4} />}
+                  <circle cx={pos.x} cy={pos.y} r={tokenMetrics.tokenRadius} fill={performer.color || "#2e62ff"} stroke="#201f1f" strokeWidth={tokenMetrics.strokeWidth} style={{ stroke: "#201f1f", strokeWidth: tokenMetrics.strokeWidth }} />
                   <text x={pos.x} y={pos.y + tokenMetrics.labelFontSize * 0.34} textAnchor="middle" fontSize={tokenMetrics.labelFontSize}>{shortTokenName(performer.name)}</text>
                 </g>
               );

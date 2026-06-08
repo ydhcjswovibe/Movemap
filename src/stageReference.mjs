@@ -64,11 +64,11 @@ function roundReferenceMetric(value) {
 function referenceMetricsForStage(stage = LEGACY_REFERENCE_STAGE) {
   const tokenMetrics = stageTokenMetrics(stage);
   return {
-    pointRadius: roundReferenceMetric(Math.max(0.12, tokenMetrics.tokenRadius * 0.75)),
-    labelFontSize: roundReferenceMetric(Math.max(0.55, tokenMetrics.tokenRadius * 1.5)),
+    pointRadius: roundReferenceMetric(Math.max(0.08, tokenMetrics.tokenRadius * 0.48)),
+    labelFontSize: roundReferenceMetric(Math.max(0.24, tokenMetrics.tokenRadius * 0.92)),
     lineStrokeWidth: tokenMetrics.strokeWidth,
-    labelOffset: roundReferenceMetric(Math.max(0.55, tokenMetrics.tokenRadius * 1.5)),
-    pointLabelOffset: roundReferenceMetric(Math.max(0.75, tokenMetrics.tokenRadius * 2))
+    labelOffset: roundReferenceMetric(Math.max(0.24, tokenMetrics.tokenRadius * 0.92)),
+    pointLabelOffset: roundReferenceMetric(Math.max(0.34, tokenMetrics.tokenRadius * 1.1))
   };
 }
 

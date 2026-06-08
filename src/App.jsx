@@ -190,8 +190,8 @@ function stageFrontGuide(stage) {
   return {
     arrowPath: `M${inset} ${y} H${Math.max(inset, dimensions.width - inset)}`,
     labelY: Math.max(inset, y - inset * 0.35),
-    fontSize: Math.min(3.5, Math.max(0.55, shortSide * 0.18)),
-    strokeWidth: Math.min(0.5, Math.max(0.08, shortSide * 0.035))
+    fontSize: Math.min(0.38, Math.max(0.2, shortSide * 0.03)),
+    strokeWidth: Math.min(0.12, Math.max(0.04, shortSide * 0.008))
   };
 }
 
@@ -4612,22 +4612,22 @@ function App() {
               </g>
               <g className="grid-points">
                 {GRID_X.filter((x) => x <= stageDimensions.width).flatMap((x) => GRID_Y.filter((y) => y <= stageDimensions.height).map((y) => (
-                  <circle key={`${x}-${y}`} cx={x} cy={y} r="0.55" />
+                  <circle key={`${x}-${y}`} cx={x} cy={y} r={Math.max(tokenMetrics.strokeWidth * 0.7, 0.03)} />
                 )))}
               </g>
               <g className="stage-reference-layer" aria-hidden="true">
                 {stageReferenceItems.map((reference) => reference.type === "point" ? (
                   <g key={reference.id}>
-                    <circle cx={reference.x} cy={reference.y} r="1.35" fill={reference.style.fill} opacity="0.52" />
+                    <circle cx={reference.x} cy={reference.y} r={reference.metrics.pointRadius} fill={reference.style.fill} opacity="0.52" />
                     {reference.showLabel && (
-                      <text x={reference.x} y={reference.y - 2.4} textAnchor="middle" fontSize="2.8" fill={reference.style.fill} fontWeight="700">{reference.label}</text>
+                      <text x={reference.x} y={reference.y - reference.metrics.pointLabelOffset} textAnchor="middle" fontSize={reference.metrics.labelFontSize} fill={reference.style.fill} fontWeight="700">{reference.label}</text>
                     )}
                   </g>
                 ) : (
                   <g key={reference.id}>
-                    <line x1={reference.x1} y1={reference.y1} x2={reference.x2} y2={reference.y2} stroke={reference.style.stroke} strokeWidth="0.42" strokeDasharray={reference.style.dash} opacity="0.54" />
+                    <line x1={reference.x1} y1={reference.y1} x2={reference.x2} y2={reference.y2} stroke={reference.style.stroke} strokeWidth={reference.metrics.lineStrokeWidth} strokeDasharray={reference.style.dash} opacity="0.54" />
                     {reference.showLabel && (
-                      <text x={(reference.x1 + reference.x2) / 2} y={Math.max(5, (reference.y1 + reference.y2) / 2 - 1.8)} textAnchor="middle" fontSize="2.6" fill={reference.style.fill} fontWeight="700">{reference.label}</text>
+                      <text x={(reference.x1 + reference.x2) / 2} y={Math.max(reference.metrics.labelFontSize, (reference.y1 + reference.y2) / 2 - reference.metrics.labelOffset)} textAnchor="middle" fontSize={reference.metrics.labelFontSize} fill={reference.style.fill} fontWeight="700">{reference.label}</text>
                     )}
                   </g>
                 ))}

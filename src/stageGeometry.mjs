@@ -15,6 +15,10 @@ function roundDimension(value) {
   return Math.round(value * 10) / 10;
 }
 
+function roundMetric(value) {
+  return Math.round(value * 100) / 100;
+}
+
 export function clampStageDimension(value, limits = STAGE_DIMENSION_LIMITS) {
   const number = finiteNumber(value, DEFAULT_STAGE_DIMENSIONS.width);
   return roundDimension(Math.max(limits.min, Math.min(limits.max, number)));
@@ -35,19 +39,20 @@ export function stageViewBox(stage = DEFAULT_STAGE_DIMENSIONS) {
 export function stageTokenMetrics(stage = DEFAULT_STAGE_DIMENSIONS) {
   const dimensions = normalizeStageDimensions(stage);
   const shortSide = Math.max(1, Math.min(dimensions.width, dimensions.height));
-  const tokenRadius = roundDimension(Math.max(0.36, Math.min(4.2, shortSide * 0.0525)));
+  const compactScale = shortSide < 8 ? 0.038 : 0.04;
+  const tokenRadius = roundMetric(Math.max(0.19, Math.min(4.2, shortSide * compactScale)));
   return {
     tokenRadius,
-    selectedRingRadius: roundDimension(Math.max(tokenRadius * 1.35, tokenRadius + 0.16)),
-    pairRingRadius: roundDimension(Math.max(tokenRadius * 1.12, tokenRadius + 0.08)),
-    selectedPairRingRadius: roundDimension(Math.max(tokenRadius * 1.22, tokenRadius + 0.14)),
-    hitRadius: roundDimension(Math.max(tokenRadius * 2.15, 0.9)),
-    candidateRadius: roundDimension(Math.max(tokenRadius * 1.7, 0.75)),
-    centerDotRadius: roundDimension(Math.max(tokenRadius * 0.26, 0.12)),
-    ghostRadius: roundDimension(Math.max(tokenRadius * 0.6, 0.24)),
-    previewRadius: roundDimension(Math.max(tokenRadius * 0.74, 0.3)),
-    labelFontSize: roundDimension(Math.max(tokenRadius * 0.82, 0.3)),
-    strokeWidth: roundDimension(Math.max(tokenRadius * 0.17, 0.08))
+    selectedRingRadius: roundMetric(Math.max(tokenRadius * 1.25, tokenRadius + 0.08)),
+    pairRingRadius: roundMetric(Math.max(tokenRadius * 1.12, tokenRadius + 0.07)),
+    selectedPairRingRadius: roundMetric(Math.max(tokenRadius * 1.22, tokenRadius + 0.1)),
+    hitRadius: roundMetric(Math.max(tokenRadius * 2.15, 0.72)),
+    candidateRadius: roundMetric(Math.max(tokenRadius * 1.7, 0.56)),
+    centerDotRadius: roundMetric(Math.max(tokenRadius * 0.22, 0.07)),
+    ghostRadius: roundMetric(Math.max(tokenRadius * 0.6, 0.18)),
+    previewRadius: roundMetric(Math.max(tokenRadius * 0.74, 0.22)),
+    labelFontSize: roundMetric(Math.max(tokenRadius * 0.82, 0.2)),
+    strokeWidth: roundMetric(Math.max(tokenRadius * 0.17, 0.04))
   };
 }
 

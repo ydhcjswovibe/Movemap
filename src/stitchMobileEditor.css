@@ -323,20 +323,13 @@
 
     .stitch-mobile-editor .token text {
         fill: #fff;
-        font-size: 2px;
         font-weight: 800;
         pointer-events: none;
     }
 
-    .stitch-mobile-editor .token circle:last-of-type {
-        stroke: #201f1f;
-        stroke-width: 0.55;
-    }
-
     .stitch-mobile-editor .stitch-token-ring {
-        fill: rgba(46, 98, 255, 0.22);
+        fill: none;
         stroke: var(--stitch-blue);
-        stroke-width: 0.95;
     }
 
     .stitch-mobile-editor .stage-corner-tools {
@@ -503,7 +496,7 @@
         border: 0;
         border-radius: 0;
         background: transparent;
-        overflow: visible;
+        overflow: hidden;
     }
 
     .stitch-mobile-editor .timeline-content {
@@ -545,9 +538,12 @@
         pointer-events: none;
     }
 
-    .stitch-mobile-editor .timeline-playhead::before {
-        display: none;
-        content: none;
+    .stitch-mobile-editor .timeline-playhead::before,
+    .stitch-mobile-editor .timeline-playhead::after {
+        display: none !important;
+        content: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
     }
 
     .stitch-mobile-editor .timeline-snapline {

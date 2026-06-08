@@ -246,24 +246,31 @@ async function expectRulerLooksLikeTimeStrip(page) {
     const playhead = ruler.querySelector(".timeline-playhead");
     const playheadStyle = playhead ? window.getComputedStyle(playhead) : null;
     const playheadCapStyle = playhead ? window.getComputedStyle(playhead, "::before") : null;
+    const playheadAfterStyle = playhead ? window.getComputedStyle(playhead, "::after") : null;
     return {
       backgroundColor: style.backgroundColor,
       borderTopWidth: style.borderTopWidth,
       borderBottomWidth: style.borderBottomWidth,
+      overflow: style.overflow,
       playheadWidth: playheadStyle?.width || "",
       playheadBackground: playheadStyle?.backgroundColor || "",
       playheadCapDisplay: playheadCapStyle?.display || "",
-      playheadCapContent: playheadCapStyle?.content || ""
+      playheadCapContent: playheadCapStyle?.content || "",
+      playheadAfterDisplay: playheadAfterStyle?.display || "",
+      playheadAfterContent: playheadAfterStyle?.content || ""
     };
   });
 
   expect(rulerStyle.backgroundColor).toBe("rgba(0, 0, 0, 0)");
   expect(rulerStyle.borderTopWidth).toBe("0px");
   expect(rulerStyle.borderBottomWidth).toBe("0px");
+  expect(rulerStyle.overflow).toBe("hidden");
   expect(Number.parseFloat(rulerStyle.playheadWidth)).toBeGreaterThanOrEqual(1.5);
   expect(rulerStyle.playheadBackground).not.toBe("rgb(5, 231, 119)");
   expect(rulerStyle.playheadCapDisplay).toBe("none");
   expect(rulerStyle.playheadCapContent).toBe("none");
+  expect(rulerStyle.playheadAfterDisplay).toBe("none");
+  expect(rulerStyle.playheadAfterContent).toBe("none");
 }
 
 async function expectPlayheadExtendsAcrossTracks(page) {
@@ -374,9 +381,49 @@ async function expectCompactStage(page) {
   const frameBox = await page.locator("[data-stitch-mobile-editor] .stage-frame").boundingBox();
   expect(frameBox).not.toBeNull();
   expect(frameBox.height).toBeLessThanOrEqual(352);
-  const tokenRadius = await page.locator("[data-stitch-mobile-editor] .token circle").last().getAttribute("r");
-  expect(Number(tokenRadius)).toBeGreaterThanOrEqual(0.35);
-  expect(Number(tokenRadius)).toBeLessThanOrEqual(0.6);
+  const tokenVisualMetrics = await page.locator("[data-stitch-mobile-editor] .token").first().evaluate((token) => {
+    const svg = token.ownerSVGElement;
+    const svgBox = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    const scale = svgBox.width / viewBox.width;
+    const circles = [...token.querySelectorAll("circle")];
+    const visibleCircle = circles.find((circle) => {
+      const fill = circle.getAttribute("fill");
+      return fill && fill !== "transparent";
+    });
+    const selectedRing = circles.find((circle) => circle.classList.contains("stitch-token-ring"));
+    const strokeWidth = Number(visibleCircle?.getAttribute("stroke-width") || 0);
+    const computedStrokeWidth = Number.parseFloat(window.getComputedStyle(visibleCircle).strokeWidth || "0");
+    const radius = Number(visibleCircle?.getAttribute("r") || 0);
+    const selectedRingStrokeWidth = Number(selectedRing?.getAttribute("stroke-width") || 0);
+    const selectedRingRadius = Number(selectedRing?.getAttribute("r") || 0);
+
+    return {
+      radius,
+      strokeWidth,
+      computedStrokeWidth,
+      paintedPixelDiameter: (radius * 2 + strokeWidth) * scale,
+      selectedRingFill: selectedRing ? window.getComputedStyle(selectedRing).fill : "",
+      selectedRingPixelDiameter: selectedRing
+        ? (selectedRingRadius * 2 + selectedRingStrokeWidth) * scale
+        : 0
+    };
+  });
+  expect(tokenVisualMetrics.radius).toBeGreaterThanOrEqual(0.18);
+  expect(tokenVisualMetrics.radius).toBeLessThanOrEqual(0.45);
+  expect(tokenVisualMetrics.strokeWidth).toBeLessThanOrEqual(0.12);
+  expect(tokenVisualMetrics.computedStrokeWidth).toBeCloseTo(tokenVisualMetrics.strokeWidth, 3);
+  expect(tokenVisualMetrics.paintedPixelDiameter).toBeLessThanOrEqual(24);
+  if (tokenVisualMetrics.selectedRingPixelDiameter > 0) {
+    expect(tokenVisualMetrics.selectedRingFill).toBe("none");
+  }
+  expect(tokenVisualMetrics.selectedRingPixelDiameter).toBeLessThanOrEqual(32);
+  const tokenLabelMetrics = await page.locator("[data-stitch-mobile-editor] .token text").first().evaluate((node) => ({
+    attributeFontSize: Number(node.getAttribute("font-size")),
+    computedFontSize: Number.parseFloat(getComputedStyle(node).fontSize)
+  }));
+  expect(tokenLabelMetrics.computedFontSize).toBeCloseTo(tokenLabelMetrics.attributeFontSize, 3);
+  expect(tokenLabelMetrics.computedFontSize).toBeLessThanOrEqual(0.6);
 }
 
 test.describe("Stitch main editor visual states", () => {
@@ -429,6 +476,7 @@ test.describe("Stitch main editor visual states", () => {
       buttons: 1
     });
     await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "token-selected");
+    await expectCompactStage(page);
     await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
     await expectOrderedMobileBands(page);
     await expectVisibleMeterGrid(page);

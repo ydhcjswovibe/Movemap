@@ -93,7 +93,7 @@ test("renders compact reference marks from stage token metrics", () => {
     { id: "mark", type: "point", label: "M", x: 6, y: 5.6 }
   ], { stage: { width: 12, height: 8 } });
 
-  assert.match(svg, /stroke-width="0.1"/);
-  assert.match(svg, /r="0.3"/);
-  assert.match(svg, /font-size="0.6"/);
+  assert.match(svg, /stroke-width="0.05"/);
+  assert.match(svg, /r="0.15"/);
+  assert.match(svg, /font-size="0.29"/);
 });
