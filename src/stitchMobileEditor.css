@@ -12,7 +12,9 @@
     .app > .mobile-editor {
         display: none;
     }
+}
 
+@media (max-width: 900px), (min-width: 901px) {
     .stitch-mobile-editor {
         --stitch-base: #131313;
         --stitch-panel-low: #1c1b1b;
@@ -905,5 +907,64 @@
 @media (min-width: 901px) {
     .stitch-mobile-editor {
         display: none !important;
+    }
+
+    .stitch-mobile-editor.editor-v2 {
+        --stitch-stage-size: min(58dvh, 620px);
+        --timeline-ruler-height: 14px;
+        --timeline-lane-height: 88px;
+        --timeline-block-height: 70px;
+        --timeline-audio-height: 64px;
+        --timeline-row-label-width: 82px;
+        --timeline-editor-height: calc(
+            38px + 8px + var(--timeline-workbench-height) + 12px
+        );
+        --action-rail-height: 64px;
+        display: grid !important;
+        grid-template-rows: 50px minmax(0, calc(var(--stitch-stage-size) + 18px)) var(
+                --timeline-editor-height
+            ) minmax(0, 1fr) var(--action-rail-height);
+        max-width: min(920px, 100dvw);
+        height: calc(100dvh - 24px);
+        margin: 12px auto;
+        padding: 4px;
+        border: 1px solid var(--stitch-outline);
+        border-radius: 10px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+    }
+
+    .editor-v2-app {
+        min-height: 100dvh;
+        background:
+            radial-gradient(circle at 50% 0%, rgba(46, 98, 255, 0.12), transparent 34%),
+            #0f0f10;
+    }
+
+    .stitch-mobile-editor.editor-v2 .mobile-status-bar {
+        height: 50px;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) 170px;
+        padding: 6px 8px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .mobile-project-title,
+    .stitch-mobile-editor.editor-v2 .mobile-status-meta strong {
+        font-size: 12px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .save-meta,
+    .stitch-mobile-editor.editor-v2 .mobile-status-meta span {
+        font-size: 10px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .stage-area {
+        padding: 5px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .timeline-editor {
+        padding: 6px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .mobile-action-bar {
+        min-height: var(--action-rail-height);
     }
 }

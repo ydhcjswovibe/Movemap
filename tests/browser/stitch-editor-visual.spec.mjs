@@ -27,6 +27,22 @@ async function openStitchMock(browser) {
   return page;
 }
 
+async function openEditorV2Desktop(browser) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+  await page.addInitScript(() => {
+    localStorage.removeItem("movemap-project");
+    localStorage.removeItem("choreo-stage-planner-project");
+  });
+  await page.goto("/editor-v2");
+  await page.getByRole("button", { name: /샘플로 시작/ }).click();
+  await expect(page.locator(".app")).toHaveAttribute("data-editor-version", "v2");
+  await expect(page.locator("[data-stitch-mobile-editor][data-editor-v2='true']")).toBeVisible();
+  await expect(page.locator(".desktop-editor")).toHaveCount(0);
+  await expect(page.locator(".stage-area")).toBeVisible();
+  await expect(page.locator(".timeline-editor")).toBeVisible();
+  return page;
+}
+
 async function expectNoHorizontalOverflow(page) {
   const overflow = await page.evaluate(() => {
     const root = document.scrollingElement || document.documentElement;
@@ -427,6 +443,16 @@ async function expectCompactStage(page) {
 }
 
 test.describe("Stitch main editor visual states", () => {
+  test("renders the Stitch editor shell on the desktop /editor-v2 route", async ({ browser }) => {
+    const page = await openEditorV2Desktop(browser);
+    await expect(page.locator("[data-stitch-mobile-editor] .stage-frame")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor] .timeline-workbench")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "test-results/editor-v2-desktop-stitch-1440.png", fullPage: false });
+    await page.close();
+  });
+
   test("captures mobile idle, timeline, formation, token, and menu states at 390px", async ({ browser }) => {
     let page = await openSampleEditor(browser);
     await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "idle");

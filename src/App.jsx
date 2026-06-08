@@ -4,6 +4,7 @@ import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import StitchMobileEditor from "./StitchMobileEditor.jsx";
+import { createEditorV2Runtime } from "./editorV2Runtime.mjs";
 import { findPairGridPlacement, pairMetricsForStage, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -21,7 +22,8 @@ import { createPersonalTemplateFromSection, loadPersonalTemplates, personalTempl
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
-import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageTokenMetrics, stageViewBox } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
+import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
 import {
   applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
@@ -784,7 +786,7 @@ function Wizard({ onCreate }) {
   );
 }
 
-function App() {
+function App({ forceStitchEditor = false } = {}) {
   const linkMode = linkModeFromLocation(window.location);
   const shareId = linkMode.projectId;
   const linkType = linkMode.linkType;
@@ -868,6 +870,7 @@ function App() {
   const localAudioUrlRef = useRef("");
   const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
+  const isStitchEditorActive = forceStitchEditor || isStitchMobileViewport;
 
   function closeTopActionMenu() {
     setTopActionMenu("");
@@ -888,7 +891,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isStitchMobileViewport) return undefined;
+    if (!isStitchEditorActive) return undefined;
     function selectClickedFormation(event) {
       const block = event.target?.closest?.(".stitch-mobile-editor .formation-block");
       const sectionId = block?.dataset?.sectionId;
@@ -902,7 +905,7 @@ function App() {
     }
     document.addEventListener("click", selectClickedFormation, true);
     return () => document.removeEventListener("click", selectClickedFormation, true);
-  }, [isStitchMobileViewport]);
+  }, [isStitchEditorActive]);
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -4178,17 +4181,28 @@ function App() {
     return null;
   }
 
-  const stitchEditorModel = {
+  const { actions: stitchEditorActions, model: stitchEditorModel } = createEditorV2Runtime({
     activeMobilePanelActionKey,
     activeSection,
-    activeSectionName: activeSection?.name || "대형 없음",
     activeTransitionPaths,
+    addSection,
     arrivalLabel: activeSection ? formatTime(pointTime(activeSection)) : "0:00.0",
+    clearDrag,
+    clearTimelineSelection: () => {
+      setSelectedSectionId("");
+      clearSelection();
+    },
+    closeMobilePanel,
+    closeTopActionMenu,
     currentSectionId: sortedSections[timeSectionIndex]?.id || "",
+    cycleMobilePanelSize,
     dragPositions,
+    finishActiveDrag,
     focusedPerformerIds: activeFocusedPerformerIds,
     frontZone: plan.frontZone,
     globalActions: MOBILE_GLOBAL_ACTIONS,
+    handleMobileAction,
+    handleStageTap,
     hasUsableAudio,
     isMobilePanelOpen,
     isPlaying,
@@ -4198,55 +4212,6 @@ function App() {
       : mobileActions,
     mobilePanelSize: mobilePanel.size,
     mobilePanelTitle,
-    performers: plan.performers,
-    playheadPixel,
-    projectTitle: plan.title,
-    readonly,
-    redoDisabled: !redoStack.length,
-    selectedPerformerId,
-    selectedPerformerIds,
-    selectedSection,
-    selectedSectionId: stitchSelectedSectionId,
-    selectedStateText,
-    selectionVisualState,
-    snapPixel: snapPixel !== null && snapPixel >= 0 && snapPixel <= timelineViewportWidth
-      ? timelineSnapTime * timelinePixelsPerSecond
-      : null,
-    sortedSections,
-    stage3dProjection,
-    stageDimensions,
-    stageReferences: stageReferenceItems,
-    stageSizeLabel: `${stageDimensions.width}m x ${stageDimensions.height}m`,
-    stageViewMode,
-    timeLabel: formatTime(sliderTime),
-    timelineContentWidth,
-    timelineBlockedEdge,
-    timelineFormationBlocks,
-    timelineVisualSegments,
-    timelineScrollX,
-    timelineTicks,
-    timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
-    topActionMenu,
-    topActionSurface,
-    transitionPathCount: activeTransitionPaths.length,
-    undoDisabled: !undoStack.length,
-    visiblePositions,
-    waveformBars
-  };
-
-  const stitchEditorActions = {
-    addSection,
-    clearDrag,
-    closeMobilePanel,
-    closeTopActionMenu,
-    cycleMobilePanelSize,
-    finishActiveDrag,
-    handleMobileAction,
-    handleStageTap,
-    clearTimelineSelection: () => {
-      setSelectedSectionId("");
-      clearSelection();
-    },
     onFormationPointerDown,
     onFormationSelect: (section) => {
       setSelectedSectionId(section.id);
@@ -4270,24 +4235,63 @@ function App() {
       }
     },
     openTopActionMenu,
+    performers: plan.performers,
+    playheadPixel,
+    projectTitle: plan.title,
+    readonly,
+    redoDisabled: !redoStack.length,
     redoPlan,
     renderDownloadMenu,
     renderMobilePanelContent,
     renderMoreMenu,
     renderShareMenu,
     selectPerformer,
+    selectedPerformerId,
+    selectedPerformerIds,
+    selectedSection,
+    selectedSectionId: stitchSelectedSectionId,
+    selectedStateText,
+    selectionVisualState,
     setStageViewMode,
+    snapPixel: snapPixel !== null && snapPixel >= 0 && snapPixel <= timelineViewportWidth
+      ? timelineSnapTime * timelinePixelsPerSecond
+      : null,
+    sortedSections,
+    stage3dProjection,
+    stageDimensions,
+    stageReferences: stageReferenceItems,
+    stageSizeLabel: `${stageDimensions.width}m x ${stageDimensions.height}m`,
+    stageViewMode,
     svgRef,
+    timeLabel: formatTime(sliderTime),
+    timelineBlockedEdge,
+    timelineContentWidth,
+    timelineFormationBlocks,
+    timelineScrollX,
+    timelineTicks,
     timelineViewportRef,
+    timelineVisualSegments,
+    timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
     togglePlayback,
     toggleStageReferences: () => setShowStageReferences((value) => !value),
+    topActionMenu,
+    topActionSurface,
+    transitionPathCount: activeTransitionPaths.length,
+    undoDisabled: !undoStack.length,
     undoPlan,
+    visiblePositions,
+    waveformBars,
     zoomTimelineBy
-  };
+  });
 
   return (
     <div
-      className={isStageFocus ? "app stage-focus" : "app"}
+      className={[
+        "app",
+        isStageFocus ? "stage-focus" : "",
+        forceStitchEditor ? "editor-v2-app" : ""
+      ].filter(Boolean).join(" ")}
+      data-editor-version={forceStitchEditor ? "v2" : "legacy"}
       data-selection-state={selectionVisualState}
       data-timeline-state={timelineVisualState}
       data-menu-state={menuVisualState}
@@ -4313,7 +4317,7 @@ function App() {
         </div>
       )}
 
-      {!isStitchMobileViewport && (
+      {!isStitchEditorActive && (
       <main
         className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}
         data-selection-state={selectionVisualState}
@@ -4974,7 +4978,7 @@ function App() {
       </main>
       )}
 
-      {!isStitchMobileViewport && <section className="mobile-editor">
+      {!isStitchEditorActive && <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
             {mobileActions.map((action) => {
@@ -5020,7 +5024,7 @@ function App() {
         )}
       </section>}
 
-      {isStitchMobileViewport && !readonly && (
+      {isStitchEditorActive && !readonly && (
         <input
           ref={stitchAudioFileInputRef}
           type="file"
@@ -5083,7 +5087,13 @@ function App() {
         }}
       />
 
-      {isStitchMobileViewport && <StitchMobileEditor actions={stitchEditorActions} model={stitchEditorModel} />}
+      {isStitchEditorActive && (
+        <StitchMobileEditor
+          actions={stitchEditorActions}
+          model={stitchEditorModel}
+          variant={forceStitchEditor ? "editor-v2" : "mobile"}
+        />
+      )}
 
       <section className="print-sheets">
         {sortedSections.map((section, index) => (

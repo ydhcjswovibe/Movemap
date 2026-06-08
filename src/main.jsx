@@ -6,6 +6,10 @@ import App from "./App.jsx";
 import LandingPage from "./LandingPage.jsx";
 import StitchMobileEditorMock from "./StitchMobileEditorMock.jsx";
 
+function EditorV2Route() {
+  return <App forceStitchEditor />;
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -48,7 +52,9 @@ const RootComponent = currentPath === "/about" || currentPath === "/landing"
   ? LandingPage
   : currentPath === "/stitch-mobile-mock"
     ? StitchMobileEditorMock
-    : App;
+    : currentPath === "/editor-v2"
+      ? EditorV2Route
+      : App;
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
