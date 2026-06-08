@@ -35,7 +35,7 @@
   max-height: 844px;
   min-height: min(780px, 100dvh);
   display: grid;
-  grid-template-rows: 28px minmax(285px, 309px) 32px minmax(366px, 1fr) 64px;
+  grid-template-rows: 28px minmax(0, 1fr) 32px 236px 72px;
   overflow: hidden;
   background: var(--v2-bg);
   border-inline: 1px solid rgba(255, 255, 255, 0.06);
@@ -452,7 +452,7 @@
 .v2-audio-row {
   display: grid;
   grid-template-columns: 64px 1fr;
-  height: calc(100% - 86px);
+  height: 150px;
   min-height: 0;
 }
 
@@ -461,7 +461,7 @@
   align-content: start;
   justify-items: center;
   gap: 12px;
-  padding-top: 42px;
+  padding-top: 40px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   color: #8c96a6;
 }
@@ -477,7 +477,7 @@
   gap: 2px;
   min-width: 0;
   height: 100%;
-  padding: 42px 18px 22px 14px;
+  padding: 40px 18px 18px 14px;
   background:
     repeating-linear-gradient(90deg, transparent 0 63px, rgba(255, 255, 255, 0.04) 63px 64px),
     #111419;
@@ -494,19 +494,26 @@
 
 .v2-bottom-rail {
   justify-content: space-around;
-  gap: 6px;
-  padding: 9px 20px calc(9px + env(safe-area-inset-bottom));
+  gap: 8px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.11);
 }
 
 .v2-bottom-rail .v2-icon-button {
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.v2-bottom-rail .v2-icon-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 @media (max-height: 800px) {
   .v2-phone-shell {
-    grid-template-rows: 28px minmax(265px, 285px) 31px minmax(336px, 1fr) 60px;
+    grid-template-rows: 28px minmax(0, 1fr) 31px 220px 68px;
   }
 
   .v2-waveform {

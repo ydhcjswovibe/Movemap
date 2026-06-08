@@ -38,10 +38,17 @@ test.describe("visual-only v2 editor prototype", () => {
       };
     });
 
-    expect(boxes.stage.height).toBeGreaterThanOrEqual(285);
-    expect(boxes.timeline.height).toBeGreaterThanOrEqual(360);
+    expect(boxes.stage.height).toBeGreaterThan(boxes.timeline.height);
+    expect(boxes.stage.height).toBeGreaterThanOrEqual(460);
+    expect(boxes.timeline.height).toBeGreaterThanOrEqual(220);
+    expect(boxes.timeline.height).toBeLessThanOrEqual(260);
     expect(boxes.timeline.bottom).toBeLessThanOrEqual(boxes.rail.y + 1);
     expect(boxes.rail.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
+
+    const actionButtonBox = await bottomRail.getByRole("button").first().boundingBox();
+    expect(actionButtonBox).not.toBeNull();
+    expect(actionButtonBox.width).toBeGreaterThanOrEqual(44);
+    expect(actionButtonBox.height).toBeGreaterThanOrEqual(44);
 
     await expectInsideViewport(page, timeline);
     await expectInsideViewport(page, bottomRail);
