@@ -8,7 +8,7 @@ const coolIconSource = readFileSync(new URL("./icons/CoolIcon.jsx", import.meta.
 const iconHintSource = readFileSync(new URL("./IconHintButton.jsx", import.meta.url), "utf8");
 const topActionDropdownSource = readFileSync(new URL("./TopActionDropdown.jsx", import.meta.url), "utf8");
 const stitchSource = readFileSync(new URL("./StitchMobileEditor.jsx", import.meta.url), "utf8");
-const editorV2TimelineSource = readFileSync(new URL("./EditorV2Timeline.jsx", import.meta.url), "utf8");
+const stitchTimelineSource = readFileSync(new URL("./StitchTimeline.jsx", import.meta.url), "utf8");
 const attributionSource = readFileSync(new URL("../docs/third-party-attribution.md", import.meta.url), "utf8");
 const selectedFormationStart = appSource.indexOf("<div className=\"selected-formation-bar\">");
 const selectedFormationEnd = appSource.indexOf("\n          )}\n        </section>", selectedFormationStart);
@@ -20,7 +20,7 @@ const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\
 const formationPointerDown = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?\n  \}\n\n  function onMovementKeyframePointerDown/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
-  assert.match(editorV2TimelineSource, /aria-label="대형 추가"/);
+  assert.match(stitchTimelineSource, /aria-label="대형 추가"/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
 });
 
@@ -44,15 +44,17 @@ test("icon hint button centralizes icon labels and compact hints", () => {
 });
 
 test("timeline controls use a single icon rail", () => {
-  const railSource = editorV2TimelineSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
+  const railSource = stitchTimelineSource.match(/<div className="timeline-control-rail stitch-timeline-header">[\s\S]*?<div className="timeline-workbench stitch-timeline-workbench"/)?.[0] || "";
+  const stageSource = readFileSync(new URL("./StitchStage.jsx", import.meta.url), "utf8");
 
   assert.match(railSource, /IconHintButton/);
   assert.match(railSource, /iconName=\{isPlaying \? "pause" : "play"\}/);
   assert.match(railSource, /iconName="undo"/);
   assert.match(railSource, /iconName="redo"/);
-  assert.match(railSource, /iconName="zoom-minus"/);
-  assert.match(railSource, /iconName="zoom-plus"/);
-  assert.match(railSource, /className="timeline-time-readout"/);
+  assert.match(railSource, /iconName="settings"/);
+  assert.match(stageSource, /iconName="zoom-minus"/);
+  assert.match(stageSource, /iconName="zoom-plus"/);
+  assert.match(railSource, /className="timeline-time-readout stitch-timecode"/);
   assert.doesNotMatch(railSource, /label="현재 시간에 대형 추가"/);
   assert.doesNotMatch(railSource, /timeline-add-button/);
   assert.doesNotMatch(railSource, />대형 추가<\/button>/);
@@ -64,20 +66,18 @@ test("timeline controls use a single icon rail", () => {
 });
 
 test("Stitch timeline exposes row-local add buttons for forms and audio", () => {
-  const formsRowSource = editorV2TimelineSource.match(/<div className="timeline-track-row forms-row"[\s\S]*?<div ref=\{formationLaneRef\}/)?.[0] || "";
-  const audioRowSource = editorV2TimelineSource.match(/<div className="timeline-track-row audio-row"[\s\S]*?<div ref=\{audioLaneRef\}/)?.[0] || "";
-  const controlRailSource = editorV2TimelineSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
+  const formsRowSource = stitchTimelineSource.match(/<div className="timeline-track-row forms-row stitch-track-row"[\s\S]*?<div ref=\{formationLaneRef\}/)?.[0] || "";
+  const audioRowSource = stitchTimelineSource.match(/<div className="timeline-track-row audio-row stitch-track-row"[\s\S]*?<div className="timeline-viewport timeline-lane audio-lane"/)?.[0] || "";
+  const controlRailSource = stitchTimelineSource.match(/<div className="timeline-control-rail stitch-timeline-header">[\s\S]*?<div className="timeline-workbench stitch-timeline-workbench"/)?.[0] || "";
 
-  assert.match(formsRowSource, /<span>Forms<\/span>/);
+  assert.match(formsRowSource, /<span>대형<\/span>/);
   assert.match(formsRowSource, /className="timeline-row-add-button"/);
   assert.match(formsRowSource, /aria-label="대형 추가"/);
-  assert.match(formsRowSource, /title="대형 추가"/);
-  assert.match(formsRowSource, /actions\.addSection\(\{ forceAppend: true \}\)/);
+  assert.match(formsRowSource, /actions\.addSection\?\.\(\{ forceAppend: true \}\)/);
   assert.match(formsRowSource, />\s*\+\s*<\/button>/);
-  assert.match(audioRowSource, /<span>Audio<\/span>/);
+  assert.match(audioRowSource, /<span>오디오<\/span>/);
   assert.match(audioRowSource, /className="timeline-row-add-button"/);
   assert.match(audioRowSource, /aria-label="음악 추가"/);
-  assert.match(audioRowSource, /title="음악 추가"/);
   assert.match(audioRowSource, /actions\.openAudioFilePicker/);
   assert.doesNotMatch(controlRailSource, /현재 시간에 대형 추가/);
   assert.doesNotMatch(controlRailSource, /timeline-add-button/);

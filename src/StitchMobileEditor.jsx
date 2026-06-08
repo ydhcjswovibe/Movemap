@@ -1,27 +1,25 @@
-import EditorV2ActionRail from "./EditorV2ActionRail.jsx";
-import EditorV2Inspector from "./EditorV2Inspector.jsx";
-import EditorV2Stage from "./EditorV2Stage.jsx";
-import EditorV2Timeline from "./EditorV2Timeline.jsx";
-import EditorV2TopBar from "./EditorV2TopBar.jsx";
+import StitchActionRail from "./StitchActionRail.jsx";
+import StitchInspector from "./StitchInspector.jsx";
+import StitchStage from "./StitchStage.jsx";
+import StitchTimeline from "./StitchTimeline.jsx";
+import StitchTopBar from "./StitchTopBar.jsx";
 
-export default function StitchMobileEditor({ actions, model, variant = "mobile" }) {
-  const isEditorV2 = variant === "editor-v2";
+export default function StitchMobileEditor({ actions, model }) {
   const selection = model.selection || model;
   const selectionVisualState = selection.selectionVisualState;
   return (
     <section
-      className={["stitch-mobile-editor", isEditorV2 ? "editor-v2" : ""].filter(Boolean).join(" ")}
-      data-editor-v2={isEditorV2 ? "true" : undefined}
+      className="stitch-mobile-editor"
       data-stitch-mobile-editor
       data-selection-state={selectionVisualState}
     >
-      <EditorV2TopBar model={model} actions={actions} />
+      <StitchTopBar model={model} actions={actions} />
       <div className="stage-area" data-selection-state={selectionVisualState}>
-        <EditorV2Stage model={model} actions={actions} />
+        <StitchStage model={model} actions={actions} />
       </div>
-      <EditorV2Timeline model={model} actions={actions} />
-      <EditorV2ActionRail model={model} actions={actions} />
-      <EditorV2Inspector model={model} actions={actions} />
+      <StitchTimeline model={model} actions={actions} />
+      <StitchActionRail model={model} actions={actions} />
+      <StitchInspector model={model} actions={actions} />
     </section>
   );
 }

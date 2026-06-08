@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { createEditorV2Runtime } from "./editorV2Runtime.mjs";
+import { createStitchEditorRuntime } from "./stitchEditorRuntime.mjs";
 
-test("editor v2 runtime exposes Stitch-ready model and command contracts", () => {
+test("Stitch editor runtime exposes mobile model and command contracts", () => {
   const addSection = () => {};
   const onFormationSelect = () => {};
   const onStagePointerDown = () => {};
   const renderMobilePanelContent = () => null;
-  const { actions, model } = createEditorV2Runtime({
+  const { actions, model } = createStitchEditorRuntime({
     activeSection: { id: "s1", name: "Intro" },
     addSection,
     arrivalLabel: "0:12.0",
@@ -58,9 +58,9 @@ test("editor v2 runtime exposes Stitch-ready model and command contracts", () =>
   assert.equal(actions.renderMobilePanelContent, renderMobilePanelContent);
 });
 
-test("editor v2 runtime exposes inspector panel descriptors and command callbacks", () => {
+test("Stitch editor runtime exposes inspector panel descriptors and command callbacks", () => {
   const calls = [];
-  const { actions, model } = createEditorV2Runtime({
+  const { actions, model } = createStitchEditorRuntime({
     activeMobilePanelActionKey: "view",
     handleMobileAction: (key) => calls.push(`mobile:${key}`),
     inspectorCommands: {
@@ -96,10 +96,10 @@ test("editor v2 runtime exposes inspector panel descriptors and command callback
   assert.deepEqual(calls, ["command:refs"]);
 });
 
-test("editor v2 inspector model keeps temporary fallback panels and mobile action descriptors", () => {
+test("Stitch inspector model keeps temporary fallback panels and mobile action descriptors", () => {
   const calls = [];
   const renderMobilePanelContent = () => null;
-  const { actions, model } = createEditorV2Runtime({
+  const { actions, model } = createStitchEditorRuntime({
     handleMobileAction: (key) => calls.push(key),
     isMobilePanelOpen: true,
     mobilePanelKind: "formation",
@@ -125,12 +125,11 @@ test("editor v2 inspector model keeps temporary fallback panels and mobile actio
   assert.equal(actions.renderMobilePanelContent, renderMobilePanelContent);
 });
 
-test("main route maps /editor-v2 to forced Stitch editor shell", () => {
+test("main route does not expose a separate experimental editor surface", () => {
   const mainSource = readFileSync(new URL("./main.jsx", import.meta.url), "utf8");
   const appSource = readFileSync(new URL("./App.jsx", import.meta.url), "utf8");
 
-  assert.match(mainSource, /currentPath === "\/editor-v2"/);
-  assert.match(mainSource, /<App forceStitchEditor \/>/);
-  assert.match(appSource, /forceStitchEditor = false/);
-  assert.match(appSource, /variant=\{forceStitchEditor \? "editor-v2" : "mobile"\}/);
+  assert.match(mainSource, /currentPath === "\/stitch-mobile-mock"/);
+  assert.doesNotMatch(appSource, /data-editor-version/);
+  assert.doesNotMatch(appSource, /variant=\{/);
 });

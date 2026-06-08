@@ -4,7 +4,7 @@ import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import StitchMobileEditor from "./StitchMobileEditor.jsx";
-import { createEditorV2Runtime } from "./editorV2Runtime.mjs";
+import { createStitchEditorRuntime } from "./stitchEditorRuntime.mjs";
 import { findPairGridPlacement, pairMetricsForStage, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -786,7 +786,7 @@ function Wizard({ onCreate }) {
   );
 }
 
-function App({ forceStitchEditor = false } = {}) {
+function App() {
   const linkMode = linkModeFromLocation(window.location);
   const shareId = linkMode.projectId;
   const linkType = linkMode.linkType;
@@ -870,7 +870,7 @@ function App({ forceStitchEditor = false } = {}) {
   const localAudioUrlRef = useRef("");
   const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
-  const isStitchEditorActive = forceStitchEditor || isStitchMobileViewport;
+  const isStitchEditorActive = isStitchMobileViewport;
 
   function closeTopActionMenu() {
     setTopActionMenu("");
@@ -4181,7 +4181,7 @@ function App({ forceStitchEditor = false } = {}) {
     return null;
   }
 
-  const { actions: stitchEditorActions, model: stitchEditorModel } = createEditorV2Runtime({
+  const { actions: stitchEditorActions, model: stitchEditorModel } = createStitchEditorRuntime({
     activeMobilePanelActionKey,
     activeSection,
     activeTransitionPaths,
@@ -4302,10 +4302,8 @@ function App({ forceStitchEditor = false } = {}) {
     <div
       className={[
         "app",
-        isStageFocus ? "stage-focus" : "",
-        forceStitchEditor ? "editor-v2-app" : ""
+        isStageFocus ? "stage-focus" : ""
       ].filter(Boolean).join(" ")}
-      data-editor-version={forceStitchEditor ? "v2" : "legacy"}
       data-selection-state={selectionVisualState}
       data-timeline-state={timelineVisualState}
       data-menu-state={menuVisualState}
@@ -5105,7 +5103,6 @@ function App({ forceStitchEditor = false } = {}) {
         <StitchMobileEditor
           actions={stitchEditorActions}
           model={stitchEditorModel}
-          variant={forceStitchEditor ? "editor-v2" : "mobile"}
         />
       )}
 

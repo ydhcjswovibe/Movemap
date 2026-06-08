@@ -153,7 +153,7 @@ function buildInspectorPanels(input) {
   };
 }
 
-export function createEditorV2Runtime(input = {}) {
+export function createStitchEditorRuntime(input = {}) {
   const shell = {
     activeSectionName: input.activeSection?.name || "대형 없음",
     arrivalLabel: input.arrivalLabel,

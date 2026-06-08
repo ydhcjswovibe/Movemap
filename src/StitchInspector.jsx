@@ -33,7 +33,7 @@ function RuntimePanel({ panel, actions }) {
   );
 }
 
-export default function EditorV2Inspector({ model, actions }) {
+export default function StitchInspector({ model, actions }) {
   const inspector = model.inspector || {};
   const isOpen = inspector.isOpen ?? model.isMobilePanelOpen;
   if (!isOpen) return null;
