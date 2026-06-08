@@ -236,24 +236,28 @@
   height: 24px;
   display: grid;
   place-items: center;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   color: #ffffff;
+  font-family: inherit;
   font-size: 8px;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
+  text-align: center;
   transform: translate(-50%, -50%);
   appearance: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .v2-token-a {
-  background: radial-gradient(circle at 35% 28%, #53a0ff, #1d56cf 70%);
+  background: #256fe8;
   box-shadow: 0 5px 14px rgba(19, 80, 201, 0.45);
 }
 
 .v2-token-b {
-  background: radial-gradient(circle at 35% 28%, #ff5a98, #ba1a58 72%);
+  background: #d72f72;
   box-shadow: 0 5px 14px rgba(188, 25, 92, 0.42);
 }
 
