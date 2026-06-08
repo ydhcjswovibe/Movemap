@@ -236,6 +236,7 @@
   height: 24px;
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
@@ -253,19 +254,19 @@
 
 .v2-token-a {
   background: #256fe8;
-  box-shadow: 0 5px 14px rgba(19, 80, 201, 0.45);
 }
 
 .v2-token-b {
   background: #d72f72;
-  box-shadow: 0 5px 14px rgba(188, 25, 92, 0.42);
 }
 
 .v2-token.is-selected {
-  box-shadow:
-    0 0 0 3px rgba(29, 109, 255, 0.32),
-    0 0 0 7px rgba(29, 109, 255, 0.18),
-    0 0 21px rgba(36, 118, 255, 0.64);
+  z-index: 6;
+  width: 30px;
+  height: 30px;
+  border: 2px solid #9bc3ff;
+  background: #1f67d8;
+  font-size: 9px;
 }
 
 .v2-zoom-rail {
