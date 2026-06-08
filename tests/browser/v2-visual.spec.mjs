@@ -35,6 +35,8 @@ test.describe("visual-only v2 editor prototype", () => {
       return {
         stage: rectFor("[data-v2-stage]"),
         timeline: rectFor("[data-v2-timeline]"),
+        formationLane: rectFor(".v2-lane-row"),
+        musicLane: rectFor(".v2-audio-row"),
         rail: rectFor("[data-v2-bottom-rail]"),
         viewportHeight: window.innerHeight
       };
@@ -44,6 +46,7 @@ test.describe("visual-only v2 editor prototype", () => {
     expect(boxes.stage.height).toBeGreaterThanOrEqual(460);
     expect(boxes.timeline.height).toBeGreaterThanOrEqual(220);
     expect(boxes.timeline.height).toBeLessThanOrEqual(260);
+    expect(boxes.formationLane.height).toBeGreaterThan(boxes.musicLane.height);
     expect(boxes.timeline.bottom).toBeLessThanOrEqual(boxes.rail.y + 1);
     expect(boxes.rail.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
 
