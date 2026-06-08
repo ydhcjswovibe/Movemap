@@ -4,7 +4,9 @@ import IconHintButton, { IconHintOverlay } from "./IconHintButton.jsx";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import StitchMobileEditor from "./StitchMobileEditor.jsx";
+import V2VisualEditor from "./V2VisualEditor.jsx";
 import { createStitchEditorRuntime } from "./stitchEditorRuntime.mjs";
+import { clientPointToV2Stage, createV2EditorRuntime } from "./v2EditorRuntime.mjs";
 import { findPairGridPlacement, pairMetricsForStage, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -791,6 +793,8 @@ function App() {
   const shareId = linkMode.projectId;
   const linkType = linkMode.linkType;
   const isEditLinkRoute = linkType === LINK_TYPES.edit;
+  const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
+  const isV2Route = normalizedPath === "/v2" || normalizedPath.endsWith("/v2");
   const supabaseClient = useMemo(() => {
     try {
       return createMovemapSupabaseClient(supabaseConfig());
@@ -862,6 +866,7 @@ function App() {
   const timelineViewportRef = useRef(null);
   const timelineGestureRef = useRef({ pointers: new Map(), mode: "" });
   const dragStateRef = useRef(null);
+  const ignoreNextV2StageTapRef = useRef(false);
   const interactiveEditSnapshotRef = useRef(null);
   const ignoreNextStageTapRef = useRef(false);
   const ignoreNextFormationClickRef = useRef(false);
@@ -870,7 +875,7 @@ function App() {
   const localAudioUrlRef = useRef("");
   const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
-  const isStitchEditorActive = isStitchMobileViewport;
+  const isStitchEditorActive = isStitchMobileViewport && !isV2Route;
 
   function closeTopActionMenu() {
     setTopActionMenu("");
@@ -2550,6 +2555,24 @@ function App() {
     setSelectedPerformerIds([]);
   }
 
+  function duplicateV2Selection() {
+    if (readonly) return;
+    if (selectedPerformerId) {
+      duplicateSelectedPerformer();
+      return;
+    }
+    duplicateSection();
+  }
+
+  function deleteV2Selection() {
+    if (readonly) return;
+    if (selectedPerformerId) {
+      deleteSelectedPerformer();
+      return;
+    }
+    deleteSection();
+  }
+
   function resetSelectedFormation() {
     if (readonly || !selectedSection) return;
     const confirmed = window.confirm("선택한 대형의 토큰 위치와 페어 연결을 기본 배치로 초기화할까요?");
@@ -2674,6 +2697,89 @@ function App() {
       }
     };
     setDragPositions({ [performerId]: token });
+  }
+
+  function onV2StagePointerDown(event, performerId, stageElement) {
+    if (readonly || !selectedSection || !stageElement) return;
+    event.stopPropagation();
+    const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
+    const editKeyframeId = selectedMovementKeyframe?.id || "";
+    const editPositions = sectionEditPositions(selectedSection, editKeyframeId);
+    const token = editPositions?.[performerId] || { x: pointer.x, y: pointer.y };
+    beginInteractiveEdit();
+    dragStateRef.current = {
+      mode: "v2-token-move",
+      performerId,
+      pointerId: event.pointerId,
+      sectionId: selectedSection.id,
+      keyframeId: editKeyframeId,
+      offsetX: token.x - pointer.x,
+      offsetY: token.y - pointer.y,
+      startPointer: pointer,
+      moved: false,
+      finalPositions: {
+        [performerId]: token
+      }
+    };
+    selectPerformer(performerId);
+    setDragPositions({ [performerId]: token });
+  }
+
+  function onV2StagePointerMove(event, stageElement) {
+    const drag = dragStateRef.current;
+    if (readonly || !selectedSection || !stageElement || drag?.mode !== "v2-token-move" || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
+    if (distance(pointer, drag.startPointer || pointer) > 0.05) {
+      drag.moved = true;
+    }
+    const nextPosition = clampPointToStage({
+      x: pointer.x + drag.offsetX,
+      y: pointer.y + drag.offsetY
+    }, stageDimensions);
+    drag.finalPositions = {
+      [drag.performerId]: nextPosition
+    };
+    setDragPositions(drag.finalPositions);
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === drag.sectionId
+        ? sectionWithPositionPatch(section, drag.finalPositions, drag.keyframeId)
+        : section)
+    }), { history: false });
+  }
+
+  function onV2StagePointerUp(event) {
+    const drag = dragStateRef.current;
+    if (drag?.mode !== "v2-token-move" || drag.pointerId !== event.pointerId) return;
+    finishInteractiveEdit(Boolean(drag.moved));
+    setDragPositions(null);
+    dragStateRef.current = null;
+    if (drag.moved) {
+      ignoreNextV2StageTapRef.current = true;
+      clearSelection();
+    }
+    clearQuietStatus();
+  }
+
+  function onV2StageTap(event, stageElement) {
+    if (ignoreNextV2StageTapRef.current) {
+      ignoreNextV2StageTapRef.current = false;
+      return;
+    }
+    if (event.target?.closest?.(".v2-token, .v2-zoom-rail")) return;
+    if (readonly || !selectedSection || !selectedPerformerId || !stageElement) return;
+    if (dragStateRef.current) return;
+    const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
+    const editKeyframeId = selectedMovementKeyframe?.id || "";
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === selectedSection.id
+        ? sectionWithPositionPatch(section, { [selectedPerformerId]: pointer }, editKeyframeId)
+        : section)
+    }));
+    clearSelection();
+    clearQuietStatus();
   }
 
   function shouldPullOutPairMember(drag, pointer) {
@@ -4181,6 +4287,15 @@ function App() {
     return null;
   }
 
+  function selectFormationForMobileSurface(section) {
+    setSelectedSectionId(section.id);
+    setSelectedPerformerId("");
+    setSelectedPerformerIds([]);
+    setSelectedPairKey("");
+    setMobileContextSelection("formation");
+    setStitchFormationContext(true);
+  }
+
   const { actions: stitchEditorActions, model: stitchEditorModel } = createStitchEditorRuntime({
     activeMobilePanelActionKey,
     activeSection,
@@ -4227,14 +4342,7 @@ function App() {
     mobilePanelSize: mobilePanel.size,
     mobilePanelTitle,
     onFormationPointerDown,
-    onFormationSelect: (section) => {
-      setSelectedSectionId(section.id);
-      setSelectedPerformerId("");
-      setSelectedPerformerIds([]);
-      setSelectedPairKey("");
-      setMobileContextSelection("formation");
-      setStitchFormationContext(true);
-    },
+    onFormationSelect: selectFormationForMobileSurface,
     onStagePointerDown,
     onStagePointerMove,
     onTimelinePointerDown,
@@ -4297,6 +4405,33 @@ function App() {
     waveformBars,
     zoomTimelineBy
   });
+  const v2EditorModel = createV2EditorRuntime({
+    ...stitchEditorModel,
+    addSection,
+    currentSectionId: sortedSections[timeSectionIndex]?.id || "",
+    deleteSelection: deleteV2Selection,
+    duplicateSelection: duplicateV2Selection,
+    handleMobileAction,
+    onFormationSelect: selectFormationForMobileSurface,
+    onTimelinePointerDown,
+    onTimelinePointerMove,
+    onTimelinePointerUp,
+    onTimelineWheel,
+    onV2StagePointerDown,
+    onV2StagePointerMove,
+    onV2StagePointerUp,
+    onV2StageTap,
+    openAudioFilePicker: stitchEditorActions.openAudioFilePicker,
+    redoDisabled: !redoStack.length,
+    redoPlan,
+    selectPerformer,
+    selectedSection,
+    selectedSectionId,
+    timelineViewportRef,
+    togglePlayback,
+    undoPlan,
+    undoDisabled: !undoStack.length
+  });
 
   return (
     <div
@@ -4329,7 +4464,13 @@ function App() {
         </div>
       )}
 
-      {!isStitchEditorActive && (
+      {isV2Route && (
+        <V2VisualEditor
+          model={v2EditorModel}
+        />
+      )}
+
+      {!isV2Route && !isStitchEditorActive && (
       <main
         className={isToolDrawerOpen ? "desktop-editor tools-open" : "desktop-editor"}
         data-selection-state={selectionVisualState}
@@ -4990,7 +5131,7 @@ function App() {
       </main>
       )}
 
-      {!isStitchEditorActive && <section className="mobile-editor">
+      {!isV2Route && !isStitchEditorActive && <section className="mobile-editor">
         {!readonly && (
           <div className="mobile-action-bar" aria-label="모바일 편집 도구">
             {mobileActions.map((action) => {
@@ -5036,7 +5177,7 @@ function App() {
         )}
       </section>}
 
-      {isStitchEditorActive && !readonly && (
+      {(isStitchEditorActive || isV2Route) && !readonly && (
         <input
           ref={stitchAudioFileInputRef}
           type="file"
