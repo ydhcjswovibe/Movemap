@@ -4206,10 +4206,24 @@ function App({ forceStitchEditor = false } = {}) {
     hasUsableAudio,
     isMobilePanelOpen,
     isPlaying,
+    inspectorCommands: {
+      "align-x": () => alignCurrentSelection("x"),
+      "align-y": () => alignCurrentSelection("y"),
+      "clear-selection": () => selectedPairKey ? removePairByKey(selectedPairKey) : clearSelection(),
+      "role-group-a": () => setSelectedPerformerRole("groupA"),
+      "role-group-b": () => setSelectedPerformerRole("groupB"),
+      "role-other": () => setSelectedPerformerRole("other"),
+      "stage-3d": () => setStageViewMode("3d"),
+      "toggle-snap": () => setSnapEnabled((value) => !value),
+      "toggle-stage-reference-labels": () => setShowStageReferenceLabels((value) => !value),
+      "toggle-stage-references": () => setShowStageReferences((value) => !value),
+      "toggle-transition-paths": () => setShowAllTransitionPaths((value) => !value)
+    },
     localSaveLabel,
     mobileActions: !selectedPerformerId && stitchSelectedSectionId && stitchSelectedSectionId !== sortedSections[0]?.id
       ? MOBILE_ACTION_GROUPS.formation
       : mobileActions,
+    mobilePanelKind: mobilePanel.kind,
     mobilePanelSize: mobilePanel.size,
     mobilePanelTitle,
     onFormationPointerDown,
