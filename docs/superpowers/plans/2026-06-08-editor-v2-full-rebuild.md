@@ -98,6 +98,24 @@ V2 is not parity-complete until `/editor-v2` supports all of these workflows:
 - Valid edit-link route behavior.
 - Invalid or disabled link fallback behavior.
 
+### Parity Status as of 2026-06-08
+
+Implemented and covered by current tests:
+
+- `/editor-v2` route contract, forced Stitch shell, and legacy `/` fallback smoke coverage.
+- Stage/timeline/action/inspector renderer split with grouped runtime model consumption.
+- Desktop 1440px Stitch layout pass with stage-first hierarchy, visible timeline/action rail, and bounded top menus.
+- 390px mobile Stitch shell visibility, screenshot outputs, compact stage/timeline/action rail ordering, and no horizontal overflow.
+- Sample project start, token selection, token drag, formation selection, formation add, formation duplicate, formation delete, timeline block select, timeline zoom, scrollable timeline overflow, top menus, save/share/download menu surfaces, audio upload menu surface, stage reference visibility toggle, 2D/3D toggle, contextual bottom action rail, and route behavior for readonly, valid edit-link, and invalid/disabled links.
+- Runtime inspector now exposes panel state, panel descriptors, and command descriptors for migrated panels, while people/stage/transition panels remain temporary fallback panels.
+
+Remaining parity gaps before cutover:
+
+- Full inspector ownership is incomplete for people, stage, and transition panels; they still use `actions.renderMobilePanelContent()` fallback.
+- Formation rename is not yet locked by `/editor-v2` browser coverage.
+- Timeline hold trim and body drag/reorder behavior are covered in domain/unit and legacy browser tests, but `/editor-v2` still only locks trim affordance exposure and scrollable timeline state rather than a full v2 drag gesture.
+- Multi-token selection, pair selection, pair movement, audio playback, audio fallback/reconnect, stage reference label toggle, transition path filter behavior, undo, redo, save/share creation side effects, edit-link creation side effects, project load from local storage, and export command execution still need dedicated `/editor-v2` browser assertions.
+
 ## Regression Rules
 
 - Stage renderer changes require `npm test` and the Stitch browser visual spec.
