@@ -472,6 +472,82 @@ async function expectCompactStage(page) {
   expect(tokenLabelMetrics.computedFontSize).toBeLessThanOrEqual(0.6);
 }
 
+async function expectEditorV2DesktopWorkflowHierarchy(page) {
+  const metrics = await page.locator("[data-stitch-mobile-editor][data-editor-v2='true']").evaluate((root) => {
+    const rootRect = root.getBoundingClientRect();
+    const rectFor = (selector) => {
+      const node = root.querySelector(selector);
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        bottom: rect.bottom,
+        right: rect.right
+      };
+    };
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      editor: {
+        x: rootRect.x,
+        y: rootRect.y,
+        width: rootRect.width,
+        height: rootRect.height,
+        bottom: rootRect.bottom,
+        right: rootRect.right
+      },
+      stageArea: rectFor(".stage-area"),
+      stageFrame: rectFor(".stage-frame"),
+      timeline: rectFor(".timeline-editor"),
+      actionRail: rectFor(".mobile-action-bar")
+    };
+  });
+
+  expect(metrics.editor).not.toBeNull();
+  expect(metrics.stageArea).not.toBeNull();
+  expect(metrics.stageFrame).not.toBeNull();
+  expect(metrics.timeline).not.toBeNull();
+  expect(metrics.actionRail).not.toBeNull();
+  expect(metrics.editor.width).toBeGreaterThan(980);
+  expect(metrics.editor.width).toBeLessThanOrEqual(metrics.viewportWidth - 24);
+  expect(metrics.stageArea.height).toBeGreaterThan(metrics.timeline.height);
+  expect(metrics.stageFrame.width).toBeGreaterThan(500);
+  expect(metrics.stageFrame.height).toBeGreaterThan(320);
+  expect(metrics.stageFrame.width).toBeGreaterThan(metrics.stageFrame.height);
+  expect(metrics.timeline.y).toBeGreaterThanOrEqual(metrics.stageArea.bottom - 1);
+  expect(metrics.actionRail.y).toBeGreaterThanOrEqual(metrics.timeline.bottom - 1);
+  expect(metrics.actionRail.bottom).toBeLessThanOrEqual(metrics.viewportHeight);
+}
+
+async function expectTopMenuAvoidsStageCore(page) {
+  const moreAction = page.locator("[data-stitch-mobile-editor] .mobile-global-actions").getByRole("button", { name: "더보기" });
+  await moreAction.click();
+  const metrics = await page.locator("[data-stitch-mobile-editor][data-editor-v2='true']").evaluate((root) => {
+    const stage = root.querySelector(".stage-frame")?.getBoundingClientRect();
+    const menu = root.querySelector(".top-action-menu")?.getBoundingClientRect();
+    if (!stage || !menu) return null;
+    const overlapWidth = Math.max(0, Math.min(stage.right, menu.right) - Math.max(stage.left, menu.left));
+    const overlapHeight = Math.max(0, Math.min(stage.bottom, menu.bottom) - Math.max(stage.top, menu.top));
+    return {
+      menuBottom: menu.bottom,
+      menuRight: menu.right,
+      overlapArea: overlapWidth * overlapHeight,
+      stageArea: stage.width * stage.height,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth
+    };
+  });
+  expect(metrics).not.toBeNull();
+  expect(metrics.menuRight).toBeLessThanOrEqual(metrics.viewportWidth);
+  expect(metrics.menuBottom).toBeLessThanOrEqual(metrics.viewportHeight);
+  expect(metrics.overlapArea / metrics.stageArea).toBeLessThan(0.16);
+  await page.keyboard.press("Escape");
+  await expect(page.locator("[data-stitch-mobile-editor] .mobile-global-actions .more-action-menu")).toHaveCount(0);
+}
+
 test.describe("Stitch main editor visual states", () => {
   test("editor v2 supports core parity workflows", async ({ browser }) => {
     const page = await openEditorV2Desktop(browser);
@@ -586,6 +662,8 @@ test.describe("Stitch main editor visual states", () => {
     await expect(page.locator("[data-stitch-mobile-editor] .stage-frame")).toBeVisible();
     await expect(page.locator("[data-stitch-mobile-editor] .timeline-workbench")).toBeVisible();
     await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
+    await expectEditorV2DesktopWorkflowHierarchy(page);
+    await expectTopMenuAvoidsStageCore(page);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: "test-results/editor-v2-desktop-stitch-1440.png", fullPage: false });
     await page.close();

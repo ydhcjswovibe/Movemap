@@ -910,7 +910,7 @@
     }
 
     .stitch-mobile-editor.editor-v2 {
-        --stitch-stage-size: min(58dvh, 620px);
+        --stitch-stage-size: min(55dvh, 600px);
         --timeline-ruler-height: 14px;
         --timeline-lane-height: 88px;
         --timeline-block-height: 70px;
@@ -924,10 +924,10 @@
         grid-template-rows: 50px minmax(0, calc(var(--stitch-stage-size) + 18px)) var(
                 --timeline-editor-height
             ) minmax(0, 1fr) var(--action-rail-height);
-        max-width: min(920px, 100dvw);
+        max-width: min(1120px, calc(100dvw - 32px));
         height: calc(100dvh - 24px);
         margin: 12px auto;
-        padding: 4px;
+        padding: 6px;
         border: 1px solid var(--stitch-outline);
         border-radius: 10px;
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
@@ -935,9 +935,7 @@
 
     .editor-v2-app {
         min-height: 100dvh;
-        background:
-            radial-gradient(circle at 50% 0%, rgba(46, 98, 255, 0.12), transparent 34%),
-            #0f0f10;
+        background: #131313;
     }
 
     .stitch-mobile-editor.editor-v2 .mobile-status-bar {
@@ -957,7 +955,7 @@
     }
 
     .stitch-mobile-editor.editor-v2 .stage-area {
-        padding: 5px;
+        padding: 8px;
     }
 
     .stitch-mobile-editor.editor-v2 .stage-corner-tools {
@@ -970,5 +968,11 @@
 
     .stitch-mobile-editor.editor-v2 .mobile-action-bar {
         min-height: var(--action-rail-height);
+    }
+
+    .stitch-mobile-editor.editor-v2 .top-action-menu {
+        top: 72px;
+        right: max(12px, calc((100dvw - min(1120px, calc(100dvw - 32px))) / 2 + 12px));
+        max-height: calc(100dvh - 72px - var(--action-rail-height) - 24px);
     }
 }
