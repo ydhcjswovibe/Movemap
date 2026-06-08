@@ -455,6 +455,30 @@
   width: 121px;
 }
 
+.v2-move-block {
+  position: absolute;
+  left: 118px;
+  top: 50%;
+  width: 44px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid rgba(36, 211, 124, 0.22);
+  border-radius: 999px;
+  background: rgba(36, 211, 124, 0.11);
+  color: #7de9ad;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  box-shadow: 0 0 16px rgba(36, 211, 124, 0.11);
+}
+
 .v2-formation-block.is-selected {
   border-color: rgba(85, 151, 255, 0.95);
   background: linear-gradient(180deg, rgba(38, 116, 255, 0.38), rgba(28, 75, 151, 0.42));

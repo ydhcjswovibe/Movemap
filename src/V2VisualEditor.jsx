@@ -101,6 +101,7 @@ function V2VisualEditor() {
             </div>
             <div className="v2-formation-lane">
               <button className="v2-formation-block v2-intro-block" type="button">Intro V</button>
+              <button className="v2-move-block" type="button" aria-label="Move transition">Move</button>
               <button className="v2-formation-block v2-diamond-block is-selected" type="button">Diamond Form</button>
             </div>
           </div>

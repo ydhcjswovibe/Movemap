@@ -39,6 +39,7 @@ test.describe("visual-only v2 editor prototype", () => {
         formationLane: rectFor(".v2-lane-row"),
         musicLane: rectFor(".v2-audio-row"),
         introBlock: rectFor(".v2-intro-block"),
+        moveBlock: rectFor(".v2-move-block"),
         waveform: rectFor("[data-v2-waveform]"),
         rail: rectFor("[data-v2-bottom-rail]"),
         viewportHeight: window.innerHeight
@@ -51,6 +52,8 @@ test.describe("visual-only v2 editor prototype", () => {
     expect(boxes.timeline.height).toBeLessThanOrEqual(260);
     expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.introBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.moveBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
+    expect(boxes.moveBlock.height).toBeLessThan(boxes.introBlock.height);
     expect(Math.abs(boxes.waveform.center - boxes.musicLane.center)).toBeLessThanOrEqual(1);
     expect(boxes.timeline.bottom).toBeLessThanOrEqual(boxes.rail.y + 1);
     expect(boxes.rail.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
