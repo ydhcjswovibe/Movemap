@@ -507,22 +507,33 @@
 }
 
 .v2-bottom-rail {
-  justify-content: space-around;
-  gap: 8px;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  justify-content: stretch;
+  gap: 0;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(255, 255, 255, 0.11);
 }
 
 .v2-bottom-rail .v2-icon-button {
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  width: auto;
+  height: 56px;
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.v2-bottom-rail .v2-icon-button + .v2-icon-button {
+  border-left: 1px solid rgba(185, 198, 219, 0.16);
 }
 
 .v2-bottom-rail .v2-icon-button svg {
   width: 17px;
   height: 17px;
+}
+
+.v2-bottom-rail .v2-icon-button.is-primary {
+  background: rgba(31, 111, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(70, 139, 255, 0.28);
 }
 
 @media (max-height: 800px) {
