@@ -576,11 +576,11 @@ async function expectEditorV2DesktopWorkflowHierarchy(page) {
   expect(metrics.stageFrame).not.toBeNull();
   expect(metrics.timeline).not.toBeNull();
   expect(metrics.actionRail).not.toBeNull();
-  expect(metrics.editor.width).toBeGreaterThan(980);
+  expect(metrics.editor.width).toBeGreaterThan(1240);
   expect(metrics.editor.width).toBeLessThanOrEqual(metrics.viewportWidth - 24);
-  expect(metrics.stageArea.height).toBeGreaterThan(metrics.timeline.height);
-  expect(metrics.stageFrame.width).toBeGreaterThan(500);
-  expect(metrics.stageFrame.height).toBeGreaterThan(320);
+  expect(metrics.stageArea.height).toBeGreaterThan(metrics.timeline.height * 2);
+  expect(metrics.stageFrame.width).toBeGreaterThan(720);
+  expect(metrics.stageFrame.height).toBeGreaterThan(460);
   expect(metrics.stageFrame.width).toBeGreaterThan(metrics.stageFrame.height);
   expect(metrics.timeline.y).toBeGreaterThanOrEqual(metrics.stageArea.bottom - 1);
   expect(metrics.actionRail.y).toBeGreaterThanOrEqual(metrics.timeline.bottom - 1);

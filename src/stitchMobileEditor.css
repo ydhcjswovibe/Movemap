@@ -910,7 +910,9 @@
     }
 
     .stitch-mobile-editor.editor-v2 {
-        --stitch-stage-size: min(55dvh, 600px);
+        --stitch-stage-size: min(66dvh, 760px);
+        --stitch-stage-frame-width: min(100%, 960px);
+        --stitch-stage-frame-height: min(52dvh, 520px);
         --timeline-ruler-height: 14px;
         --timeline-lane-height: 88px;
         --timeline-block-height: 70px;
@@ -921,16 +923,16 @@
         );
         --action-rail-height: 64px;
         display: grid !important;
-        grid-template-rows: 50px minmax(0, calc(var(--stitch-stage-size) + 18px)) var(
+        grid-template-rows: 50px minmax(0, 1fr) var(
                 --timeline-editor-height
-            ) minmax(0, 1fr) var(--action-rail-height);
-        max-width: min(1120px, calc(100dvw - 32px));
-        height: calc(100dvh - 24px);
-        margin: 12px auto;
-        padding: 6px;
+            ) var(--action-rail-height);
+        max-width: min(1360px, calc(100dvw - 16px));
+        height: calc(100dvh - 16px);
+        margin: 8px auto;
+        padding: 8px;
         border: 1px solid var(--stitch-outline);
-        border-radius: 10px;
-        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+        border-radius: 8px;
+        box-shadow: none;
     }
 
     .editor-v2-app {
@@ -955,7 +957,16 @@
     }
 
     .stitch-mobile-editor.editor-v2 .stage-area {
-        padding: 8px;
+        align-items: center;
+        justify-items: stretch;
+        padding: 10px 12px;
+    }
+
+    .stitch-mobile-editor.editor-v2 .stage-frame {
+        --stitch-stage-size: min(70dvw, 78dvh, 900px) !important;
+        justify-self: center;
+        max-width: var(--stitch-stage-frame-width);
+        max-height: var(--stitch-stage-frame-height);
     }
 
     .stitch-mobile-editor.editor-v2 .stage-corner-tools {
@@ -963,10 +974,12 @@
     }
 
     .stitch-mobile-editor.editor-v2 .timeline-editor {
+        margin: 0;
         padding: 6px;
     }
 
     .stitch-mobile-editor.editor-v2 .mobile-action-bar {
+        grid-row: 4;
         min-height: var(--action-rail-height);
     }
 
