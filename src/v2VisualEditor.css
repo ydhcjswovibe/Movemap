@@ -486,24 +486,56 @@
 }
 
 .v2-waveform {
+  position: relative;
   display: flex;
-  align-items: start;
+  align-items: center;
   gap: 2px;
   min-width: 0;
   height: 100%;
-  padding: 18px 18px 12px 14px;
+  padding: 12px 18px 12px 14px;
   background:
     repeating-linear-gradient(90deg, transparent 0 63px, rgba(255, 255, 255, 0.04) 63px 64px),
     #111419;
 }
 
+.v2-waveform::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 18px;
+  top: 50%;
+  height: 1px;
+  background: rgba(68, 221, 137, 0.18);
+  transform: translateY(-50%);
+}
+
+.v2-waveform::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 18px;
+  bottom: 18px;
+  width: 74%;
+  background: linear-gradient(90deg, rgba(36, 211, 124, 0.08), transparent);
+  pointer-events: none;
+}
+
 .v2-waveform span {
-  width: 2px;
-  height: var(--bar-height);
-  min-height: 4px;
-  max-height: 54px;
+  position: relative;
+  z-index: 1;
+  width: 3px;
+  height: var(--sample-height);
+  min-height: 7px;
+  max-height: 48px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(36, 211, 124, 0.85), rgba(36, 211, 124, 0.18));
+  background: linear-gradient(
+    180deg,
+    rgba(36, 211, 124, calc(var(--sample-alpha) * 0.6)),
+    rgba(36, 211, 124, var(--sample-alpha)) 48%,
+    rgba(36, 211, 124, var(--sample-alpha)) 52%,
+    rgba(36, 211, 124, calc(var(--sample-alpha) * 0.36))
+  );
+  box-shadow: 0 0 8px rgba(36, 211, 124, calc(var(--sample-alpha) * 0.18));
 }
 
 .v2-bottom-rail {

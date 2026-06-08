@@ -25,6 +25,7 @@ test.describe("visual-only v2 editor prototype", () => {
     await expect(bottomRail).toBeVisible();
     await expect(timeline.getByRole("button", { name: "대형 추가" })).toBeVisible();
     await expect(timeline.getByRole("button", { name: "음악 추가" })).toBeVisible();
+    await expect(timeline.locator("[data-v2-waveform] span")).toHaveCount(48);
     await expect(root.getByText("BPM")).toHaveCount(0);
 
     const boxes = await root.evaluate((node) => {
