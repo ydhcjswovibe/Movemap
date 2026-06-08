@@ -8,6 +8,7 @@ const coolIconSource = readFileSync(new URL("./icons/CoolIcon.jsx", import.meta.
 const iconHintSource = readFileSync(new URL("./IconHintButton.jsx", import.meta.url), "utf8");
 const topActionDropdownSource = readFileSync(new URL("./TopActionDropdown.jsx", import.meta.url), "utf8");
 const stitchSource = readFileSync(new URL("./StitchMobileEditor.jsx", import.meta.url), "utf8");
+const editorV2TimelineSource = readFileSync(new URL("./EditorV2Timeline.jsx", import.meta.url), "utf8");
 const attributionSource = readFileSync(new URL("../docs/third-party-attribution.md", import.meta.url), "utf8");
 const selectedFormationStart = appSource.indexOf("<div className=\"selected-formation-bar\">");
 const selectedFormationEnd = appSource.indexOf("\n          )}\n        </section>", selectedFormationStart);
@@ -19,7 +20,7 @@ const formationPanel = appSource.match(/function renderFormationPanel\(\) \{[\s\
 const formationPointerDown = appSource.match(/function onFormationPointerDown\(event, section, index, mode\) \{[\s\S]*?\n  \}\n\n  function onMovementKeyframePointerDown/)?.[0] || "";
 
 test("formation creation uses the short add label", () => {
-  assert.match(stitchSource, /aria-label="대형 추가"/);
+  assert.match(editorV2TimelineSource, /aria-label="대형 추가"/);
   assert.doesNotMatch(appSource, /현재 시간에 대형 만들기/);
 });
 
@@ -43,7 +44,7 @@ test("icon hint button centralizes icon labels and compact hints", () => {
 });
 
 test("timeline controls use a single icon rail", () => {
-  const railSource = stitchSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
+  const railSource = editorV2TimelineSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
 
   assert.match(railSource, /IconHintButton/);
   assert.match(railSource, /iconName=\{isPlaying \? "pause" : "play"\}/);
@@ -63,9 +64,9 @@ test("timeline controls use a single icon rail", () => {
 });
 
 test("Stitch timeline exposes row-local add buttons for forms and audio", () => {
-  const formsRowSource = stitchSource.match(/<div className="timeline-track-row forms-row"[\s\S]*?<div ref=\{formationLaneRef\}/)?.[0] || "";
-  const audioRowSource = stitchSource.match(/<div className="timeline-track-row audio-row"[\s\S]*?<div ref=\{audioLaneRef\}/)?.[0] || "";
-  const controlRailSource = stitchSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
+  const formsRowSource = editorV2TimelineSource.match(/<div className="timeline-track-row forms-row"[\s\S]*?<div ref=\{formationLaneRef\}/)?.[0] || "";
+  const audioRowSource = editorV2TimelineSource.match(/<div className="timeline-track-row audio-row"[\s\S]*?<div ref=\{audioLaneRef\}/)?.[0] || "";
+  const controlRailSource = editorV2TimelineSource.match(/<div className="timeline-control-rail">[\s\S]*?<div className="timeline-workbench"/)?.[0] || "";
 
   assert.match(formsRowSource, /<span>Forms<\/span>/);
   assert.match(formsRowSource, /className="timeline-row-add-button"/);
