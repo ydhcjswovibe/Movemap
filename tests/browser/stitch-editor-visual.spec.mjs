@@ -43,6 +43,36 @@ async function openEditorV2Desktop(browser) {
   return page;
 }
 
+async function openEditorV2Mobile(browser) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.addInitScript(() => {
+    localStorage.removeItem("movemap-project");
+    localStorage.removeItem("choreo-stage-planner-project");
+  });
+  await page.goto("/editor-v2");
+  await page.getByRole("button", { name: /샘플로 시작/ }).click();
+  await expect(page.locator(".app")).toHaveAttribute("data-editor-version", "v2");
+  await expect(page.locator("[data-stitch-mobile-editor][data-editor-v2='true']")).toBeVisible();
+  await expect(page.locator(".desktop-editor")).toHaveCount(0);
+  await expect(page.locator(".stage-area")).toBeVisible();
+  await expect(page.locator(".timeline-editor")).toBeVisible();
+  return page;
+}
+
+function collectBrowserIssues(page) {
+  const issues = [];
+  const shouldIgnore = (text) => text.includes("net::ERR_NETWORK_CHANGED");
+  page.on("console", (message) => {
+    const text = `${message.type()}: ${message.text()}`;
+    if (message.type() === "error" && !shouldIgnore(text)) issues.push(text);
+  });
+  page.on("pageerror", (error) => {
+    const text = `pageerror: ${error.message}`;
+    if (!shouldIgnore(text)) issues.push(text);
+  });
+  return issues;
+}
+
 async function expectNoHorizontalOverflow(page) {
   const overflow = await page.evaluate(() => {
     const root = document.scrollingElement || document.documentElement;
@@ -443,6 +473,114 @@ async function expectCompactStage(page) {
 }
 
 test.describe("Stitch main editor visual states", () => {
+  test("editor v2 supports core parity workflows", async ({ browser }) => {
+    const page = await openEditorV2Desktop(browser);
+    const browserIssues = collectBrowserIssues(page);
+    await expect(page.locator("[data-stitch-mobile-editor] .stage-frame")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor] .timeline-workbench")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor] .audio-lane")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    const firstToken = page.locator("[data-stitch-mobile-editor] .token").first();
+    const firstTokenCircle = firstToken.locator("circle").last();
+    const firstTokenBox = await firstToken.boundingBox();
+    expect(firstTokenBox).not.toBeNull();
+    const beforeTokenPosition = await firstTokenCircle.evaluate((circle) => ({
+      cx: Number(circle.getAttribute("cx")),
+      cy: Number(circle.getAttribute("cy"))
+    }));
+    await firstToken.dispatchEvent("pointerdown", {
+      pointerId: 91,
+      pointerType: "mouse",
+      isPrimary: true,
+      bubbles: true,
+      cancelable: true,
+      clientX: firstTokenBox.x + firstTokenBox.width / 2,
+      clientY: firstTokenBox.y + firstTokenBox.height / 2,
+      buttons: 1
+    });
+    await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "token-selected");
+    await expect(page.locator("[data-stitch-mobile-editor] .mobile-bottom-sheet")).toHaveCount(0);
+    await page.locator("[data-stitch-mobile-editor] .stage").dispatchEvent("pointermove", {
+      pointerId: 91,
+      pointerType: "mouse",
+      isPrimary: true,
+      bubbles: true,
+      cancelable: true,
+      clientX: firstTokenBox.x + firstTokenBox.width / 2 + 80,
+      clientY: firstTokenBox.y + firstTokenBox.height / 2 + 40,
+      buttons: 1
+    });
+    await page.locator("[data-stitch-mobile-editor] .stage").dispatchEvent("pointerup", {
+      pointerId: 91,
+      pointerType: "mouse",
+      isPrimary: true,
+      bubbles: true,
+      cancelable: true,
+      buttons: 0
+    });
+    await expect.poll(() => firstTokenCircle.evaluate((circle) => ({
+      cx: Number(circle.getAttribute("cx")),
+      cy: Number(circle.getAttribute("cy"))
+    }))).not.toEqual(beforeTokenPosition);
+
+    const firstFormationBlock = page.locator("[data-stitch-mobile-editor] .formation-block.hold").first();
+    await firstFormationBlock.click();
+    await expect(firstFormationBlock).toHaveClass(/selected/);
+    await expect(firstFormationBlock.locator(".formation-resize-handle.right")).toBeVisible();
+
+    const moreAction = page.locator("[data-stitch-mobile-editor] .mobile-global-actions").getByRole("button", { name: "더보기" });
+    await moreAction.click();
+    const moreMenu = page.locator("[data-stitch-mobile-editor] .mobile-global-actions .more-action-menu");
+    await expect(moreMenu).toBeVisible();
+    const menuBox = await moreMenu.boundingBox();
+    const viewport = page.viewportSize();
+    expect(menuBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(menuBox.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(viewport.width);
+    expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(viewport.height);
+    await page.keyboard.press("Escape");
+    await expect(moreMenu).toHaveCount(0);
+
+    const referenceLayer = page.locator("[data-stitch-mobile-editor] .stage-reference-layer");
+    await expect(referenceLayer).toBeVisible();
+    const initialReferenceItems = await referenceLayer.locator("g").count();
+    expect(initialReferenceItems).toBeGreaterThan(0);
+    await page.locator("[data-stitch-mobile-editor] .stage-corner-tools").getByRole("button", { name: "참조선" }).click();
+    await expect(referenceLayer.locator("g")).toHaveCount(0);
+    await page.locator("[data-stitch-mobile-editor] .stage-corner-tools").getByRole("button", { name: "참조선" }).click();
+    await expect(referenceLayer.locator("g")).toHaveCount(initialReferenceItems);
+
+    const stageViewToggle = page.locator("[data-stitch-mobile-editor] .stage-view-float-toggle").getByRole("button");
+    await expect(stageViewToggle).toHaveText("3D");
+    await stageViewToggle.click();
+    await expect(stageViewToggle).toHaveText("2D");
+    await expect(page.locator("[data-stitch-mobile-editor] .stage-3d-preview")).toBeVisible();
+    await stageViewToggle.click();
+    await expect(stageViewToggle).toHaveText("3D");
+    await expect(page.locator("[data-stitch-mobile-editor] .stage")).toBeVisible();
+
+    await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
+    expect(browserIssues).toEqual([]);
+    await page.close();
+  });
+
+  test("editor v2 mobile keeps the full Stitch workflow visible at 390px", async ({ browser }) => {
+    const page = await openEditorV2Mobile(browser);
+    await expectCompactStage(page);
+    await expectOrderedMobileBands(page);
+    await expectTimelineTrimSpace(page);
+    await expectTimelineContentUnclipped(page);
+    await expectAudioLaneHasNoLegacyBadge(page);
+    await expectSingleActionRail(page);
+    await expectNoHorizontalOverflow(page);
+    await page.screenshot({ path: "test-results/editor-v2-mobile-parity-390.png", fullPage: false });
+    await page.close();
+  });
+
   test("renders the Stitch editor shell on the desktop /editor-v2 route", async ({ browser }) => {
     const page = await openEditorV2Desktop(browser);
     await expect(page.locator("[data-stitch-mobile-editor] .stage-frame")).toBeVisible();

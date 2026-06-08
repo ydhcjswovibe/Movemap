@@ -960,6 +960,10 @@
         padding: 5px;
     }
 
+    .stitch-mobile-editor.editor-v2 .stage-corner-tools {
+        display: flex;
+    }
+
     .stitch-mobile-editor.editor-v2 .timeline-editor {
         padding: 6px;
     }
