@@ -848,6 +848,7 @@ function App() {
   const [timelineSnapTime, setTimelineSnapTime] = useState(null);
   const [timelineReorderPreview, setTimelineReorderPreview] = useState(null);
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
+  const [v2ActiveTab, setV2ActiveTab] = useState("Stage");
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
@@ -1831,6 +1832,95 @@ function App() {
         return;
       }
       if (hasStartedEdit) finishInteractiveEdit(hasEdited);
+      clearQuietStatus();
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+    window.addEventListener("pointercancel", onPointerUp, { once: true });
+  }
+
+  function onV2TimelineHandlePointerDown(event, sectionId, mode, segment = {}) {
+    if (readonly) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Browser tests and cancelled gestures may not allow capture.
+    }
+    const section = sortedSections.find((item) => item.id === sectionId);
+    const index = sortedSections.findIndex((item) => item.id === sectionId);
+    if (!section || index < 0) return;
+
+    const startClientX = event.clientX;
+    const nextSection = sortedSections[index + 1] || null;
+    const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
+    const startTime = mode === "hold-right"
+      ? Number(segment.displayEndTime ?? (nextSection ? pointMoveStart(nextSection) : pointTime(section))) || 0
+      : pointMoveStart(section);
+    let lastSectionsSignature = sectionsTimingSignature(sortedSections);
+    let hasEdited = false;
+    beginInteractiveEdit();
+
+    const replaceSectionsIfChanged = (nextSections) => {
+      const nextSignature = sectionsTimingSignature(nextSections);
+      if (nextSignature === lastSectionsSignature) return false;
+      replaceSections(nextSections, { history: false });
+      lastSectionsSignature = nextSignature;
+      hasEdited = true;
+      return true;
+    };
+
+    const commit = (clientX) => {
+      const rawTime = startTime + (clientX - startClientX) / timelinePixelsPerSecond;
+      if (mode === "hold-right") {
+        const rightLimit = Math.max(timelineMax, rawTime);
+        const snap = snapTimelineTime(rawTime, section, pointTime(section), rightLimit);
+        setTimelineSnapTime(snap.snapped ? snap.time : null);
+        const result = applyFormationTimelineEdit({
+          sections: sortedSections,
+          action: "trim-hold-right",
+          sectionId,
+          time: snap.time,
+          timelineMax: rightLimit
+        });
+        replaceSectionsIfChanged(result.sections);
+        setTimelineBlockedEdge(null);
+        return;
+      }
+
+      if (mode === "move-left") {
+        const snap = snapTimelineTime(rawTime, section, previousArrival, pointTime(section));
+        setTimelineSnapTime(snap.snapped ? snap.time : null);
+        const result = applyFormationTimelineEdit({
+          sections: sortedSections,
+          action: "trim-left",
+          sectionId,
+          time: snap.time,
+          timelineMax
+        });
+        replaceSectionsIfChanged(result.sections);
+        setTimelineBlockedEdge(rawTime < previousArrival ? { sectionId, edge: "left" } : null);
+      }
+    };
+
+    const onPointerMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      commit(moveEvent.clientX);
+    };
+    const onPointerUp = (upEvent) => {
+      try {
+        event.currentTarget?.releasePointerCapture?.(upEvent.pointerId);
+      } catch {
+        // Pointer capture may already be released after synthetic or cancelled gestures.
+      }
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      setTimelineSnapTime(null);
+      setTimelineBlockedEdge(null);
+      finishInteractiveEdit(hasEdited);
       clearQuietStatus();
     };
 
@@ -4407,11 +4497,26 @@ function App() {
   });
   const v2EditorModel = createV2EditorRuntime({
     ...stitchEditorModel,
+    activeTab: v2ActiveTab,
     addSection,
+    canCreateViewLink,
+    canManageLinks,
+    canUseAdvancedExports,
+    copyEditShareUrl,
+    copyShareUrl,
     currentSectionId: sortedSections[timeSectionIndex]?.id || "",
     deleteSelection: deleteV2Selection,
     duplicateSelection: duplicateV2Selection,
+    editLinkEnabled: plan.shareLinks?.edit?.enabled !== false,
+    editLinkState,
+    editShareUrl,
+    exportAllPng,
+    exportJson,
+    exportPng,
     handleMobileAction,
+    isShareOperationPending,
+    mobileContextSelection,
+    onFormationPointerDown,
     onFormationSelect: selectFormationForMobileSurface,
     onTimelinePointerDown,
     onTimelinePointerMove,
@@ -4421,14 +4526,35 @@ function App() {
     onV2StagePointerMove,
     onV2StagePointerUp,
     onV2StageTap,
+    onV2TimelineHandlePointerDown,
     openAudioFilePicker: stitchEditorActions.openAudioFilePicker,
     redoDisabled: !redoStack.length,
     redoPlan,
+    selectionMode: mobileContextSelection,
     selectPerformer,
     selectedSection,
-    selectedSectionId,
+    selectedSectionId: mobileContextSelection === "formation" ? selectedSectionId : "",
+    setV2ActiveTab,
+    shareProject,
+    shareUrl,
+    showAllTransitionPaths,
+    showStageReferenceLabels,
+    showStageReferences,
+    snapEnabled,
+    snapPixel: snapPixel !== null && snapPixel >= 0 && snapPixel <= timelineViewportWidth
+      ? timelineSnapTime * timelinePixelsPerSecond
+      : null,
+    timelineBlockedEdge,
+    timelineReorderGuide,
     timelineViewportRef,
+    toggleSnap: () => setSnapEnabled((value) => !value),
+    toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
+    toggleStageReferences: () => setShowStageReferences((value) => !value),
+    toggleTransitionPaths: () => setShowAllTransitionPaths((value) => !value),
     togglePlayback,
+    updateSectionTiming,
+    viewLinkEnabled: plan.shareLinks?.view?.enabled !== false,
+    viewLinkState,
     undoPlan,
     undoDisabled: !undoStack.length
   });

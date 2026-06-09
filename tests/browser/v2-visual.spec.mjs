@@ -116,6 +116,19 @@ async function seedProject(page, project = seededV2Project()) {
   }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY, plan: project });
 }
 
+async function routeCloudProject(page, plan, projectId = "v2-edit-project") {
+  await page.route("**/rest/v1/rpc/get_project_by_edit_token", async (route) => {
+    const payload = route.request().postDataJSON?.() || {};
+    await route.fulfill({ json: payload.p_token === plan.shareLinks?.edit?.token ? { id: projectId, plan } : null });
+  });
+  await page.route("**/rest/v1/movemap_projects**", async (route) => {
+    await route.fulfill({ json: [{ id: projectId, plan }] });
+  });
+  await page.route("**/rest/v1/choreo_projects**", async (route) => {
+    await route.fulfill({ json: [] });
+  });
+}
+
 async function expectInsideViewport(page, locator) {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
@@ -413,23 +426,129 @@ test.describe("connected v2 editor route", () => {
     await expect(token).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("drives bottom rail actions from V2 capabilities", async ({ page }) => {
+  test("edits V2 hold and move timing with timeline handles", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const compactTimingProject = {
+      ...seededV2Project(),
+      sections: [
+        seededV2Project().sections[0],
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        }
+      ]
+    };
+    await seedProject(page, compactTimingProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const introHoldHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+    await expect(introHoldHandle).toBeVisible();
+    const holdBox = await introHoldHandle.boundingBox();
+    expect(holdBox).not.toBeNull();
+    await page.mouse.move(holdBox.x + holdBox.width / 2, holdBox.y + holdBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(holdBox.x + holdBox.width / 2 + 56, holdBox.y + holdBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "diamond").moveDuration;
+    }).toBeLessThan(2);
+
+    await root.locator('[data-v2-segment-kind="move"]').click();
+    const moveHandle = root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]');
+    await expect(moveHandle).toBeVisible();
+    const moveBox = await moveHandle.boundingBox();
+    expect(moveBox).not.toBeNull();
+    const beforeDuration = await storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond").moveDuration);
+    await page.mouse.move(moveBox.x + moveBox.width / 2, moveBox.y + moveBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(moveBox.x + moveBox.width / 2 - 56, moveBox.y + moveBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "diamond").moveDuration;
+    }).toBeGreaterThan(beforeDuration);
+  });
+
+  test("organizes V2 top menus, settings submenu, transport undo redo, and default bottom modes", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/v2");
 
+    const root = page.locator("[data-v2-visual-editor]");
+    const rail = root.locator("[data-v2-bottom-rail]");
+
+    await expect(root.getByRole("button", { name: "공유" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "더보기" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
+    await expect(root.getByRole("button", { name: "다시 실행" })).toBeDisabled();
+    await expect(root.getByRole("button", { name: "타임라인 설정" })).toHaveCount(0);
+    await expect(root.getByRole("tab")).toHaveCount(0);
+
+    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Timeline" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Stage" })).toHaveClass(/is-active/);
+    await rail.getByRole("button", { name: "Timeline" }).click();
+    await expect(rail.getByRole("button", { name: "Timeline" })).toHaveClass(/is-active/);
+
+    await root.getByRole("button", { name: "더보기" }).click();
+    await expect(root.getByRole("menu", { name: "더보기 메뉴" })).toBeVisible();
+    await expect(root.getByRole("menu", { name: "Settings 메뉴" })).toHaveCount(0);
+    const settingsMenuItem = root.getByRole("menuitem", { name: /Settings/ });
+    await expect(settingsMenuItem).toContainText("›");
+    await settingsMenuItem.click();
+    const settingsMenu = root.getByRole("menu", { name: "Settings 메뉴" });
+    await expect(settingsMenu).toBeVisible();
+    await expect(settingsMenuItem).toContainText("‹");
+    const snap = settingsMenu.getByRole("menuitemcheckbox", { name: /Snap/ });
+    const beforeSnap = await snap.getAttribute("aria-checked");
+    await snap.click();
+    await expect(snap).toHaveAttribute("aria-checked", beforeSnap === "true" ? "false" : "true");
+    await settingsMenuItem.click();
+    await expect(settingsMenu).toHaveCount(0);
+    await expect(settingsMenuItem).toContainText("›");
+
+    await page.keyboard.press("Escape");
+    await expect(root.getByRole("menu", { name: "더보기 메뉴" })).toHaveCount(0);
+
+    await root.getByRole("button", { name: "공유" }).click();
+    await expect(root.getByRole("menu", { name: "공유 메뉴" })).toBeVisible();
+  });
+
+  test("drives bottom rail actions from V2 selection context", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
     const rail = page.locator("[data-v2-bottom-rail]");
-    await expect(rail.getByRole("button", { name: "대형 추가" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Timeline" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
     await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "실행 취소" })).toBeDisabled();
-
+    await expect(rail.getByRole("button", { name: "Timing" })).toBeEnabled();
     await rail.getByRole("button", { name: "복제" }).click();
     await expect.poll(async () => {
       const project = await storedProject(page);
       return project.sections.length;
     }).toBe(3);
-    await expect(rail.getByRole("button", { name: "실행 취소" })).toBeEnabled();
+    await expect(root.getByRole("button", { name: "실행 취소" })).toBeEnabled();
+
+    await root.locator('[data-v2-performer-token="a1"]').click();
+    await expect(rail.getByRole("button", { name: "역할" })).toBeEnabled();
+    await rail.getByRole("button", { name: "해제" }).click();
+    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
   });
 
   test("does not render edit controls for readonly v2", async ({ page }) => {
@@ -454,9 +573,34 @@ test.describe("connected v2 editor route", () => {
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
     await expect(root.locator(".v2-track-add-button")).toHaveCount(0);
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "대형 추가" })).toBeDisabled();
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "복제" })).toBeDisabled();
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "삭제" })).toBeDisabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Timeline" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Cast" })).toBeEnabled();
+    await root.getByRole("button", { name: "더보기" }).click();
+    await root.getByRole("menuitem", { name: /Settings/ }).click();
+    await expect(root.getByRole("menuitemcheckbox", { name: /Snap/ })).toBeDisabled();
+  });
+
+  test("opens valid edit links on the V2 route with edit controls enabled", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const editProject = {
+      ...seededV2Project(),
+      title: "Editable V2 Link Fixture",
+      shareLinks: {
+        view: { projectId: "v2-edit-project", token: "", enabled: true },
+        edit: { projectId: "v2-edit-project", token: "valid", enabled: true }
+      }
+    };
+    await routeCloudProject(page, editProject);
+
+    await page.goto("/edit/v2-edit-project/v2?token=valid");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await expect(root).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Editable V2 Link Fixture" })).toBeVisible();
+    await expect(root.locator(".v2-track-add-button")).not.toHaveCount(0);
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(root.getByRole("button", { name: "공유" })).toBeEnabled();
   });
 
   test("keeps the project wizard when v2 has no loaded project", async ({ page }) => {

@@ -47,6 +47,11 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.equal(runtime.capabilities.canDelete, true);
   assert.equal(runtime.capabilities.canUndo, true);
   assert.equal(runtime.capabilities.canRedo, false);
+  assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "more"]);
+  assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "performer-role", "clear-selection"]);
+  assert.equal(runtime.moreMenu[0].key, "settings");
+  assert.equal(runtime.settingsMenu[0].key, "toggle-snap");
   assert.equal(runtime.actions.selectPerformer, selectPerformer);
   assert.equal(runtime.actions.selectFormation, onFormationSelect);
   assert.equal(runtime.actions.stageTap, onV2StageTap);
@@ -68,6 +73,7 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   assert.equal(readonlyRuntime.capabilities.canRedo, false);
 
   const emptyRuntime = createV2EditorRuntime({
+    activeTab: "Cast",
     readonly: false,
     sortedSections: [{ id: "s1" }],
     undoDisabled: true,
@@ -75,6 +81,76 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   });
   assert.equal(emptyRuntime.capabilities.canDuplicate, false);
   assert.equal(emptyRuntime.capabilities.canDelete, false);
+  assert.deepEqual(emptyRuntime.bottomRail.map((action) => action.key), ["stage", "timeline", "cast"]);
+  assert.equal(emptyRuntime.bottomRail[2].active, true);
+});
+
+test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {
+  const onFormationPointerDown = () => {};
+  const onV2TimelineHandlePointerDown = () => {};
+  const setV2ActiveTab = () => {};
+  const runtime = createV2EditorRuntime({
+    activeTab: "Timeline",
+    onFormationPointerDown,
+    onV2TimelineHandlePointerDown,
+    readonly: false,
+    setV2ActiveTab,
+    snapPixel: 84,
+    sortedSections: [{ id: "intro" }, { id: "diamond" }],
+    timelineBlockedEdge: { sectionId: "diamond", edge: "left" },
+    timelineReorderGuide: { sectionId: "diamond", slotLabel: "F1" }
+  });
+
+  assert.equal(runtime.activeTab, "Timeline");
+  assert.equal(runtime.timeline.snapPixel, 84);
+  assert.deepEqual(runtime.timeline.timelineBlockedEdge, { sectionId: "diamond", edge: "left" });
+  assert.deepEqual(runtime.timeline.timelineReorderGuide, { sectionId: "diamond", slotLabel: "F1" });
+  assert.equal(runtime.capabilities.canEditTimeline, true);
+  assert.equal(runtime.actions.formationPointerDown, onFormationPointerDown);
+  assert.equal(runtime.actions.timelineHandlePointerDown, onV2TimelineHandlePointerDown);
+  assert.equal(runtime.actions.setActiveTab, setV2ActiveTab);
+
+  const readonlyRuntime = createV2EditorRuntime({
+    activeTab: "Share",
+    readonly: true,
+    sortedSections: [{ id: "intro" }, { id: "diamond" }]
+  });
+  assert.equal(readonlyRuntime.activeTab, "Stage");
+  assert.equal(readonlyRuntime.capabilities.canEditTimeline, false);
+});
+
+test("V2 runtime exposes formation rail, settings toggles, and readonly settings constraints", () => {
+  const runtime = createV2EditorRuntime({
+    canUseAdvancedExports: true,
+    mobileContextSelection: "formation",
+    readonly: false,
+    selectedSection: { id: "s2", name: "Finale" },
+    selectedSectionId: "s2",
+    showAllTransitionPaths: true,
+    showStageReferenceLabels: false,
+    showStageReferences: true,
+    snapEnabled: true,
+    sortedSections: [{ id: "s1" }, { id: "s2" }]
+  });
+
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-formation", "delete-formation", "timeline", "clear-selection"]);
+  assert.equal(runtime.moreMenu.find((item) => item.key === "export-png").disabled, false);
+  assert.deepEqual(
+    runtime.settingsMenu.map((item) => [item.key, item.checked, Boolean(item.disabled)]),
+    [
+      ["toggle-snap", true, false],
+      ["toggle-stage-references", true, false],
+      ["toggle-stage-reference-labels", false, false],
+      ["toggle-transition-paths", true, false]
+    ]
+  );
+
+  const readonlyRuntime = createV2EditorRuntime({
+    readonly: true,
+    snapEnabled: true
+  });
+  assert.equal(readonlyRuntime.settingsMenu.find((item) => item.key === "toggle-snap").disabled, true);
+  assert.equal(readonlyRuntime.moreMenu.find((item) => item.key === "export-png").disabled, true);
 });
 
 test("V2 coordinate adapter maps client pixels to stage meters and clamps to bounds", () => {

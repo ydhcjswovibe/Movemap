@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import CoolIcon from "./icons/CoolIcon.jsx";
 import "./v2VisualEditor.css";
 
@@ -24,17 +24,6 @@ const demoWaveformSamples = [
   0.7, 0.42, 0.25, 0.19, 0.37, 0.57, 0.74, 0.52, 0.29, 0.21, 0.33, 0.47,
   0.63, 0.46, 0.28, 0.17, 0.22, 0.36, 0.51, 0.67, 0.43, 0.26, 0.18, 0.14
 ];
-
-function bottomActions(capabilities = {}) {
-  return [
-    { icon: "timer-add", label: "대형 추가", primary: true, action: "add-formation", disabled: !capabilities.canAddFormation },
-    { icon: "undo", label: "실행 취소", action: "undo", disabled: !capabilities.canUndo },
-    { icon: "redo", label: "다시 실행", action: "redo", disabled: !capabilities.canRedo },
-    { icon: "select", label: "복제", action: "duplicate", disabled: !capabilities.canDuplicate },
-    { icon: "close", label: "삭제", action: "delete", disabled: !capabilities.canDelete },
-    { icon: "more", label: "더보기", action: "more", disabled: false }
-  ];
-}
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, value));
@@ -82,6 +71,8 @@ function tickStyle(tick, index) {
   };
 }
 
+const taskTabs = ["Stage", "Timeline", "Cast"];
+
 function buildDemoViewModel(model) {
   if (!model?.shell || !model?.stage || !model?.selection || !model?.timeline) {
     return {
@@ -97,6 +88,11 @@ function buildDemoViewModel(model) {
         stageDimensions: { width: 100, height: 100 },
         frontZone: { y: 69 }
       },
+      bottomRail: [
+        { key: "stage", icon: "settings", label: "Stage", mode: "Stage", active: true },
+        { key: "timeline", icon: "grid", label: "Timeline", mode: "Timeline" },
+        { key: "cast", icon: "users", label: "Cast", mode: "Cast" }
+      ],
       selection: {
         selectedPerformerId: "A1",
         selectedPerformerIds: ["A1"],
@@ -110,6 +106,29 @@ function buildDemoViewModel(model) {
         timelineVisualSegments: demoTimelineSegments,
         waveformBars: demoWaveformSamples
       },
+      moreMenu: [
+        { key: "settings", label: "Settings", hasSubmenu: true },
+        { key: "export-json", label: "프로젝트 파일 공유" },
+        { key: "export-png", label: "현재 PNG", disabled: true },
+        { key: "project-info", label: "Finale Scene" },
+        { key: "help", label: "Help / Shortcuts", disabled: true }
+      ],
+      settingsMenu: [
+        { key: "toggle-snap", label: "Snap", checked: true },
+        { key: "toggle-stage-references", label: "Stage references", checked: false },
+        { key: "toggle-stage-reference-labels", label: "Reference labels", checked: false },
+        { key: "toggle-transition-paths", label: "Transition paths", checked: false }
+      ],
+      share: {
+        readonly: false,
+        shareUrl: "",
+        editShareUrl: "",
+        viewLinkState: "없음",
+        editLinkState: "없음",
+        canCreateViewLink: true,
+        canManageLinks: false
+      },
+      activeTab: "Stage",
       sections: [
         { id: "intro", name: "Intro V" },
         { id: "diamond", name: "Diamond Form" }
@@ -124,14 +143,19 @@ function buildDemoViewModel(model) {
     timeline: model.timeline,
     capabilities: model.capabilities || {},
     actions: model.actions || {},
+    activeTab: model.activeTab || "Stage",
+    bottomRail: model.bottomRail || [],
+    moreMenu: model.moreMenu || [],
+    settingsMenu: model.settingsMenu || [],
+    share: model.share || {},
     sections: model.timeline.sortedSections || model.sortedSections || model.sections || []
   };
 }
 
-function IconButton({ icon, label, className = "", primary = false, onClick, disabled = false }) {
+function IconButton({ icon, label, className = "", primary = false, active = false, onClick, disabled = false }) {
   return (
     <button
-      className={`v2-icon-button ${primary ? "is-primary" : ""} ${className}`}
+      className={`v2-icon-button ${primary ? "is-primary" : ""} ${active ? "is-active" : ""} ${className}`}
       type="button"
       aria-label={label}
       title={label}
@@ -145,13 +169,18 @@ function IconButton({ icon, label, className = "", primary = false, onClick, dis
 }
 
 function V2VisualEditor({ model, actions = {} }) {
+  const topbarRef = useRef(null);
   const stageSurfaceRef = useRef(null);
   const tokenGestureRef = useRef(null);
+  const settingsHoverTimerRef = useRef(null);
   const suppressNextTokenClickRef = useRef(false);
+  const [openTopMenu, setOpenTopMenu] = useState("");
+  const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
   const view = buildDemoViewModel(model);
-  const { shell, stage, selection, timeline, sections } = view;
+  const { shell, stage, selection, timeline, sections, share } = view;
   const runtimeActions = { ...(view.actions || {}), ...actions };
   const capabilities = view.capabilities || {};
+  const activeTab = taskTabs.includes(view.activeTab) ? view.activeTab : "Stage";
   const stageDimensions = stage.stageDimensions || { width: 100, height: 100 };
   const stageWidth = Math.max(1, Number(stageDimensions.width) || 100);
   const stageHeight = Math.max(1, Number(stageDimensions.height) || 100);
@@ -167,11 +196,59 @@ function V2VisualEditor({ model, actions = {} }) {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
   };
+  const closeTopMenus = () => {
+    if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
+    settingsHoverTimerRef.current = null;
+    setOpenTopMenu("");
+    setSettingsSubmenuOpen(false);
+  };
+  const runMenuAction = (key) => {
+    if (key === "export-json") {
+      runtimeActions.exportJson?.();
+      closeTopMenus();
+    } else if (key === "export-png") {
+      runtimeActions.exportPng?.();
+      closeTopMenus();
+    }
+  };
+  const runSettingsAction = (key) => {
+    if (key === "toggle-snap") runtimeActions.toggleSnap?.();
+    if (key === "toggle-stage-references") runtimeActions.toggleStageReferences?.();
+    if (key === "toggle-stage-reference-labels") runtimeActions.toggleStageReferenceLabels?.();
+    if (key === "toggle-transition-paths") runtimeActions.toggleTransitionPaths?.();
+  };
+  const runBottomAction = (action) => {
+    if (!action || action.disabled) return;
+    if (action.mode) {
+      runtimeActions.setActiveTab?.(action.mode);
+      return;
+    }
+    if (action.key === "duplicate-formation" || action.key === "duplicate-performer") runtimeActions.duplicate?.();
+    else if (action.key === "delete-formation" || action.key === "delete-performer" || action.key === "delete-performers") runtimeActions.delete?.();
+    else if (action.key === "clear-selection") runtimeActions.mobileAction?.("clear-selection");
+    else runtimeActions.mobileAction?.(action.key);
+  };
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!topbarRef.current?.contains(event.target)) closeTopMenus();
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") closeTopMenus();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   return (
     <main className="v2-visual-editor" data-v2-visual-editor>
       <section className="v2-phone-shell" aria-label="Movemap Pro Editor">
-        <header className="v2-topbar">
+        <header className="v2-topbar" ref={topbarRef}>
           <IconButton icon="grid" label="편집 메뉴" className="v2-brand-mark" />
           <div className="v2-title-cluster">
             <h1>{shell.projectTitle || shell.title || "Movemap"}</h1>
@@ -180,7 +257,114 @@ function V2VisualEditor({ model, actions = {} }) {
               {normalizeSaveLabel(shell.localSaveLabel ?? shell.saveLabel)}
             </span>
           </div>
-          <IconButton icon="more" label="더보기" onClick={() => runtimeActions.more?.("more")} />
+          <div className="v2-top-actions">
+            <div className="v2-menu-anchor">
+              <IconButton
+                icon="share"
+                label="공유"
+                active={openTopMenu === "share"}
+                onClick={() => {
+                  setSettingsSubmenuOpen(false);
+                  setOpenTopMenu((value) => value === "share" ? "" : "share");
+                }}
+              />
+              {openTopMenu === "share" && (
+                <div className="v2-top-menu v2-share-menu" role="menu" aria-label="공유 메뉴">
+                  <div className="v2-menu-status-row">
+                    <span>View {share.viewLinkState || (share.shareUrl ? "켜짐" : "없음")}</span>
+                    {!share.readonly && <span>Edit {share.editLinkState || (share.editShareUrl ? "켜짐" : "없음")}</span>}
+                  </div>
+                  {!share.readonly && (
+                    <button type="button" className="v2-menu-primary" onClick={() => runtimeActions.createShare?.()} disabled={share.isPending || (!share.canCreateViewLink && !share.shareUrl)}>
+                      편집 링크 만들기
+                    </button>
+                  )}
+                  <div className="v2-menu-link-row">
+                    <span>보기 링크</span>
+                    {share.shareUrl ? <a href={share.shareUrl}>열기</a> : <em>저장 후 생성</em>}
+                    {share.shareUrl && <button type="button" onClick={() => runtimeActions.copyShareUrl?.()}>복사</button>}
+                  </div>
+                  {!share.readonly && (
+                    <div className="v2-menu-link-row">
+                      <span>편집 링크</span>
+                      {share.editShareUrl ? <a href={share.editShareUrl}>열기</a> : <em>생성 대기</em>}
+                      {share.editShareUrl && <button type="button" onClick={() => runtimeActions.copyEditShareUrl?.()}>복사</button>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="v2-menu-anchor">
+              <IconButton
+                icon="more"
+                label="더보기"
+                active={openTopMenu === "more"}
+                onClick={() => {
+                  const isOpening = openTopMenu !== "more";
+                  setOpenTopMenu(isOpening ? "more" : "");
+                  setSettingsSubmenuOpen(false);
+                }}
+              />
+              {openTopMenu === "more" && (
+                <div className="v2-top-menu v2-more-menu" role="menu" aria-label="더보기 메뉴">
+                  {(view.moreMenu || []).map((item) => (
+                    <div
+                      className="v2-menu-item-wrap"
+                      key={item.key}
+                      onMouseEnter={() => {
+                        if (item.key !== "settings") return;
+                        if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
+                        settingsHoverTimerRef.current = window.setTimeout(() => {
+                          setSettingsSubmenuOpen(true);
+                          settingsHoverTimerRef.current = null;
+                        }, 160);
+                      }}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={item.hasSubmenu ? "has-submenu" : ""}
+                        disabled={Boolean(item.disabled)}
+                        onClick={(event) => {
+                          if (item.key === "settings") {
+                            event.stopPropagation();
+                            if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
+                            settingsHoverTimerRef.current = null;
+                            setSettingsSubmenuOpen((value) => !value);
+                          } else {
+                            runMenuAction(item.key);
+                          }
+                        }}
+                      >
+                        <span>{item.label}</span>
+                        {item.hasSubmenu && <span aria-hidden="true">{settingsSubmenuOpen ? "‹" : "›"}</span>}
+                      </button>
+                      {item.key === "settings" && settingsSubmenuOpen && (
+                        <div className="v2-top-menu v2-settings-submenu" role="menu" aria-label="Settings 메뉴">
+                          {(view.settingsMenu || []).map((setting) => (
+                            <button
+                              type="button"
+                              role="menuitemcheckbox"
+                              aria-checked={Boolean(setting.checked)}
+                              disabled={Boolean(setting.disabled)}
+                              key={setting.key}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                runSettingsAction(setting.key);
+                              }}
+                            >
+                              <span>{setting.label}</span>
+                              <span aria-hidden="true">{setting.checked ? "On" : "Off"}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </header>
 
         <section className="v2-stage-wrap" data-v2-stage aria-label="Stage">
@@ -270,7 +454,8 @@ function V2VisualEditor({ model, actions = {} }) {
           <IconButton icon={timeline.isPlaying ? "pause" : "play"} label={timeline.isPlaying ? "정지" : "재생"} className="v2-play-button" onClick={runtimeActions.play} />
           <div className="v2-timecode" aria-label="Current timecode">{preciseTimeLabel(shell.timeLabel)}</div>
           <div className="v2-transport-spacer" aria-hidden="true" />
-          <IconButton icon="settings" label="타임라인 설정" onClick={() => runtimeActions.more?.("view")} />
+          <IconButton icon="undo" label="실행 취소" disabled={!capabilities.canUndo} onClick={runtimeActions.undo} />
+          <IconButton icon="redo" label="다시 실행" disabled={!capabilities.canRedo} onClick={runtimeActions.redo} />
         </section>
 
         <section className="v2-timeline" data-v2-timeline aria-label="Formation timeline" onWheel={runtimeActions.timelineWheel}>
@@ -310,13 +495,14 @@ function V2VisualEditor({ model, actions = {} }) {
                     const section = sections.find((item) => item.id === targetSectionId) || sections[index] || {};
                     const isMove = segment.kind === "move";
                     const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
+                    const moveSelected = isMove && section.id && section.id === selectedSectionId;
                     const sectionCurrent = section.id && section.id === currentSectionId;
                     return (
                       <button
                         key={`${segment.kind || "hold"}-${segment.fromSectionId || section.id || index}-${segment.toSectionId || section.id || index}-${index}`}
                         className={[
                           isMove ? "v2-move-block" : "v2-formation-block",
-                          sectionSelected ? "is-selected" : "",
+                          (sectionSelected || moveSelected) ? "is-selected" : "",
                           sectionCurrent ? "is-current" : ""
                         ].filter(Boolean).join(" ")}
                         data-v2-formation-block={section.id || segment.sectionId || ""}
@@ -325,16 +511,48 @@ function V2VisualEditor({ model, actions = {} }) {
                         type="button"
                         aria-label={isMove ? "Move transition" : `${section.name || segment.label || "Formation"} formation`}
                         aria-pressed={sectionSelected}
-                        onPointerDown={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          if (!isMove && capabilities.canEditTimeline && section.id) {
+                            runtimeActions.formationPointerDown?.(event, section, sections.findIndex((item) => item.id === section.id), "body");
+                          }
+                        }}
                         onClick={() => {
                           if (section.id) runtimeActions.selectFormation?.(section);
                         }}
                       >
                         {isMove ? "Move" : section.name || segment.label}
+                        {!isMove && capabilities.canEditTimeline && segment.resizable && (
+                          <span
+                            className="v2-timeline-handle v2-timeline-handle-right"
+                            data-v2-timeline-handle="hold-right"
+                            data-v2-section-id={section.id || ""}
+                            aria-hidden="true"
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                              runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
+                            }}
+                          />
+                        )}
+                        {isMove && moveSelected && capabilities.canEditTimeline && (
+                          <span
+                            className="v2-timeline-handle v2-timeline-handle-left"
+                            data-v2-timeline-handle="move-left"
+                            data-v2-section-id={section.id || ""}
+                            aria-hidden="true"
+                            onPointerDown={(event) => {
+                              event.stopPropagation();
+                              runtimeActions.timelineHandlePointerDown?.(event, section.id, "move-left", segment);
+                            }}
+                          />
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {timeline.snapPixel !== null && timeline.snapPixel !== undefined && (
+                  <span className="v2-snapline" style={{ "--snap-left": `${timeline.snapPixel}px` }} aria-hidden="true" />
+                )}
                 <span className="v2-track-playhead" data-v2-playhead="formation" style={{ "--playhead-left": `${playheadLeft}px` }} aria-hidden="true" />
               </div>
             </div>
@@ -365,22 +583,15 @@ function V2VisualEditor({ model, actions = {} }) {
         </section>
 
         <nav className="v2-bottom-rail" data-v2-bottom-rail aria-label="Selected item actions">
-          {bottomActions(capabilities).map((action) => (
+          {(view.bottomRail || []).map((action) => (
             <IconButton
-              key={action.label}
+              key={action.key || action.label}
               icon={action.icon}
               label={action.label}
               primary={action.primary}
+              active={Boolean(action.active)}
               disabled={Boolean(action.disabled)}
-              onClick={() => {
-                if (action.disabled) return;
-                if (action.action === "add-formation") runtimeActions.addFormation?.({ forceAppend: true });
-                if (action.action === "undo") runtimeActions.undo?.();
-                if (action.action === "redo") runtimeActions.redo?.();
-                if (action.action === "duplicate") runtimeActions.duplicate?.();
-                if (action.action === "delete") runtimeActions.delete?.();
-                if (action.action === "more") runtimeActions.more?.("more");
-              }}
+              onClick={() => runBottomAction(action)}
             />
           ))}
         </nav>
