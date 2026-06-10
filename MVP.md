@@ -202,15 +202,18 @@ Current implementation:
 - Mobile shared review route loads.
 - Mobile action bar exposes select/add/duplicate/delete/undo/share.
 - Mobile bottom sheet can show existing tool panels.
+- `/v2` is implemented as a parallel mobile editor route, not a replacement for `/`.
+- `/v2` tab 작업면 productization is in progress: Stage shows settings plus selected-performer context, Timeline shows selected-formation timing/trim context, and Cast shows roster selection plus selection-scoped actions.
+- Readonly `/share/:id/v2` keeps roster selection available while disabling role, duplicate, delete, timeline edit, and artifact actions that mutate project state or require plan access.
 
 Next implementation slices:
 
-1. Replace the desktop-density mobile sheet with task-specific mobile tabs.
+1. Continue `/v2` task-specific tab productization until Stage, Timeline, and Cast cover practical phone editing without falling back to desktop panels.
 2. Add mobile formation selector with clear current/selected states.
 3. Add mobile timing controls for arrival and movement duration.
-4. Add mobile roster edit flow.
-5. Add route-specific Edit Link onboarding for mobile recipients.
-6. Add mobile transition review.
+4. Add route-specific Edit Link onboarding for mobile recipients.
+5. Add mobile transition review.
+6. Decide explicitly before migrating `/v2` into `/`; until then `/v2` remains the parallel route.
 
 Acceptance criteria:
 
@@ -380,8 +383,8 @@ Next implementation slices:
 1. Done: import/export validation is hardened.
 2. Done locally: snapshot metadata is attached to manual JSON export.
 3. Partial: existing review/export layout remains readable; deeper visual QA is still useful.
-4. Next: split the product surface into `Share` and `Export`, where Export opens a panel for JSON backup, PNG/image, PDF/print, and future video options.
-5. Remaining: add explicit export choices for scope, layers, layout, and media where supported.
+4. Done locally for `/v2`: `Share` is link-only and `Export` owns JSON backup, PNG/image, and PDF/print artifact actions. `/v2` remains a parallel editor route until migration is explicitly chosen.
+5. Partial locally for `/v2`: Export scope rows are now selectable artifact panels; JSON stays available for recovery, while PNG/PDF stay plan-gated through the existing advanced-export capability.
 6. Remaining: MP4/GIF movement preview as a later export tier after PNG/PDF/JSON are dependable.
 7. Remaining: native app packaging as a later platform step.
 

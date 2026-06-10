@@ -50,8 +50,12 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
   assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "performer-role", "clear-selection"]);
+  assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["p1", true]]);
+  assert.equal(runtime.cast.canClearSelection, true);
+  assert.equal(runtime.cast.canOpenRoleActions, true);
   assert.deepEqual(runtime.exportMenu.map((item) => item.key), ["export-json", "export-png", "export-all-png", "print"]);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-json").label, "프로젝트 JSON 내보내기");
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-json").scopeLabel, "Project backup");
   assert.equal(runtime.moreMenu[0].key, "settings");
   assert.equal(runtime.moreMenu.some((item) => item.key.startsWith("export-") || item.key === "print"), false);
   assert.equal(runtime.settingsMenu[0].key, "toggle-snap");
@@ -74,6 +78,9 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   assert.equal(readonlyRuntime.capabilities.canDelete, false);
   assert.equal(readonlyRuntime.capabilities.canUndo, false);
   assert.equal(readonlyRuntime.capabilities.canRedo, false);
+  assert.deepEqual(readonlyRuntime.bottomRail.map((action) => action.key), ["stage", "timeline", "cast"]);
+  assert.equal(readonlyRuntime.bottomRail.find((action) => action.key === "timeline").disabled, undefined);
+  assert.equal(readonlyRuntime.cast.canOpenRoleActions, false);
 
   const emptyRuntime = createV2EditorRuntime({
     activeTab: "Cast",
@@ -138,8 +145,12 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
 
   assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-formation", "delete-formation", "timeline", "clear-selection"]);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").scopeLabel, "Current view");
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "사용 가능");
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-all-png").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-all-png").scopeLabel, "All formations");
   assert.equal(runtime.exportMenu.find((item) => item.key === "print").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "print").scopeLabel, "Print layout");
   assert.deepEqual(
     runtime.settingsMenu.map((item) => [item.key, item.checked, Boolean(item.disabled)]),
     [
@@ -156,8 +167,175 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
   });
   assert.equal(readonlyRuntime.settingsMenu.find((item) => item.key === "toggle-snap").disabled, true);
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-png").disabled, true);
+  assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "플랜 업그레이드 필요");
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-all-png").disabled, true);
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "print").disabled, true);
+});
+
+test("V2 runtime exposes tab state and Cast selection action model", () => {
+  const selectPerformer = () => {};
+  const handleMobileAction = () => {};
+  const runtime = createV2EditorRuntime({
+    activeTab: "Cast",
+    handleMobileAction,
+    performers: [
+      { id: "a1", label: "A1", role: "groupA" },
+      { id: "b2", label: "B2", role: "groupB" }
+    ],
+    readonly: false,
+    selectPerformer,
+    selectedPerformerId: "b2",
+    selectedPerformerIds: ["b2"]
+  });
+
+  assert.equal(runtime.activeTab, "Cast");
+  assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["a1", false], ["b2", true]]);
+  assert.equal(runtime.cast.canClearSelection, true);
+  assert.equal(runtime.cast.canOpenRoleActions, true);
+  assert.equal(runtime.actions.selectPerformer, selectPerformer);
+  assert.equal(runtime.actions.mobileAction, handleMobileAction);
+});
+
+test("V2 Cast task model summarizes selection and edit action availability", () => {
+  const editableRuntime = createV2EditorRuntime({
+    performers: [
+      { id: "a1", label: "A1", name: "Ari", role: "lead", group: "groupA" },
+      { id: "b2", label: "B2", name: "Bo", role: "support", group: "groupB" }
+    ],
+    readonly: false,
+    selectedPerformerId: "a1",
+    selectedPerformerIds: ["a1"]
+  });
+
+  assert.deepEqual(editableRuntime.cast.selectedSummary, {
+    id: "a1",
+    label: "Ari",
+    metaLabel: "groupA / lead",
+    stateLabel: "선택됨"
+  });
+  assert.equal(editableRuntime.cast.canClearSelection, true);
+  assert.equal(editableRuntime.cast.canOpenRoleActions, true);
+  assert.equal(editableRuntime.cast.canDuplicate, true);
+  assert.equal(editableRuntime.cast.canDelete, true);
+
+  const emptyRuntime = createV2EditorRuntime({
+    performers: [{ id: "a1", label: "A1" }],
+    readonly: false
+  });
+  assert.equal(emptyRuntime.cast.selectedSummary.stateLabel, "선택 없음");
+  assert.equal(emptyRuntime.cast.canClearSelection, false);
+  assert.equal(emptyRuntime.cast.canOpenRoleActions, false);
+  assert.equal(emptyRuntime.cast.canDuplicate, false);
+  assert.equal(emptyRuntime.cast.canDelete, false);
+
+  const readonlyRuntime = createV2EditorRuntime({
+    performers: [{ id: "a1", label: "A1", role: "lead" }],
+    readonly: true,
+    selectedPerformerId: "a1",
+    selectedPerformerIds: ["a1"]
+  });
+  assert.equal(readonlyRuntime.cast.canClearSelection, true);
+  assert.equal(readonlyRuntime.cast.canOpenRoleActions, false);
+  assert.equal(readonlyRuntime.cast.canDuplicate, false);
+  assert.equal(readonlyRuntime.cast.canDelete, false);
+});
+
+test("V2 Stage task model exposes setting state and selected performer summary", () => {
+  const runtime = createV2EditorRuntime({
+    performers: [{ id: "a1", label: "A1", name: "Ari", role: "lead", group: "groupA" }],
+    readonly: false,
+    selectedPerformerId: "a1",
+    selectedPerformerIds: ["a1"],
+    showAllTransitionPaths: true,
+    showStageReferenceLabels: false,
+    showStageReferences: true,
+    snapEnabled: true
+  });
+
+  assert.deepEqual(
+    runtime.stageTask.settings.map((setting) => [setting.key, setting.label, setting.stateLabel, setting.checked]),
+    [
+      ["toggle-snap", "Snap", "On", true],
+      ["toggle-stage-references", "Stage references", "On", true],
+      ["toggle-stage-reference-labels", "Reference labels", "Off", false],
+      ["toggle-transition-paths", "Transition paths", "On", true]
+    ]
+  );
+  assert.deepEqual(runtime.stageTask.selectedPerformerSummary, {
+    id: "a1",
+    label: "Ari",
+    metaLabel: "groupA / lead",
+    stateLabel: "선택됨"
+  });
+  assert.equal(runtime.stageTask.canClearSelection, true);
+  assert.equal(runtime.stageTask.canOpenRoleActions, true);
+
+  const emptyRuntime = createV2EditorRuntime({ readonly: false });
+  assert.equal(emptyRuntime.stageTask.selectedPerformerSummary.stateLabel, "무대 선택 없음");
+  assert.equal(emptyRuntime.stageTask.canClearSelection, false);
+  assert.equal(emptyRuntime.stageTask.canOpenRoleActions, false);
+});
+
+test("V2 Timeline task model summarizes selected formation and edit availability", () => {
+  const runtime = createV2EditorRuntime({
+    mobileContextSelection: "formation",
+    readonly: false,
+    selectedSection: {
+      id: "diamond",
+      name: "Diamond",
+      time: 12,
+      start: 10,
+      end: 16
+    },
+    selectedSectionId: "diamond",
+    sortedSections: [
+      { id: "intro", name: "Intro", time: 0, start: 0, end: 8 },
+      { id: "diamond", name: "Diamond", time: 12, start: 10, end: 16 }
+    ]
+  });
+
+  assert.deepEqual(runtime.timelineTask.selectedFormationSummary, {
+    id: "diamond",
+    name: "Diamond",
+    timeRangeLabel: "10.0s - 16.0s",
+    durationLabel: "6.0s",
+    trimStateLabel: "Trim enabled"
+  });
+  assert.equal(runtime.timelineTask.canTrimSelectedFormation, true);
+  assert.equal(runtime.timelineTask.canAddFormation, true);
+  assert.equal(runtime.timelineTask.canAddAudio, true);
+  assert.equal(runtime.timelineTask.focusLabel, "Selected: Diamond");
+
+  const readonlyRuntime = createV2EditorRuntime({
+    mobileContextSelection: "formation",
+    readonly: true,
+    selectedSection: { id: "diamond", name: "Diamond", time: 12, start: 10, end: 16 },
+    selectedSectionId: "diamond",
+    sortedSections: [{ id: "diamond", name: "Diamond", time: 12, start: 10, end: 16 }]
+  });
+  assert.equal(readonlyRuntime.timelineTask.canTrimSelectedFormation, false);
+  assert.equal(readonlyRuntime.timelineTask.selectedFormationSummary.trimStateLabel, "Trim locked");
+  assert.equal(readonlyRuntime.timelineTask.canAddFormation, false);
+  assert.equal(readonlyRuntime.timelineTask.canAddAudio, false);
+});
+
+test("V2 Export model keeps JSON available and plan-gates render artifacts", () => {
+  const runtime = createV2EditorRuntime({ canUseAdvancedExports: false });
+  assert.deepEqual(
+    runtime.exportMenu.map((item) => [item.key, item.scopeLabel, item.availabilityLabel, item.disabled]),
+    [
+      ["export-json", "Project backup", "Recovery file", false],
+      ["export-png", "Current view", "플랜 업그레이드 필요", true],
+      ["export-all-png", "All formations", "플랜 업그레이드 필요", true],
+      ["print", "Print layout", "플랜 업그레이드 필요", true]
+    ]
+  );
+  assert.equal(runtime.exportMenu.every((item) => item.kind === "artifact"), true);
+
+  const proRuntime = createV2EditorRuntime({ canUseAdvancedExports: true });
+  assert.equal(proRuntime.exportMenu.find((item) => item.key === "export-json").disabled, false);
+  assert.equal(proRuntime.exportMenu.find((item) => item.key === "export-png").disabled, false);
+  assert.equal(proRuntime.exportMenu.find((item) => item.key === "print").availabilityLabel, "사용 가능");
 });
 
 test("V2 coordinate adapter maps client pixels to stage meters and clamps to bounds", () => {

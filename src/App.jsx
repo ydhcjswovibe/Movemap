@@ -5046,7 +5046,7 @@ function App() {
           </button>
         </div>
       )}
-      {readonly && (
+      {readonly && !isV2Route && (
         <div className="readonly-banner">
           <div>
             <strong>{shareRouteBlocked === "disabled-view-link" ? "비활성화된 View Link" : "보기 링크 · View Link"}</strong>

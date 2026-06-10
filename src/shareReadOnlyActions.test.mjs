@@ -6,11 +6,12 @@ const appSource = readFileSync(new URL("./App.jsx", import.meta.url), "utf8");
 const stylesSource = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 test("keeps the readonly share banner focused on editable copies", () => {
-  const readonlyBanner = appSource.match(/\{readonly && \(\s*<div className="readonly-banner">[\s\S]*?<\/div>\s*\)\}/)?.[0] || "";
+  const readonlyBanner = appSource.match(/\{readonly && !isV2Route && \(\s*<div className="readonly-banner">[\s\S]*?<\/div>\s*\)\}/)?.[0] || "";
 
   assert.doesNotMatch(readonlyBanner, /exportJson/);
   assert.doesNotMatch(readonlyBanner, /저장하기/);
   assert.match(readonlyBanner, /<button onClick=\{saveEditableCopy\}>사본으로 편집<\/button>/);
+  assert.match(readonlyBanner, /readonly && !isV2Route/);
 });
 
 test("uses cloud save as the default edit save action and keeps json for file sharing", () => {

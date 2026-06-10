@@ -704,6 +704,8 @@ test.describe("connected v2 editor route", () => {
     await page.goto("/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Timeline" }).click();
+    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toBeVisible();
     const moveBlock = root.locator('[data-v2-segment-kind="move"]').first();
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
     await expect(moveBlock).toBeVisible();
@@ -734,6 +736,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
     await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]')).toBeVisible();
     await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]')).toBeVisible();
+    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toBeVisible();
 
     expect(await v2TimingSnapshot(page)).toEqual(timingBefore);
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
@@ -1576,6 +1579,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "공유" })).toBeVisible();
     await expect(root.getByRole("button", { name: "내보내기" })).toBeVisible();
     await expect(root.getByRole("button", { name: "더보기" })).toBeVisible();
+    await expect(root.getByRole("button", { name: "편집 메뉴" })).toHaveCount(0);
     const topbarMetrics = await root.locator(".v2-topbar").evaluate((topbar) => {
       const rect = topbar.getBoundingClientRect();
       const actionRects = Array.from(topbar.querySelectorAll(".v2-top-actions .v2-icon-button")).map((button) => {
@@ -1599,8 +1603,33 @@ test.describe("connected v2 editor route", () => {
     await expect(rail.getByRole("button", { name: "Timeline" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "Stage" })).toHaveClass(/is-active/);
+    const stageSurface = root.locator('[data-v2-tab-surface="Stage"]');
+    await expect(stageSurface).toHaveCount(0);
+    await expect(root.locator("[data-v2-stage]").getByRole("button", { name: "Stage references" })).toHaveCount(0);
     await rail.getByRole("button", { name: "Timeline" }).click();
     await expect(rail.getByRole("button", { name: "Timeline" })).toHaveClass(/is-active/);
+    const timelineSurface = root.locator('[data-v2-tab-surface="Timeline"]');
+    await expect(timelineSurface).toBeVisible();
+    await expect(timelineSurface.getByRole("button", { name: "대형 추가" })).toBeVisible();
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await expect(timelineSurface).toContainText("Selected:");
+    await expect(timelineSurface).toContainText("Trim enabled");
+    await expect(timelineSurface).toContainText(/\d+\.\ds - \d+\.\ds/);
+    await rail.getByRole("button", { name: "해제" }).click();
+    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
+    await rail.getByRole("button", { name: "Cast" }).click();
+    await expect(rail.getByRole("button", { name: "Cast" })).toHaveClass(/is-active/);
+    const castSurface = root.locator('[data-v2-tab-surface="Cast"]');
+    await expect(castSurface).toBeVisible();
+    await castSurface.getByRole("button", { name: /B2/ }).click();
+    await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(castSurface).toContainText("B2");
+    await expect(castSurface).toContainText("선택됨");
+    await expect(castSurface.getByRole("button", { name: "복제" })).toBeEnabled();
+    await expect(castSurface.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(castSurface.getByRole("button", { name: "역할" })).toBeEnabled();
+    await castSurface.getByRole("button", { name: "해제" }).click();
+    await expect(root.locator(".v2-token[aria-pressed='true']")).toHaveCount(0);
 
     await root.getByRole("button", { name: "더보기" }).click();
     await expect(root.getByRole("menu", { name: "더보기 메뉴" })).toBeVisible();
@@ -1640,10 +1669,14 @@ test.describe("connected v2 editor route", () => {
     await root.getByRole("button", { name: "내보내기" }).click();
     const exportMenu = root.getByRole("menu", { name: "내보내기 메뉴" });
     await expect(exportMenu).toBeVisible();
-    await expect(exportMenu.getByRole("menuitem", { name: "프로젝트 JSON 내보내기" })).toBeVisible();
-    await expect(exportMenu.getByRole("menuitem", { name: "현재 PNG" })).toBeVisible();
-    await expect(exportMenu.getByRole("menuitem", { name: "전체 대형 PNG" })).toBeVisible();
-    await expect(exportMenu.getByRole("menuitem", { name: "인쇄/PDF" })).toBeVisible();
+    await expect(exportMenu).toContainText("Project backup");
+    await expect(exportMenu).toContainText("Recovery file");
+    await expect(exportMenu).toContainText("Current view");
+    await expect(exportMenu).toContainText("All formations");
+    await expect(exportMenu.getByRole("menuitem", { name: /프로젝트 JSON 내보내기/ })).toBeVisible();
+    await expect(exportMenu.getByRole("menuitem", { name: /현재 PNG/ })).toBeVisible();
+    await expect(exportMenu.getByRole("menuitem", { name: /전체 대형 PNG/ })).toBeVisible();
+    await expect(exportMenu.getByRole("menuitem", { name: /인쇄\/PDF/ })).toBeVisible();
     await expect(exportMenu).not.toContainText("보기 링크");
     await expect(exportMenu).not.toContainText("편집 링크");
   });
@@ -1705,6 +1738,18 @@ test.describe("connected v2 editor route", () => {
     await root.getByRole("button", { name: "더보기" }).click();
     await root.getByRole("menuitem", { name: /Settings/ }).click();
     await expect(root.getByRole("menuitemcheckbox", { name: /Snap/ })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Cast" }).click();
+    const castSurface = root.locator('[data-v2-tab-surface="Cast"]');
+    await expect(castSurface).toBeVisible();
+    await castSurface.getByRole("button", { name: /B2/ }).click();
+    const readonlyTopbarBox = await root.locator(".v2-topbar").boundingBox();
+    expect(readonlyTopbarBox.y).toBeGreaterThanOrEqual(0);
+    await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(castSurface.getByRole("button", { name: "해제" })).toBeEnabled();
+    await expect(castSurface.getByRole("button", { name: "역할" })).toBeDisabled();
+    await expect(castSurface.getByRole("button", { name: "복제" })).toBeDisabled();
+    await expect(castSurface.getByRole("button", { name: "삭제" })).toBeDisabled();
   });
 
   test("readonly V2 formation blocks still pan without mutating timing", async ({ page }) => {

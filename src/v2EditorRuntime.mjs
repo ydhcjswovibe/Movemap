@@ -38,6 +38,51 @@ function activeTabFor(input) {
   return V2_TABS.includes(candidate) ? candidate : "Stage";
 }
 
+function performerDisplayLabel(performer) {
+  return String(performer?.name || performer?.label || performer?.id || "").trim() || "Performer";
+}
+
+function performerMetaLabel(performer) {
+  const parts = [performer?.group, performer?.role].map((part) => String(part || "").trim()).filter(Boolean);
+  return parts.length ? parts.join(" / ") : "No role";
+}
+
+function selectedPerformerSummaryFor(performers, selectedPerformerId, selectedPerformerIds, emptyStateLabel) {
+  const ids = normalizeArray(selectedPerformerIds);
+  const selected = performers.find((performer) => performer.id === selectedPerformerId)
+    || performers.find((performer) => ids.includes(performer.id))
+    || null;
+  if (!selected) {
+    return {
+      id: "",
+      label: "No performer",
+      metaLabel: "No role",
+      stateLabel: emptyStateLabel
+    };
+  }
+  return {
+    id: selected.id,
+    label: performerDisplayLabel(selected),
+    metaLabel: performerMetaLabel(selected),
+    stateLabel: ids.length > 1 ? `${ids.length}명 선택됨` : "선택됨"
+  };
+}
+
+function formatSeconds(value) {
+  return `${finiteNumber(value, 0).toFixed(1)}s`;
+}
+
+function formationTimingFor(section) {
+  const start = finiteNumber(section?.start ?? section?.time, 0);
+  const fallbackEnd = start + finiteNumber(section?.durationSeconds ?? section?.duration ?? section?.moveDuration, 0);
+  const end = finiteNumber(section?.end, fallbackEnd);
+  return {
+    start,
+    end: Math.max(start, end),
+    duration: Math.max(0, Math.max(start, end) - start)
+  };
+}
+
 export function createV2EditorRuntime(input = {}) {
   const selectedSectionId = selectedSectionIdFor(input);
   const selectedSection = selectedSectionFor(input, selectedSectionId);
@@ -102,6 +147,20 @@ export function createV2EditorRuntime(input = {}) {
     canRedo: !readonly && !Boolean(input.redoDisabled ?? input.actions?.redoDisabled),
     canUndo: !readonly && !Boolean(input.undoDisabled ?? input.actions?.undoDisabled)
   };
+  const cast = {
+    performers: stage.performers.map((performer) => ({
+      ...performer,
+      active: performer.id === selectedPerformerId || selectedPerformerIds.includes(performer.id),
+      disabled: false
+    })),
+    selectedPerformerId,
+    selectedPerformerIds,
+    selectedSummary: selectedPerformerSummaryFor(stage.performers, selectedPerformerId, selectedPerformerIds, "선택 없음"),
+    canClearSelection: hasPerformerSelection,
+    canOpenRoleActions: !readonly && Boolean(selectedPerformerId),
+    canDuplicate: capabilities.canDuplicate && hasPerformerSelection,
+    canDelete: capabilities.canDelete && hasPerformerSelection
+  };
   const topActions = [
     { key: "share", icon: "share", label: "공유", disabled: false },
     { key: "export", icon: "download", label: "내보내기", disabled: false },
@@ -117,11 +176,40 @@ export function createV2EditorRuntime(input = {}) {
     { key: "project-info", label: shell.projectTitle },
     { key: "help", label: "Help / Shortcuts", disabled: true }
   ];
+  const hasAdvancedExports = Boolean(input.canUseAdvancedExports);
   const exportMenu = [
-    { key: "export-json", label: "프로젝트 JSON 내보내기" },
-    { key: "export-png", label: "현재 PNG", disabled: !Boolean(input.canUseAdvancedExports) },
-    { key: "export-all-png", label: "전체 대형 PNG", disabled: !Boolean(input.canUseAdvancedExports) },
-    { key: "print", label: "인쇄/PDF", disabled: !Boolean(input.canUseAdvancedExports) }
+    {
+      key: "export-json",
+      kind: "artifact",
+      label: "프로젝트 JSON 내보내기",
+      scopeLabel: "Project backup",
+      availabilityLabel: "Recovery file",
+      disabled: false
+    },
+    {
+      key: "export-png",
+      kind: "artifact",
+      label: "현재 PNG",
+      scopeLabel: "Current view",
+      availabilityLabel: hasAdvancedExports ? "사용 가능" : "플랜 업그레이드 필요",
+      disabled: !hasAdvancedExports
+    },
+    {
+      key: "export-all-png",
+      kind: "artifact",
+      label: "전체 대형 PNG",
+      scopeLabel: "All formations",
+      availabilityLabel: hasAdvancedExports ? "사용 가능" : "플랜 업그레이드 필요",
+      disabled: !hasAdvancedExports
+    },
+    {
+      key: "print",
+      kind: "artifact",
+      label: "인쇄/PDF",
+      scopeLabel: "Print layout",
+      availabilityLabel: hasAdvancedExports ? "사용 가능" : "플랜 업그레이드 필요",
+      disabled: !hasAdvancedExports
+    }
   ];
   const settingsMenu = [
     { key: "toggle-snap", label: "Snap", checked: Boolean(input.snapEnabled), disabled: readonly },
@@ -129,6 +217,39 @@ export function createV2EditorRuntime(input = {}) {
     { key: "toggle-stage-reference-labels", label: "Reference labels", checked: Boolean(input.showStageReferenceLabels) },
     { key: "toggle-transition-paths", label: "Transition paths", checked: Boolean(input.showAllTransitionPaths) }
   ];
+  const stageTask = {
+    settings: settingsMenu.map((setting) => ({
+      ...setting,
+      stateLabel: setting.checked ? "On" : "Off"
+    })),
+    selectedPerformerSummary: selectedPerformerSummaryFor(stage.performers, selectedPerformerId, selectedPerformerIds, "무대 선택 없음"),
+    canClearSelection: hasPerformerSelection,
+    canOpenRoleActions: !readonly && Boolean(selectedPerformerId)
+  };
+  const selectedFormationTiming = formationTimingFor(selectedSection);
+  const selectedFormationName = selectedSection?.name || selectedSection?.label || selectedSection?.id || "";
+  const selectedFormationSummary = selectedSection
+    ? {
+        id: selectedSection.id || selectedSectionId,
+        name: selectedFormationName || "Selected formation",
+        timeRangeLabel: `${formatSeconds(selectedFormationTiming.start)} - ${formatSeconds(selectedFormationTiming.end)}`,
+        durationLabel: formatSeconds(selectedFormationTiming.duration),
+        trimStateLabel: capabilities.canEditTimeline ? "Trim enabled" : "Trim locked"
+      }
+    : {
+        id: "",
+        name: "No formation selected",
+        timeRangeLabel: "Select a block",
+        durationLabel: "0.0s",
+        trimStateLabel: capabilities.canEditTimeline ? "Select to trim" : "Trim locked"
+      };
+  const timelineTask = {
+    selectedFormationSummary,
+    canTrimSelectedFormation: capabilities.canEditTimeline && Boolean(selectedSection),
+    canAddFormation: capabilities.canAddFormation,
+    canAddAudio: capabilities.canAddAudio,
+    focusLabel: selectedSection ? `Selected: ${selectedFormationSummary.name}` : "No selected block"
+  };
   const share = {
     canCreateViewLink: Boolean(input.canCreateViewLink),
     canManageLinks: Boolean(input.canManageLinks),
@@ -212,6 +333,7 @@ export function createV2EditorRuntime(input = {}) {
     actions,
     bottomRail,
     capabilities,
+    cast,
     exportMenu,
     moreMenu,
     sections: sortedSections,
@@ -220,7 +342,9 @@ export function createV2EditorRuntime(input = {}) {
     share,
     shell,
     stage,
+    stageTask,
     timeline,
+    timelineTask,
     topActions,
     transportActions,
     timelineViewportRef: input.timelineViewportRef || null,

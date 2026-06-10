@@ -123,11 +123,6 @@
   height: 16px;
 }
 
-.v2-topbar .v2-brand-mark {
-  width: 34px;
-  height: 34px;
-}
-
 .v2-icon-button {
   width: 24px;
   height: 24px;
@@ -170,10 +165,6 @@
 .v2-icon-button.is-active {
   background: rgba(255, 255, 255, 0.11);
   color: #ffffff;
-}
-
-.v2-brand-mark {
-  color: #3f7dff;
 }
 
 .v2-menu-anchor {
@@ -295,6 +286,55 @@
   padding: 0 6px;
 }
 
+.v2-export-scope-list {
+  display: grid;
+  gap: 3px;
+  min-width: 180px;
+}
+
+.v2-export-scope-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid rgba(231, 237, 246, 0.08);
+  border-radius: 4px;
+  background: #0f1319;
+  color: #aeb8c8;
+  font-size: 9px;
+  font-weight: 850;
+  font-family: inherit;
+  text-align: left;
+  appearance: none;
+}
+
+.v2-export-scope-list button.is-disabled {
+  opacity: 0.56;
+}
+
+.v2-export-scope-list strong,
+.v2-export-scope-list em,
+.v2-export-menu button em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-export-scope-list strong {
+  color: #e7edf6;
+  word-spacing: 2px;
+}
+
+.v2-export-scope-list em,
+.v2-export-menu button em {
+  color: #8791a0;
+  font-style: normal;
+}
+
 .v2-menu-item-wrap {
   position: relative;
 }
@@ -371,6 +411,156 @@
   border: 1px solid rgba(235, 240, 250, 0.65);
   transform: translate(-50%, -50%) rotate(45deg);
   background: #0b0d10;
+}
+
+.v2-cast-task-surface {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  z-index: 12;
+  min-width: 0;
+  border: 1px solid rgba(231, 237, 246, 0.14);
+  border-radius: 6px;
+  background: rgba(12, 15, 19, 0.9);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(8px);
+}
+
+.v2-cast-actions button,
+.v2-timeline-task-surface button,
+.v2-task-actions button {
+  margin: 0;
+  border: 1px solid rgba(231, 237, 246, 0.1);
+  border-radius: 4px;
+  background: #171c23;
+  color: #dfe7f4;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  appearance: none;
+}
+
+.v2-cast-roster button.is-active {
+  border-color: rgba(36, 211, 124, 0.38);
+  background: rgba(36, 211, 124, 0.16);
+  color: #b7ffd4;
+}
+
+.v2-cast-actions button:disabled,
+.v2-timeline-task-surface button:disabled,
+.v2-task-actions button:disabled {
+  opacity: 0.42;
+}
+
+.v2-task-summary {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 5px 6px;
+  border: 1px solid rgba(231, 237, 246, 0.08);
+  border-radius: 4px;
+  background: rgba(19, 23, 29, 0.92);
+}
+
+.v2-task-summary span,
+.v2-task-summary strong,
+.v2-task-summary em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.05;
+}
+
+.v2-task-summary span {
+  color: #8f9aaa;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.v2-task-summary strong {
+  color: #f2f6fc;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.v2-task-summary em {
+  color: #aeb8c8;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.v2-task-actions {
+  display: grid;
+  gap: 4px;
+  align-content: stretch;
+}
+
+.v2-task-actions button {
+  min-height: 21px;
+  padding: 0 6px;
+}
+
+.v2-cast-task-surface {
+  bottom: 10px;
+  display: grid;
+  grid-template-columns: minmax(68px, 0.72fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 6px;
+}
+
+.v2-cast-roster {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.v2-cast-roster button {
+  width: 42px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid rgba(231, 237, 246, 0.12);
+  border-radius: 5px;
+  background: #151a22;
+  color: #f0f5fc;
+  font-family: inherit;
+  letter-spacing: 0;
+  appearance: none;
+}
+
+.v2-cast-roster button span {
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.v2-cast-roster button em {
+  color: #8d98a8;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.v2-cast-actions {
+  display: grid;
+  gap: 4px;
+}
+
+.v2-cast-actions button {
+  min-width: 38px;
+  min-height: 17px;
+  padding: 0 5px;
 }
 
 .v2-audience-zone {
@@ -490,6 +680,53 @@
   overflow: hidden;
   background: #0c0f13;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.v2-timeline-task-surface {
+  position: absolute;
+  left: 70px;
+  right: 8px;
+  top: 30px;
+  z-index: 20;
+  min-width: 0;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(85, 151, 255, 0.24);
+  border-radius: 5px;
+  background: rgba(13, 18, 28, 0.9);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
+.v2-timeline-selection-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 54px;
+}
+
+.v2-timeline-selection-meta span {
+  min-width: 0;
+  overflow: hidden;
+  color: #dce9ff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-timeline-selection-meta span:last-child {
+  color: #b7ffd4;
+}
+
+.v2-timeline-task-surface button {
+  min-height: 20px;
+  padding: 0 6px;
+  pointer-events: auto;
 }
 
 .v2-ruler {

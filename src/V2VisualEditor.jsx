@@ -100,6 +100,21 @@ function buildDemoViewModel(model) {
         { key: "timeline", icon: "grid", label: "Timeline", mode: "Timeline" },
         { key: "cast", icon: "users", label: "Cast", mode: "Cast" }
       ],
+      cast: {
+        performers: demoPerformers.map((performer) => ({ ...performer, active: performer.id === "A1" })),
+        selectedPerformerId: "A1",
+        selectedPerformerIds: ["A1"],
+        selectedSummary: {
+          id: "A1",
+          label: "A1",
+          metaLabel: "groupA",
+          stateLabel: "선택됨"
+        },
+        canClearSelection: true,
+        canOpenRoleActions: true,
+        canDuplicate: true,
+        canDelete: true
+      },
       selection: {
         selectedPerformerId: "A1",
         selectedPerformerIds: ["A1"],
@@ -119,10 +134,10 @@ function buildDemoViewModel(model) {
         { key: "help", label: "Help / Shortcuts", disabled: true }
       ],
       exportMenu: [
-        { key: "export-json", label: "프로젝트 JSON 내보내기" },
-        { key: "export-png", label: "현재 PNG", disabled: true },
-        { key: "export-all-png", label: "전체 대형 PNG", disabled: true },
-        { key: "print", label: "인쇄/PDF", disabled: true }
+        { key: "export-json", label: "프로젝트 JSON 내보내기", scopeLabel: "Project backup", availabilityLabel: "Recovery file" },
+        { key: "export-png", label: "현재 PNG", scopeLabel: "Current view", availabilityLabel: "플랜 업그레이드 필요", disabled: true },
+        { key: "export-all-png", label: "전체 대형 PNG", scopeLabel: "All formations", availabilityLabel: "플랜 업그레이드 필요", disabled: true },
+        { key: "print", label: "인쇄/PDF", scopeLabel: "Print layout", availabilityLabel: "플랜 업그레이드 필요", disabled: true }
       ],
       settingsMenu: [
         { key: "toggle-snap", label: "Snap", checked: true },
@@ -130,6 +145,35 @@ function buildDemoViewModel(model) {
         { key: "toggle-stage-reference-labels", label: "Reference labels", checked: false },
         { key: "toggle-transition-paths", label: "Transition paths", checked: false }
       ],
+      stageTask: {
+        settings: [
+          { key: "toggle-snap", label: "Snap", checked: true, stateLabel: "On" },
+          { key: "toggle-stage-references", label: "Stage references", checked: false, stateLabel: "Off" },
+          { key: "toggle-stage-reference-labels", label: "Reference labels", checked: false, stateLabel: "Off" },
+          { key: "toggle-transition-paths", label: "Transition paths", checked: false, stateLabel: "Off" }
+        ],
+        selectedPerformerSummary: {
+          id: "A1",
+          label: "A1",
+          metaLabel: "groupA",
+          stateLabel: "선택됨"
+        },
+        canClearSelection: true,
+        canOpenRoleActions: true
+      },
+      timelineTask: {
+        selectedFormationSummary: {
+          id: "diamond",
+          name: "Diamond Form",
+          timeRangeLabel: "1.0s - 3.0s",
+          durationLabel: "2.0s",
+          trimStateLabel: "Trim enabled"
+        },
+        canTrimSelectedFormation: true,
+        canAddFormation: true,
+        canAddAudio: true,
+        focusLabel: "Selected: Diamond Form"
+      },
       share: {
         readonly: false,
         shareUrl: "",
@@ -156,9 +200,12 @@ function buildDemoViewModel(model) {
     actions: model.actions || {},
     activeTab: model.activeTab || "Stage",
     bottomRail: model.bottomRail || [],
+    cast: model.cast || {},
     exportMenu: model.exportMenu || [],
     moreMenu: model.moreMenu || [],
     settingsMenu: model.settingsMenu || [],
+    stageTask: model.stageTask || {},
+    timelineTask: model.timelineTask || {},
     share: model.share || {},
     sections: model.timeline.sortedSections || model.sortedSections || model.sections || []
   };
@@ -328,7 +375,6 @@ function V2VisualEditor({ model, actions = {} }) {
     <main className="v2-visual-editor" data-v2-visual-editor>
       <section className="v2-phone-shell" aria-label="Movemap Pro Editor">
         <header className="v2-topbar" ref={topbarRef}>
-          <IconButton icon="grid" label="편집 메뉴" className="v2-brand-mark" />
           <div className="v2-title-cluster">
             <h1>{shell.projectTitle || shell.title || "Movemap"}</h1>
             <span className="v2-saved-chip">
@@ -395,6 +441,20 @@ function V2VisualEditor({ model, actions = {} }) {
               />
               {openTopMenu === "export" && (
                 <div className="v2-top-menu v2-export-menu" role="menu" aria-label="내보내기 메뉴">
+                  <div className="v2-export-scope-list" aria-label="내보내기 범위">
+                    {(view.exportMenu || []).map((item) => (
+                      <button
+                        type="button"
+                        key={`${item.key}-scope`}
+                        className={item.disabled ? "is-disabled" : ""}
+                        disabled={Boolean(item.disabled)}
+                        onClick={() => runMenuAction(item.key)}
+                      >
+                        <strong>{item.scopeLabel}</strong>
+                        <em>{item.availabilityLabel}</em>
+                      </button>
+                    ))}
+                  </div>
                   {(view.exportMenu || []).map((item) => (
                     <button
                       type="button"
@@ -404,6 +464,7 @@ function V2VisualEditor({ model, actions = {} }) {
                       onClick={() => runMenuAction(item.key)}
                     >
                       <span>{item.label}</span>
+                      {item.scopeLabel && <em>{item.scopeLabel}</em>}
                     </button>
                   ))}
                 </div>
@@ -509,6 +570,78 @@ function V2VisualEditor({ model, actions = {} }) {
           >
             <div className="v2-stage-crosshair" aria-hidden="true" />
             <div className="v2-center-diamond" aria-hidden="true" />
+            {activeTab === "Cast" && (
+              <div className="v2-cast-task-surface" data-v2-tab-surface="Cast" aria-label="Cast roster">
+                <div className="v2-task-summary">
+                  <span>{view.cast?.selectedSummary?.label || "No performer"}</span>
+                  <strong>{view.cast?.selectedSummary?.stateLabel || "선택 없음"}</strong>
+                  <em>{view.cast?.selectedSummary?.metaLabel || "No role"}</em>
+                </div>
+                <div className="v2-cast-roster">
+                  {(view.cast?.performers?.length ? view.cast.performers : stage.performers || []).map((performer) => {
+                    const active = Boolean(performer.active || selection.selectedPerformerId === performer.id || selectedPerformerIds.has(performer.id));
+                    return (
+                      <button
+                        key={performer.id}
+                        type="button"
+                        className={active ? "is-active" : ""}
+                        aria-pressed={active}
+                        data-v2-cast-performer={performer.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          runtimeActions.selectPerformer?.(performer.id);
+                        }}
+                      >
+                        <span>{performerLabel(performer)}</span>
+                        <em>{performer.role === "groupB" ? "B" : "A"}</em>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="v2-cast-actions">
+                  <button
+                    type="button"
+                    disabled={!view.cast?.canDuplicate}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      runtimeActions.duplicate?.();
+                    }}
+                  >
+                    복제
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!view.cast?.canDelete}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      runtimeActions.delete?.();
+                    }}
+                  >
+                    삭제
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!view.cast?.canClearSelection}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      runtimeActions.mobileAction?.("clear-selection");
+                    }}
+                  >
+                    해제
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!view.cast?.canOpenRoleActions}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      runtimeActions.mobileAction?.("performer-role");
+                    }}
+                  >
+                    역할
+                  </button>
+                </div>
+              </div>
+            )}
             <div
               className="v2-audience-zone"
               style={{ "--front-zone-y": `${clampPercent(((stage.frontZone?.y ?? stageHeight * 0.69) / stageHeight) * 100)}%` }}
@@ -568,6 +701,23 @@ function V2VisualEditor({ model, actions = {} }) {
         </section>
 
         <section className="v2-timeline" data-v2-timeline aria-label="Formation timeline" onWheel={runtimeActions.timelineWheel}>
+          {activeTab === "Timeline" && (
+            <div className="v2-timeline-task-surface" data-v2-tab-surface="Timeline" aria-label="Timeline task controls">
+              <div className="v2-task-summary">
+                <span>{view.timelineTask?.focusLabel || "No selected block"}</span>
+                <strong>{view.timelineTask?.selectedFormationSummary?.name || selection.selectedSection?.name || sections.find((section) => section.id === selectedSectionId)?.name || "Timeline"}</strong>
+                <em>{view.timelineTask?.selectedFormationSummary?.timeRangeLabel || "Select a block"}</em>
+              </div>
+              <div className="v2-timeline-selection-meta">
+                <span>{view.timelineTask?.selectedFormationSummary?.durationLabel || "0.0s"}</span>
+                <span>{view.timelineTask?.selectedFormationSummary?.trimStateLabel || "Select to trim"}</span>
+              </div>
+              <div className="v2-task-actions">
+                <button type="button" disabled={!view.timelineTask?.canAddFormation} onClick={() => runtimeActions.addFormation?.({ forceAppend: true })}>대형 추가</button>
+                <button type="button" disabled={!view.timelineTask?.canAddAudio} onClick={runtimeActions.addAudio}>음악 추가</button>
+              </div>
+            </div>
+          )}
           <div className="v2-ruler">
             <div className="v2-timeline-tools" aria-label="Timeline zoom controls">
               <IconButton icon="zoom-minus" label="타임라인 축소" className="v2-timeline-zoom-button" onClick={() => runtimeActions.zoomTimelineBy?.(0.88)}>-</IconButton>
