@@ -1,4 +1,4 @@
-import { clampValue, pointMoveDuration, pointMoveStart, pointTime, quantizeTimelineDelta, quantizeTimelineTime, timeToPercent, timeToPixels } from "./timelineCore.mjs";
+import { clampValue, pixelsToTime, pointMoveDuration, pointMoveStart, pointTime, quantizeTimelineDelta, quantizeTimelineTime, timeToPercent, timeToPixels } from "./timelineCore.mjs";
 
 export function sortFormationSections(sections = []) {
   return [...sections].sort((a, b) => pointTime(a) - pointTime(b));
@@ -53,6 +53,10 @@ export function clampFormationTiming({ sections = [], sectionId, time, moveDurat
 
 export function formationTimelineLabel(index) {
   return `F${index + 1}`;
+}
+
+export function movementTimelineLabel(index) {
+  return `M${index + 1}`;
 }
 
 export function formationTimelineBlock(section, index, duration) {
@@ -157,6 +161,7 @@ export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, opt
       widthPx: holdWidthPx,
       hitWidthPx: Math.max(holdWidthPx, minSegmentWidthPx),
       label: formationTimelineLabel(index),
+      durationSeconds: quantizeTimelineDelta(holdEndTime - holdStartTime),
       isLastHold: !nextSection,
       resizable: Boolean(nextSection)
     });
@@ -176,7 +181,8 @@ export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, opt
       leftPx: timeToPixels(moveStartTime, scale),
       widthPx: moveWidthPx,
       hitWidthPx: Math.max(moveWidthPx, minSegmentWidthPx),
-      label: "Move",
+      label: movementTimelineLabel(index),
+      durationSeconds: quantizeTimelineDelta(moveEndTime - moveStartTime),
       isLastHold: false,
       resizable: false
     });

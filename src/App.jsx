@@ -47,6 +47,7 @@ import {
   pointTime,
   quantizeTimelineTime,
   resolveFormationAddTarget,
+  resolveFormationPointDrop,
   snapFormationTime
 } from "./timelinePolicy.mjs";
 
@@ -847,6 +848,7 @@ function App() {
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineSnapTime, setTimelineSnapTime] = useState(null);
   const [timelineReorderPreview, setTimelineReorderPreview] = useState(null);
+  const [v2TimelineBlockDragPreview, setV2TimelineBlockDragPreview] = useState(null);
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [v2ActiveTab, setV2ActiveTab] = useState("Stage");
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
@@ -1156,6 +1158,91 @@ function App() {
   }), [timelineMax, timelinePixelsPerSecond, timelineScrollX, timelineViewportWidth]);
   const waveformBars = useMemo(() => buildWaveformBars(96), []);
   const playheadPixel = sliderTime * timelinePixelsPerSecond - timelineScrollX;
+  const v2TimelineDuration = Math.max(
+    duration || 0,
+    ...sortedSections.map((section) => pointTime(section)),
+    ...timelineVisualSegments.map((segment) => ((Number(segment.leftPx) || 0) + (Number(segment.widthPx) || 0)) / timelinePixelsPerSecond),
+    0
+  ) || timelineMax;
+  const v2TimelineContentWidth = Math.max(timelineViewportWidth, timelineContentWidth, v2TimelineDuration * timelinePixelsPerSecond + 80);
+  const v2TimelineScrollX = clampValue(timelineScrollX, 0, v2TimelineMaxScrollX());
+  const v2PlayheadPixel = clamp(currentTime, 0, v2TimelineDuration) * timelinePixelsPerSecond - v2TimelineScrollX;
+  const v2TimelineTicks = useMemo(() => buildTimelineTicks(v2TimelineDuration, {
+    pixelsPerSecond: timelinePixelsPerSecond,
+    scrollX: timelineScrollX,
+    viewportWidth: timelineViewportWidth
+  }), [v2TimelineDuration, timelinePixelsPerSecond, timelineScrollX, timelineViewportWidth]);
+  const v2TimelineFormationBlocks = timelineFormationBlocks;
+  const v2TimelineVisualSegments = timelineVisualSegments;
+  const v2TimelineReorderGuide = timelineReorderGuide;
+  function v2HoldSegmentForSection(sections, sectionId) {
+    const segments = layoutTimelineVisualSegments(sections, timelinePixelsPerSecond, { minSegmentWidthPx: 58 });
+    return segments.find((segment) => segment.kind === "hold" && segment.sectionId === sectionId) || null;
+  }
+
+  function v2DragSlotPreviewForResult(result, section, sourceRect) {
+    const action = result?.action || (result.statusKind === "reorder-preview" ? "insert" : result.statusKind === "blocked" ? "blocked" : "time-move");
+    const blocked = result.statusKind === "blocked" || action === "blocked";
+    if (action === "insert" && result.statusKind === "reorder-preview") {
+      const toIndex = Math.max(0, Number(result.toIndex) || 0);
+      const projectedSections = [...sortedSections];
+      const fromIndex = indexOfSection(sortedSections, section.id);
+      const [movingSection] = fromIndex >= 0 ? projectedSections.splice(fromIndex, 1) : [null];
+      if (movingSection) projectedSections.splice(toIndex, 0, movingSection);
+      const previousSection = projectedSections[toIndex - 1] || null;
+      const nextSection = projectedSections[toIndex + 1] || null;
+      const previousBlock = previousSection
+        ? timelineFormationBlocks[sortedSections.findIndex((item) => item.id === previousSection.id)]
+        : null;
+      const nextBlock = nextSection
+        ? timelineFormationBlocks[sortedSections.findIndex((item) => item.id === nextSection.id)]
+        : null;
+      const leftPx = previousBlock
+        ? previousBlock.visualRightPx + 6
+        : Math.max(0, (nextBlock?.leftPx || 0) - Math.max(48, sourceRect?.width || 64) - 6);
+      return {
+        dropLeftPx: leftPx,
+        dropWidthPx: Math.max(48, Math.min(160, sourceRect?.width || 72)),
+        dropLabel: result.label || (nextSection ? "여기에 삽입" : "여기에 삽입"),
+        dropAction: "insert",
+        isEndSlot: !nextSection,
+        blockedEdge: ""
+      };
+    }
+
+    if (action === "swap") {
+      const geometry = result.previewGeometry || {};
+      const targetSegment = result.targetSectionId
+        ? timelineVisualSegments.find((segment) => segment.kind === "hold" && segment.sectionId === result.targetSectionId)
+        : null;
+      return {
+        dropLeftPx: geometry.leftPx ?? targetSegment?.leftPx ?? Math.max(0, pointMoveStart(section) * timelinePixelsPerSecond),
+        dropWidthPx: Math.max(48, geometry.widthPx ?? targetSegment?.hitWidthPx ?? targetSegment?.widthPx ?? sourceRect?.width ?? 72),
+        dropLabel: result.label || "교체",
+        dropAction: "swap",
+        isEndSlot: false,
+        blockedEdge: ""
+      };
+    }
+
+    const segment = blocked ? null : v2HoldSegmentForSection(result.sections, section.id);
+    const blockedGeometry = result.previewGeometry || {};
+    return {
+      dropLeftPx: segment ? segment.leftPx : (blockedGeometry.leftPx ?? Math.max(0, pointMoveStart(section) * timelinePixelsPerSecond)),
+      dropWidthPx: Math.max(48, segment ? segment.hitWidthPx || segment.widthPx : blockedGeometry.widthPx ?? sourceRect?.width ?? 72),
+      dropLabel: blocked ? "배치 불가" : (result.label || "여기로 이동"),
+      dropAction: blocked ? "blocked" : "time-move",
+      isEndSlot: false,
+      blockedEdge: blocked ? "right" : ""
+    };
+  }
+
+  function indexOfSection(sections, sectionId) {
+    return sections.findIndex((item) => item.id === sectionId);
+  }
+  const v2SnapPixel = timelineSnapTime === null
+    ? null
+    : timelineSnapTime * timelinePixelsPerSecond - v2TimelineScrollX;
   const snapPixel = timelineSnapTime === null ? null : timelineSnapTime * timelinePixelsPerSecond - timelineScrollX;
   const selectedSection = sortedSections[selectedSectionIndex];
   const selectedMovementKeyframe = selectedSection
@@ -1539,6 +1626,82 @@ function App() {
     return pixelsToTime(clientX - rect.left + timelineScrollX, timelinePixelsPerSecond);
   }
 
+  function v2TimelineMaxScrollX() {
+    return Math.max(0, v2TimelineContentWidth - timelineViewportWidth);
+  }
+
+  function seekV2TimelineToTime(nextTime) {
+    const safeTime = clamp(nextTime, 0, v2TimelineDuration);
+    setCurrentTime(safeTime);
+    if (audioRef.current) audioRef.current.currentTime = safeTime;
+  }
+
+  function v2TimeFromTimelineClientX(clientX, viewportRect = null) {
+    const viewport = timelineViewportRef.current;
+    const rect = viewportRect || viewport?.getBoundingClientRect();
+    if (!rect?.width) return 0;
+    return clamp(pixelsToTime(clientX - rect.left + timelineScrollX, timelinePixelsPerSecond), 0, v2TimelineDuration);
+  }
+
+  function panV2TimelineNearEdge(clientX, baseScrollX) {
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    if (!rect?.width) return Number.isFinite(baseScrollX) ? baseScrollX : timelineScrollX;
+    const viewportX = clampValue(clientX - rect.left, 0, rect.width);
+    const edgeZone = clampValue(rect.width * 0.24, 72, 96);
+    let nextScrollX = Number.isFinite(baseScrollX) ? baseScrollX : timelineScrollX;
+    if (viewportX < edgeZone) {
+      nextScrollX -= edgeZone - viewportX;
+    } else if (viewportX > rect.width - edgeZone) {
+      nextScrollX += viewportX - (rect.width - edgeZone);
+    }
+    nextScrollX = clampValue(nextScrollX, 0, Math.max(0, v2TimelineContentWidth - rect.width));
+    setTimelineScrollX(nextScrollX);
+    return nextScrollX;
+  }
+
+  function updateV2TimelineScroll(nextScrollX, viewportWidth = timelineViewportWidth) {
+    const scrollX = clampValue(nextScrollX, 0, v2TimelineMaxScrollX());
+    setTimelineScrollX(scrollX);
+    return scrollX;
+  }
+
+  function revealV2TimelineTime(time) {
+    const rect = timelineViewportRef.current?.getBoundingClientRect();
+    const fallbackViewportWidth = Math.max(0, Math.min(430, Number(window.innerWidth) || 390) - 66);
+    const viewportWidth = Math.max(0, Number(timelineViewportWidth) || Number(rect?.width) || fallbackViewportWidth);
+    if (!viewportWidth) return;
+    const timePixel = Math.max(0, Number(time) || 0) * timelinePixelsPerSecond;
+    const margin = Math.min(96, viewportWidth * 0.25);
+    let nextScrollX = timelineScrollX;
+    if (timePixel < timelineScrollX + margin) {
+      nextScrollX = timePixel - margin;
+    } else if (timePixel > timelineScrollX + viewportWidth - margin) {
+      nextScrollX = timePixel - viewportWidth + margin;
+    }
+    setTimelineScrollX(clampValue(nextScrollX, 0, Math.max(0, Math.max(v2TimelineContentWidth, timePixel + 80) - viewportWidth)));
+  }
+
+  function scrubV2PlayheadAtClientX(clientX, gesture = {}) {
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    if (!rect?.width) return gesture.lastScrollX ?? timelineScrollX;
+    const viewportX = clampValue(clientX - rect.left, 0, rect.width);
+    const edgeZone = clampValue(rect.width * 0.24, 72, 96);
+    const baseScrollX = Number.isFinite(gesture.lastScrollX) ? gesture.lastScrollX : timelineScrollX;
+    let nextScrollX = baseScrollX;
+    if (viewportX < edgeZone) {
+      nextScrollX = baseScrollX - (edgeZone - viewportX);
+    } else if (viewportX > rect.width - edgeZone) {
+      nextScrollX = baseScrollX + (viewportX - (rect.width - edgeZone));
+    }
+    nextScrollX = clampValue(nextScrollX, 0, Math.max(0, v2TimelineContentWidth - rect.width));
+    const nextTime = clamp(pixelsToTime(nextScrollX + viewportX, timelinePixelsPerSecond), 0, v2TimelineDuration);
+    setTimelineScrollX(nextScrollX);
+    seekV2TimelineToTime(nextTime);
+    return nextScrollX;
+  }
+
   function snapTimelineTime(rawTime, section, minTime, maxTime) {
     return snapFormationTime(rawTime, {
       enabled: snapEnabled,
@@ -1588,7 +1751,20 @@ function App() {
     setTimelineScrollX((value) => clampValue(value + delta, 0, maxScrollX));
   }
 
-  function onTimelinePointerDown(event) {
+  function onV2TimelineWheel(event) {
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    if (!rect?.width) return;
+    event.preventDefault();
+    const delta = normalizeWheelDelta(event.deltaY, event.deltaMode);
+    if (event.ctrlKey || event.metaKey) {
+      zoomTimelineBy(delta > 0 ? 0.88 : 1.14, rect.width / 2);
+      return;
+    }
+    updateV2TimelineScroll(timelineScrollX + delta, rect.width);
+  }
+
+  function onTimelinePointerDown(event, options = {}) {
     if (event.button !== 0) return;
     event.preventDefault();
     try {
@@ -1596,7 +1772,12 @@ function App() {
     } catch {
       // Synthetic browser tests and cancelled gestures may not allow capture.
     }
-    const current = timelineGestureRef.current || { pointers: new Map(), mode: "" };
+    const existingGesture = timelineGestureRef.current || { pointers: new Map(), mode: "" };
+    const hasStaleSinglePointer = existingGesture.pointers?.size
+      && !existingGesture.pointers.has(event.pointerId)
+      && event.isPrimary !== false
+      && (existingGesture.mode === "pending" || existingGesture.mode === "pan" || existingGesture.mode === "scrub");
+    const current = hasStaleSinglePointer ? { pointers: new Map(), mode: "" } : existingGesture;
     const pointers = new Map(current.pointers || []);
     pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
     const next = { ...current, pointers };
@@ -1612,11 +1793,43 @@ function App() {
       next.startCenterViewportX = rect?.width ? centerX - rect.left : timelineViewportWidth / 2;
     } else {
       next.mode = "pending";
+      next.dragPolicy = options.dragPolicy || "pan";
       next.startX = event.clientX;
       next.startY = event.clientY;
       next.startScrollX = timelineScrollX;
       next.tapTime = timeFromTimelineClientX(event.clientX);
       next.hasMoved = false;
+    }
+    if (options.bindWindow) {
+      const onWindowPointerMove = (moveEvent) => onTimelinePointerMove(moveEvent);
+      const cleanupWindowTimelineGesture = () => {
+        window.removeEventListener("pointermove", onWindowPointerMove);
+        window.removeEventListener("pointerup", onWindowPointerUp);
+        window.removeEventListener("pointercancel", onWindowPointerUp);
+        window.removeEventListener("touchend", onWindowTouchEnd);
+        window.removeEventListener("touchcancel", onWindowTouchEnd);
+      };
+      const clearWindowTimelineGesture = () => {
+        timelineGestureRef.current = { pointers: new Map(), mode: "" };
+        cleanupWindowTimelineGesture();
+      };
+      const onWindowPointerUp = (upEvent) => {
+        const currentGesture = timelineGestureRef.current;
+        if (currentGesture?.pointers?.has(upEvent.pointerId)) {
+          onTimelinePointerUp(upEvent);
+          cleanupWindowTimelineGesture();
+          return;
+        }
+        clearWindowTimelineGesture();
+      };
+      const onWindowTouchEnd = () => clearWindowTimelineGesture();
+      next.windowPointerMove = onWindowPointerMove;
+      next.windowPointerUp = onWindowPointerUp;
+      window.addEventListener("pointermove", onWindowPointerMove);
+      window.addEventListener("pointerup", onWindowPointerUp, { once: true });
+      window.addEventListener("pointercancel", onWindowPointerUp, { once: true });
+      window.addEventListener("touchend", onWindowTouchEnd, { once: true });
+      window.addEventListener("touchcancel", onWindowTouchEnd, { once: true });
     }
     timelineGestureRef.current = next;
   }
@@ -1649,10 +1862,41 @@ function App() {
       return;
     }
 
-    if (current.mode === "pending" || current.mode === "pan") {
+    if (current.mode === "v2-playhead-scrub") {
+      const nextScrollX = scrubV2PlayheadAtClientX(event.clientX, current);
+      timelineGestureRef.current = { ...current, pointers, hasMoved: true, lastScrollX: nextScrollX };
+      return;
+    }
+
+    if (current.mode === "v2-pending" || current.mode === "v2-pan") {
       const dx = event.clientX - current.startX;
       const dy = event.clientY - current.startY;
-      const shouldPan = current.mode === "pan" || Math.abs(dx) > 6 || Math.abs(dy) > 6;
+      const passedDragThreshold = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+      if (current.mode === "v2-pan" || passedDragThreshold) {
+        const nextScrollX = clampValue(
+          current.startScrollX - dx,
+          0,
+          Math.max(0, v2TimelineContentWidth - rect.width)
+        );
+        timelineGestureRef.current = { ...current, pointers, mode: "v2-pan", hasMoved: true };
+        setTimelineScrollX(nextScrollX);
+      } else {
+        timelineGestureRef.current = { ...current, pointers };
+      }
+      return;
+    }
+
+    if (current.mode === "pending" || current.mode === "pan" || current.mode === "scrub") {
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      const passedDragThreshold = Math.abs(dx) > 6 || Math.abs(dy) > 6;
+      const shouldScrub = current.mode === "scrub" || (current.dragPolicy === "scrub" && passedDragThreshold);
+      if (shouldScrub) {
+        timelineGestureRef.current = { ...current, pointers, mode: "scrub", hasMoved: true };
+        seekTimelineToTime(timeFromTimelineClientX(event.clientX));
+        return;
+      }
+      const shouldPan = current.mode === "pan" || passedDragThreshold;
       if (shouldPan) {
         const nextScrollX = clampValue(
           current.startScrollX - dx,
@@ -1673,6 +1917,7 @@ function App() {
   function onTimelinePointerUp(event) {
     const current = timelineGestureRef.current;
     if (!current?.pointers?.has(event.pointerId)) return;
+    const cancelled = event.type === "pointercancel";
     try {
       event.currentTarget?.releasePointerCapture?.(event.pointerId);
     } catch {
@@ -1680,16 +1925,83 @@ function App() {
     }
     const pointers = new Map(current.pointers);
     pointers.delete(event.pointerId);
-    if (current.mode === "pending" && !current.hasMoved) {
+    if (!cancelled && current.mode === "v2-pending" && !current.hasMoved && current.clickSeekAllowed !== false) {
+      seekV2TimelineToTime(current.tapTime);
+    } else if (!cancelled && current.mode === "pending" && !current.hasMoved) {
       seekTimelineToTime(current.tapTime);
     }
     timelineGestureRef.current = { pointers, mode: "" };
+  }
+
+  function onV2TimelinePointerDown(event, source = {}) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic browser tests and cancelled gestures may not allow capture.
+    }
+    const viewport = timelineViewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    const sourceKind = typeof source === "string" ? source : source?.kind || "surface";
+    timelineGestureRef.current = {
+      pointers: new Map([[event.pointerId, { clientX: event.clientX, clientY: event.clientY }]]),
+      mode: sourceKind === "playhead" ? "v2-playhead-scrub" : "v2-pending",
+      source,
+      clickSeekAllowed: sourceKind !== "trim-handle",
+      startX: event.clientX,
+      startY: event.clientY,
+      startScrollX: timelineScrollX,
+      lastScrollX: timelineScrollX,
+      tapTime: v2TimeFromTimelineClientX(event.clientX, rect),
+      hasMoved: false
+    };
+    if (sourceKind === "playhead") {
+      const nextScrollX = scrubV2PlayheadAtClientX(event.clientX, { lastScrollX: timelineScrollX });
+      timelineGestureRef.current.lastScrollX = nextScrollX;
+    }
+    const onWindowPointerMove = (moveEvent) => onTimelinePointerMove(moveEvent);
+    const clearWindowTimelineGesture = () => {
+      timelineGestureRef.current = { pointers: new Map(), mode: "" };
+      window.removeEventListener("pointermove", onWindowPointerMove);
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
+      window.removeEventListener("touchend", clearWindowTimelineGesture);
+      window.removeEventListener("touchcancel", clearWindowTimelineGesture);
+    };
+    const onWindowPointerUp = (upEvent) => {
+      const currentGesture = timelineGestureRef.current;
+      if (currentGesture?.pointers?.has(upEvent.pointerId)) {
+        onTimelinePointerUp(upEvent);
+      }
+      clearWindowTimelineGesture();
+    };
+    window.addEventListener("pointermove", onWindowPointerMove);
+    window.addEventListener("pointerup", onWindowPointerUp, { once: true });
+    window.addEventListener("pointercancel", onWindowPointerUp, { once: true });
+    window.addEventListener("touchend", clearWindowTimelineGesture, { once: true });
+    window.addEventListener("touchcancel", clearWindowTimelineGesture, { once: true });
+    if (!rect?.width) return;
+  }
+
+  function onV2FormationPointerDown(event, section, index, mode, source = {}) {
+    const sourceKind = typeof source === "string" ? source : source?.kind || "hold-block";
+    if (sourceKind === "hold-block" && mode === "body" && !readonly) {
+      onFormationPointerDown(event, section, index, mode);
+      return;
+    }
+    onV2TimelinePointerDown(event, { kind: sourceKind });
   }
 
   function onFormationPointerDown(event, section, index, mode) {
     if (readonly) return;
     event.preventDefault();
     event.stopPropagation();
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic browser tests and cancelled gestures may not allow capture.
+    }
     ignoreNextFormationClickRef.current = true;
     setSelectedSectionId(section.id);
     setSelectedPerformerId("");
@@ -1698,9 +2010,12 @@ function App() {
     setMobileContextSelection("formation");
 
     const startClientX = event.clientX;
+    const startClientY = event.clientY;
     const startArrival = pointTime(section);
     const startMoveStart = pointMoveStart(section);
     const startHoldEnd = sortedSections[index + 1] ? pointMoveStart(sortedSections[index + 1]) : startArrival;
+    const startTimelineScrollX = timelineScrollX;
+    const sourceRect = event.currentTarget?.getBoundingClientRect?.() || null;
     const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasDragged = false;
@@ -1708,6 +2023,8 @@ function App() {
     let hasStartedEdit = mode !== "body";
     let longPressConfirmed = false;
     let reorderTargetIndex = null;
+    let pendingBodyDragResult = null;
+    let bodyDragScrollX = startTimelineScrollX;
 
     if (hasStartedEdit) {
       beginInteractiveEdit();
@@ -1720,12 +2037,49 @@ function App() {
       }
     };
 
+    const resolveV2PointDropAt = (clientX, scrollX = bodyDragScrollX) => {
+      const viewport = timelineViewportRef.current;
+      const rect = viewport?.getBoundingClientRect();
+      const viewportX = rect?.width ? clampValue(clientX - rect.left, 0, rect.width) : 0;
+      const pointerContentPx = Math.max(0, viewportX + Math.max(0, Number(scrollX) || 0));
+      const pointerTime = pixelsToTime(pointerContentPx, timelinePixelsPerSecond);
+      return resolveFormationPointDrop({
+        sections: sortedSections,
+        sectionId: section.id,
+        pointerTime,
+        pointerContentPx,
+        blocks: v2TimelineVisualSegments,
+        edgePx: 28,
+        timelineMax: Math.max(timelineMax, pointerTime)
+      });
+    };
+
     const startBodyMoveEdit = () => {
       clearFormationLongPressTimer();
       if (mode !== "body" || hasStartedEdit) return;
       longPressConfirmed = true;
       hasStartedEdit = true;
       beginInteractiveEdit();
+      if (isV2Route) {
+        const initialResult = resolveV2PointDropAt(startClientX, bodyDragScrollX);
+        pendingBodyDragResult = initialResult;
+        const slotPreview = v2DragSlotPreviewForResult(initialResult, section, sourceRect);
+        setV2TimelineBlockDragPreview({
+          sectionId: section.id,
+          label: section.name || formationTimelineLabel(index),
+          pointerClientX: startClientX,
+          pointerClientY: startClientY,
+          sourceRect: sourceRect
+            ? {
+                x: sourceRect.x,
+                y: sourceRect.y,
+                width: sourceRect.width,
+                height: sourceRect.height
+              }
+            : null,
+          ...slotPreview
+        });
+      }
     };
 
     if (mode === "body") {
@@ -1742,9 +2096,18 @@ function App() {
       return true;
     };
 
-    const commit = (clientX) => {
-      const deltaTime = (clientX - startClientX) / timelinePixelsPerSecond;
-      const passedDragThreshold = Math.abs(clientX - startClientX) >= 4;
+    const commit = (clientX, clientY = startClientY) => {
+      const nextBodyDragScrollX = isV2Route && longPressConfirmed && mode === "body"
+        ? panV2TimelineNearEdge(clientX, bodyDragScrollX)
+        : bodyDragScrollX;
+      if (isV2Route && longPressConfirmed && mode === "body") {
+        bodyDragScrollX = nextBodyDragScrollX;
+      }
+      const deltaPx = isV2Route && longPressConfirmed && mode === "body"
+        ? (clientX - startClientX) + (nextBodyDragScrollX - startTimelineScrollX)
+        : clientX - startClientX;
+      const deltaTime = deltaPx / timelinePixelsPerSecond;
+      const passedDragThreshold = Math.abs(deltaPx) >= 4;
       if (passedDragThreshold) hasDragged = true;
 
       if (mode === "left") {
@@ -1784,43 +2147,95 @@ function App() {
       if (!longPressConfirmed) {
         if (passedDragThreshold) {
           clearFormationLongPressTimer();
-          seekTimelineToTime(timeFromTimelineClientX(clientX));
+          if (isV2Route) {
+            const viewport = timelineViewportRef.current;
+            const rect = viewport?.getBoundingClientRect();
+            const maxScrollX = rect?.width ? Math.max(0, v2TimelineContentWidth - rect.width) : v2TimelineMaxScrollX();
+            setTimelineScrollX(clampValue(startTimelineScrollX - deltaPx, 0, maxScrollX));
+          } else {
+            seekTimelineToTime(timeFromTimelineClientX(clientX));
+          }
         }
         return;
       }
 
       startBodyMoveEdit();
-      const dragResult = applyFormationTimelineEdit({
-        sections: sortedSections,
-        action: "move-body",
-        sectionId: section.id,
-        deltaTime,
-        timelineMax
-      });
-      reorderTargetIndex = dragResult.toIndex;
-      setTimelineReorderPreview(dragResult.statusKind === "reorder-preview" ? { sectionId: section.id, toIndex: dragResult.toIndex } : null);
       setTimelineSnapTime(null);
-      setTimelineBlockedEdge(dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: deltaTime < 0 ? "left" : "right" } : null);
-      replaceSectionsIfChanged(dragResult.sections);
+      if (isV2Route) {
+        const dragResult = resolveV2PointDropAt(clientX, bodyDragScrollX);
+        pendingBodyDragResult = dragResult;
+        const slotPreview = v2DragSlotPreviewForResult(dragResult, section, sourceRect);
+        setTimelineReorderPreview(null);
+        setTimelineBlockedEdge(dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: "right" } : null);
+        setV2TimelineBlockDragPreview({
+          sectionId: section.id,
+          label: section.name || formationTimelineLabel(index),
+          pointerClientX: clientX,
+          pointerClientY: clientY,
+          sourceRect: sourceRect
+            ? {
+                x: sourceRect.x,
+                y: sourceRect.y,
+                width: sourceRect.width,
+                height: sourceRect.height
+              }
+            : null,
+          ...slotPreview,
+          blockedEdge: dragResult.statusKind === "blocked" ? "right" : slotPreview.blockedEdge
+        });
+      } else {
+        const dragResult = applyFormationTimelineEdit({
+          sections: sortedSections,
+          action: "move-body",
+          sectionId: section.id,
+          deltaTime,
+          timelineMax: Math.max(timelineMax, startArrival + Math.max(0, deltaTime))
+        });
+        reorderTargetIndex = dragResult.toIndex;
+        setTimelineReorderPreview(dragResult.statusKind === "reorder-preview" ? { sectionId: section.id, toIndex: dragResult.toIndex } : null);
+        setTimelineBlockedEdge(dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: deltaTime < 0 ? "left" : "right" } : null);
+        replaceSectionsIfChanged(dragResult.sections);
+      }
     };
     const onPointerMove = (moveEvent) => {
       moveEvent.preventDefault();
-      commit(moveEvent.clientX);
+      commit(moveEvent.clientX, moveEvent.clientY);
     };
-    const onPointerUp = () => {
+    const finishGesture = (upEvent) => {
+      const cancelled = upEvent?.type === "pointercancel";
+      try {
+        event.currentTarget?.releasePointerCapture?.(upEvent?.pointerId ?? event.pointerId);
+      } catch {
+        // Pointer capture may already be released after synthetic or cancelled gestures.
+      }
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("pointerup", finishGesture);
+      window.removeEventListener("pointercancel", finishGesture);
       clearFormationLongPressTimer();
       setTimelineSnapTime(null);
       setTimelineReorderPreview(null);
       setTimelineBlockedEdge(null);
-      if (!hasDragged && mode === "body") {
-        if (hasStartedEdit) finishInteractiveEdit(false);
-        jumpTo(section);
+      setV2TimelineBlockDragPreview(null);
+      if (cancelled) {
+        if (hasStartedEdit) finishInteractiveEdit(isV2Route && mode === "body" ? false : hasEdited);
+        clearQuietStatus();
         return;
       }
-      if (mode === "body" && reorderTargetIndex !== null && reorderTargetIndex !== index) {
+      if (!hasDragged && mode === "body") {
+        if (hasStartedEdit) finishInteractiveEdit(false);
+        if (isV2Route) {
+          seekV2TimelineToTime(v2TimeFromTimelineClientX(event.clientX));
+        } else {
+          jumpTo(section);
+        }
+        return;
+      }
+      if (!isV2Route && mode === "body" && reorderTargetIndex !== null && reorderTargetIndex !== index) {
+        if (isV2Route && pendingBodyDragResult?.statusKind === "blocked") {
+          if (hasStartedEdit) finishInteractiveEdit(false);
+          clearQuietStatus();
+          return;
+        }
         replaceSections(applyFormationTimelineEdit({
           sections: sortedSections,
           action: "reorder",
@@ -1831,13 +2246,23 @@ function App() {
         clearQuietStatus();
         return;
       }
+      if (isV2Route && mode === "body" && pendingBodyDragResult) {
+        const nextSignature = sectionsTimingSignature(pendingBodyDragResult.sections);
+        const changed = pendingBodyDragResult.statusKind !== "blocked" && nextSignature !== lastSectionsSignature;
+        if (changed) {
+          replaceSections(pendingBodyDragResult.sections, { history: false });
+        }
+        if (hasStartedEdit) finishInteractiveEdit(changed);
+        clearQuietStatus();
+        return;
+      }
       if (hasStartedEdit) finishInteractiveEdit(hasEdited);
       clearQuietStatus();
     };
 
     window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp, { once: true });
-    window.addEventListener("pointercancel", onPointerUp, { once: true });
+    window.addEventListener("pointerup", finishGesture, { once: true });
+    window.addEventListener("pointercancel", finishGesture, { once: true });
   }
 
   function onV2TimelineHandlePointerDown(event, sectionId, mode, segment = {}) {
@@ -1854,13 +2279,19 @@ function App() {
     if (!section || index < 0) return;
 
     const startClientX = event.clientX;
+    const startTimelineScrollX = timelineScrollX;
     const nextSection = sortedSections[index + 1] || null;
     const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
     const startTime = mode === "hold-right"
       ? Number(segment.displayEndTime ?? (nextSection ? pointMoveStart(nextSection) : pointTime(section))) || 0
-      : pointMoveStart(section);
+      : mode === "hold-left"
+        ? Number(segment.displayStartTime ?? pointTime(section)) || 0
+        : pointMoveStart(section);
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasEdited = false;
+    let lastClientX = startClientX;
+    let trimDragScrollX = startTimelineScrollX;
+    let accumulatedTrimDeltaPx = 0;
     beginInteractiveEdit();
 
     const replaceSectionsIfChanged = (nextSections) => {
@@ -1873,7 +2304,15 @@ function App() {
     };
 
     const commit = (clientX) => {
-      const rawTime = startTime + (clientX - startClientX) / timelinePixelsPerSecond;
+      const previousScrollX = trimDragScrollX;
+      const nextScrollX = panV2TimelineNearEdge(clientX, previousScrollX);
+      const panDeltaPx = nextScrollX - previousScrollX;
+      const pointerDeltaPx = clientX - lastClientX;
+      const effectiveDeltaPx = panDeltaPx !== 0 ? panDeltaPx : pointerDeltaPx;
+      trimDragScrollX = nextScrollX;
+      accumulatedTrimDeltaPx += effectiveDeltaPx;
+      lastClientX = clientX;
+      const rawTime = startTime + accumulatedTrimDeltaPx / timelinePixelsPerSecond;
       if (mode === "hold-right") {
         const rightLimit = Math.max(timelineMax, rawTime);
         const snap = snapTimelineTime(rawTime, section, pointTime(section), rightLimit);
@@ -1887,6 +2326,23 @@ function App() {
         });
         replaceSectionsIfChanged(result.sections);
         setTimelineBlockedEdge(null);
+        return;
+      }
+
+      if (mode === "hold-left") {
+        const holdEnd = Number(segment.displayEndTime ?? (nextSection ? pointMoveStart(nextSection) : pointTime(section))) || pointTime(section);
+        const moveStart = pointMoveStart(section);
+        const snap = snapTimelineTime(rawTime, section, moveStart, holdEnd);
+        setTimelineSnapTime(snap.snapped ? snap.time : null);
+        const result = applyFormationTimelineEdit({
+          sections: sortedSections,
+          action: "trim-hold-left",
+          sectionId,
+          time: snap.time,
+          timelineMax
+        });
+        replaceSectionsIfChanged(result.sections);
+        setTimelineBlockedEdge(rawTime < moveStart ? { sectionId, edge: "left" } : null);
         return;
       }
 
@@ -2324,7 +2780,7 @@ function App() {
     const positions = previous?.positions || Object.fromEntries(plan.performers.map((p, index) => [p.id, { x: 18 + index * 8, y: 55 }]));
     const section = {
       id: uid("sec"),
-      name: "새 대형",
+      name: "대형",
       notes: "음악을 들으며 현재 시각에 저장한 대형입니다.",
       moveMode: "smooth",
       positions: JSON.parse(JSON.stringify(positions)),
@@ -2338,11 +2794,14 @@ function App() {
       section
     });
     const addedSection = result.sections.find((item) => item.id === section.id) || section;
-    const nextSections = result.sections.map((item) => item.id === section.id
-      ? { ...item, name: `대형 ${formatTime(pointTime(addedSection))}` }
-      : item);
-    updatePlan((current) => ({ ...current, sections: nextSections }));
+    updatePlan((current) => ({ ...current, sections: result.sections }));
     setSelectedSectionId(section.id);
+    if (isV2Route) {
+      const nextTime = pointTime(addedSection);
+      setCurrentTime(nextTime);
+      if (audioRef.current) audioRef.current.currentTime = nextTime;
+      revealV2TimelineTime(nextTime);
+    }
     clearQuietStatus();
   }
 
@@ -2590,12 +3049,9 @@ function App() {
       time: target.time,
       section
     });
-    const addedSection = result.sections.find((item) => item.id === section.id) || section;
     updatePlan((current) => ({
       ...current,
-      sections: result.sections.map((item) => item.id === section.id
-        ? { ...item, name: `${formationPreview.label} ${formatTime(pointTime(addedSection))}` }
-        : item)
+      sections: result.sections
     }));
     setSelectedSectionId(section.id);
     setFormationPreview(null);
@@ -4516,12 +4972,13 @@ function App() {
     handleMobileAction,
     isShareOperationPending,
     mobileContextSelection,
-    onFormationPointerDown,
+    onFormationPointerDown: onV2FormationPointerDown,
     onFormationSelect: selectFormationForMobileSurface,
-    onTimelinePointerDown,
+    onTimelinePointerDown: onV2TimelinePointerDown,
     onTimelinePointerMove,
     onTimelinePointerUp,
-    onTimelineWheel,
+    onTimelineViewportMeasured: (width) => setTimelineViewportWidth(Math.max(0, Number(width) || 0)),
+    onTimelineWheel: onV2TimelineWheel,
     onV2StagePointerDown,
     onV2StagePointerMove,
     onV2StagePointerUp,
@@ -4534,6 +4991,7 @@ function App() {
     selectPerformer,
     selectedSection,
     selectedSectionId: mobileContextSelection === "formation" ? selectedSectionId : "",
+    setShareLinkEnabled,
     setV2ActiveTab,
     shareProject,
     shareUrl,
@@ -4541,17 +4999,27 @@ function App() {
     showStageReferenceLabels,
     showStageReferences,
     snapEnabled,
-    snapPixel: snapPixel !== null && snapPixel >= 0 && snapPixel <= timelineViewportWidth
-      ? timelineSnapTime * timelinePixelsPerSecond
+    timeLabel: formatTime(clamp(currentTime, 0, v2TimelineDuration)),
+    playheadPixel: v2PlayheadPixel,
+    snapPixel: v2SnapPixel !== null && v2SnapPixel >= 0 && v2SnapPixel <= timelineViewportWidth
+      ? v2SnapPixel
       : null,
+    timelineContentWidth: v2TimelineContentWidth,
+    timelineFormationBlocks: v2TimelineFormationBlocks,
+    timelineBlockDragPreview: v2TimelineBlockDragPreview,
+    timelineReorderGuide: v2TimelineReorderGuide,
+    timelineScrollX: v2TimelineScrollX,
+    timelineTicks: v2TimelineTicks,
+    timelineVisualSegments: v2TimelineVisualSegments,
     timelineBlockedEdge,
-    timelineReorderGuide,
     timelineViewportRef,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
     toggleStageReferences: () => setShowStageReferences((value) => !value),
     toggleTransitionPaths: () => setShowAllTransitionPaths((value) => !value),
     togglePlayback,
+    zoomTimelineBy,
+    printProject: () => window.print(),
     updateSectionTiming,
     viewLinkEnabled: plan.shareLinks?.view?.enabled !== false,
     viewLinkState,

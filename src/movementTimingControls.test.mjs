@@ -58,7 +58,7 @@ test("timeline controls use a single icon rail", () => {
   assert.doesNotMatch(railSource, /label="현재 시간에 대형 추가"/);
   assert.doesNotMatch(railSource, /timeline-add-button/);
   assert.doesNotMatch(railSource, />대형 추가<\/button>/);
-  assert.match(appSource, /function onTimelinePointerDown\(event\)/);
+  assert.match(appSource, /function onTimelinePointerDown\(event, options = \{\}\)/);
   assert.match(appSource, /function onTimelinePointerMove\(event\)/);
   assert.match(appSource, /function onTimelinePointerUp\(event\)/);
   assert.match(styleSource, /\.timeline-control-rail/);
@@ -248,7 +248,8 @@ test("selected formation segment exposes drag and two trim handles", () => {
   assert.match(appSource, /replaceSectionsIfChanged\(dragResult\.sections\);/);
   assert.match(formationPointerDown, /setTimeout\(startBodyMoveEdit, LONG_PRESS_MS\)/);
   assert.match(formationPointerDown, /if \(!longPressConfirmed\) \{[\s\S]*seekTimelineToTime\(timeFromTimelineClientX\(clientX\)\);[\s\S]*return;/);
-  assert.match(formationPointerDown, /startBodyMoveEdit\(\);\n      const dragResult = applyFormationTimelineEdit\(\{/);
+  assert.match(formationPointerDown, /startBodyMoveEdit\(\);[\s\S]*if \(isV2Route\) \{[\s\S]*const dragResult = resolveV2PointDropAt\(clientX, bodyDragScrollX\);/);
+  assert.match(formationPointerDown, /else \{[\s\S]*const dragResult = applyFormationTimelineEdit\(\{/);
   assert.doesNotMatch(formationPointerDown, /openSelectedFormationPanel\(section\.id\)/);
   assert.match(leftHandleRule, /left:\s*2px;/);
   assert.match(rightHandleRule, /right:\s*2px;/);
@@ -306,8 +307,8 @@ test("formation add follows sequential append selection policy", () => {
   assert.match(addSection, /const time = target\.action === "select" \? pointTime\(sortedSections\.at\(-1\)\) : target\.time;/);
   assert.match(addSection, /const previous = target\.action === "select" \? sortedSections\.at\(-1\) : target\.previous;/);
   assert.match(addSection, /action: "add-after"/);
-  assert.match(addSection, /const nextSections = result\.sections\.map/);
-  assert.match(addSection, /sections: nextSections/);
+  assert.match(addSection, /name: "대형"/);
+  assert.match(addSection, /sections: result\.sections/);
 });
 
 test("top actions expose save share and tools without legacy tabs", () => {

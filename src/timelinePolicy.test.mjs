@@ -14,6 +14,7 @@ import {
   formationTimelineBlock,
   formationTimelinePixels,
   formationTimelineLabel,
+  movementTimelineLabel,
   layoutFormationBlocks,
   layoutTimelineVisualSegments,
   movementKeyframeTime,
@@ -25,6 +26,7 @@ import {
   quantizeTimelineTime,
   reorderFormationSegments,
   resolveFormationBodyDrag,
+  resolveFormationPointDrop,
   resolveFormationAddTarget,
   resolveFormationReorderIndex,
   snapFormationTime,
@@ -86,6 +88,35 @@ test("clampFormationSpan keeps front and end edges inside neighboring boundaries
 
 test("formationTimelineLabel returns compact formation labels", () => {
   assert.equal(formationTimelineLabel(0), "F1");
+});
+
+test("movementTimelineLabel returns compact move labels", () => {
+  assert.equal(movementTimelineLabel(0), "M1");
+});
+
+test("layoutTimelineVisualSegments labels formations and moves separately with durations", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4, name: "대형" },
+    { id: "b", time: 12, start: 8, end: 12, moveDuration: 4, name: "대형" },
+    { id: "c", time: 20, start: 16, end: 20, moveDuration: 4, name: "대형" }
+  ];
+
+  const segments = layoutTimelineVisualSegments(sections, 10);
+
+  assert.deepEqual(
+    segments.map((segment) => ({
+      kind: segment.kind,
+      label: segment.label,
+      duration: segment.durationSeconds
+    })),
+    [
+      { kind: "hold", label: "F1", duration: 8 },
+      { kind: "move", label: "M1", duration: 4 },
+      { kind: "hold", label: "F2", duration: 4 },
+      { kind: "move", label: "M2", duration: 4 },
+      { kind: "hold", label: "F3", duration: 4 }
+    ]
+  );
 });
 
 test("formationTimelineBlock renders F1 as a marker and F2+ as movement segments", () => {
@@ -261,18 +292,34 @@ function assertSequentialTiming(sections) {
   }
 }
 
-test("applyFormationTimelineEdit adds a four-second formation after the intro", () => {
+function pointDropBlocks(sections, ids, pixelsPerSecond = 100) {
+  return ids.map((id) => {
+    const section = sections.find((item) => item.id === id);
+    const leftPx = pointMoveStart(section) * pixelsPerSecond;
+    const widthPx = section.moveDuration * pixelsPerSecond;
+    return {
+      kind: "hold",
+      sectionId: id,
+      leftPx,
+      widthPx,
+      hitWidthPx: widthPx
+    };
+  });
+}
+
+test("applyFormationTimelineEdit adds a default four-second hold plus four-second move after the intro", () => {
   const sections = [{ id: "intro", time: 4, start: 0, end: 4, moveDuration: 4, moveMode: "hold" }];
   const result = applyFormationTimelineEdit({
     sections,
     action: "add-after",
-    section: { id: "f2", name: "F2" }
+    section: { id: "f2" }
   });
 
   assert.equal(result.selectedSectionId, "f2");
+  assert.equal(result.sections.find((section) => section.id === "f2").name, "대형");
   assert.deepEqual(compactTiming(result.sections), [
     { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
-    { id: "f2", start: 4, end: 8, time: 8, moveDuration: 4 }
+    { id: "f2", start: 8, end: 12, time: 12, moveDuration: 4 }
   ]);
   assertSequentialTiming(result.sections);
 });
@@ -322,6 +369,7 @@ test("applyFormationTimelineEdit preserves formation payloads through add, trim,
   assert.deepEqual(added.sections.find((section) => section.id === "d").positions, { a: { x: 70, y: 70 }, b: { x: 80, y: 80 } });
   assert.equal(added.sections.find((section) => section.id === "d").partnerSetId, "pair_d");
   assert.equal(added.sections.find((section) => section.id === "d").moveDuration, 4);
+  assert.equal(added.sections.find((section) => section.id === "d").name, "대형");
 
   const trimmed = applyFormationTimelineEdit({ sections, action: "trim-right", sectionId: "b", time: 10 });
   assert.deepEqual(trimmed.sections.find((section) => section.id === "b").positions, sections[1].positions);
@@ -338,7 +386,7 @@ test("applyFormationTimelineEdit preserves formation payloads through add, trim,
   assertSequentialTiming(reordered.sections);
 });
 
-test("applyFormationTimelineEdit uses a later requested arrival while keeping a four-second new segment", () => {
+test("applyFormationTimelineEdit uses the default hold and move when the requested arrival is too early", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 }
@@ -353,7 +401,30 @@ test("applyFormationTimelineEdit uses a later requested arrival while keeping a 
   assert.deepEqual(compactTiming(result.sections), [
     { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
     { id: "b", start: 4, end: 8, time: 8, moveDuration: 4 },
-    { id: "c", start: 10, end: 14, time: 14, moveDuration: 4 }
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+  assertSequentialTiming(result.sections);
+});
+
+test("resolveFormationPointDrop lengthens the last move instead of the previous hold when dropping the last block later", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const result = resolveFormationPointDrop({
+    sections,
+    sectionId: "b",
+    pointerTime: 20,
+    pointerContentPx: 2000,
+    blocks: pointDropBlocks(sections, ["intro", "b"]),
+    timelineMax: 24
+  });
+
+  assert.equal(result.action, "time-move");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
+    { id: "b", start: 4, end: 20, time: 20, moveDuration: 16 }
   ]);
   assertSequentialTiming(result.sections);
 });
@@ -474,6 +545,122 @@ test("applyFormationTimelineEdit body drag can preview multiple positions to the
   assert.equal(frontPreview.statusKind, "reorder-preview");
   assert.equal(frontPreview.toIndex, 0);
   assert.deepEqual(compactTiming(frontPreview.sections), compactTiming(sections));
+});
+
+test("resolveFormationPointDrop moves a block by the pointer time in empty space", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 18, start: 14, end: 18, moveDuration: 4 }
+  ];
+
+  const result = resolveFormationPointDrop({
+    sections,
+    sectionId: "b",
+    pointerTime: 11,
+    pointerContentPx: 1100,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+
+  assert.equal(result.action, "time-move");
+  assert.equal(result.statusKind, "updated");
+  assert.equal(result.label, "여기로 이동");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
+    { id: "b", start: 7, end: 11, time: 11, moveDuration: 4 },
+    { id: "c", start: 14, end: 18, time: 18, moveDuration: 4 }
+  ]);
+  assertSequentialTiming(result.sections);
+});
+
+test("resolveFormationPointDrop inserts before or after a block from its edge zone", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const beforeResult = resolveFormationPointDrop({
+    sections,
+    sectionId: "c",
+    pointerTime: 4.1,
+    pointerContentPx: 401,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+  const afterResult = resolveFormationPointDrop({
+    sections,
+    sectionId: "intro",
+    pointerTime: 7.9,
+    pointerContentPx: 799,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+
+  assert.equal(beforeResult.action, "insert");
+  assert.equal(beforeResult.targetSectionId, "b");
+  assert.equal(beforeResult.edge, "before");
+  assert.equal(beforeResult.toIndex, 1);
+  assert.equal(beforeResult.label, "여기에 삽입");
+  assert.deepEqual(compactTiming(beforeResult.sections).map((section) => section.id), ["intro", "c", "b"]);
+  assertSequentialTiming(beforeResult.sections);
+
+  assert.equal(afterResult.action, "insert");
+  assert.equal(afterResult.targetSectionId, "b");
+  assert.equal(afterResult.edge, "after");
+  assert.equal(afterResult.toIndex, 1);
+  assert.deepEqual(compactTiming(afterResult.sections).map((section) => section.id), ["b", "intro", "c"]);
+  assertSequentialTiming(afterResult.sections);
+});
+
+test("resolveFormationPointDrop swaps with a block from its center zone", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const result = resolveFormationPointDrop({
+    sections,
+    sectionId: "intro",
+    pointerTime: 6,
+    pointerContentPx: 600,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+
+  assert.equal(result.action, "swap");
+  assert.equal(result.statusKind, "updated");
+  assert.equal(result.targetSectionId, "b");
+  assert.equal(result.label, "교체");
+  assert.deepEqual(compactTiming(result.sections).map((section) => section.id), ["b", "intro", "c"]);
+  assertSequentialTiming(result.sections);
+});
+
+test("resolveFormationPointDrop blocks unchanged self and overlapping time drops", () => {
+  const sections = [
+    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
+    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+  ];
+
+  const selfResult = resolveFormationPointDrop({
+    sections,
+    sectionId: "b",
+    pointerTime: 6,
+    pointerContentPx: 600,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+  const overlapResult = resolveFormationPointDrop({
+    sections,
+    sectionId: "b",
+    pointerTime: 11,
+    pointerContentPx: 1250,
+    blocks: pointDropBlocks(sections, ["intro", "b", "c"])
+  });
+
+  assert.equal(selfResult.action, "blocked");
+  assert.equal(selfResult.label, "배치 불가");
+  assert.deepEqual(compactTiming(selfResult.sections), compactTiming(sections));
+  assert.equal(overlapResult.action, "blocked");
+  assert.deepEqual(compactTiming(overlapResult.sections), compactTiming(sections));
 });
 
 test("applyFormationTimelineEdit first block can reorder to any slot and hands start role to the next block", () => {
@@ -909,7 +1096,7 @@ test("timeline visual segments split formation holds from automatic moves", () =
     })),
     [
       { kind: "hold", sectionId: "a", from: "a", to: "a", start: 0, end: 4, left: 0, width: 40, label: "F1", resizable: true },
-      { kind: "move", sectionId: "b", from: "a", to: "b", start: 4, end: 8, left: 40, width: 40, label: "Move", resizable: false },
+      { kind: "move", sectionId: "b", from: "a", to: "b", start: 4, end: 8, left: 40, width: 40, label: "M1", resizable: false },
       { kind: "hold", sectionId: "b", from: "b", to: "b", start: 8, end: 12, left: 80, width: 40, label: "F2", resizable: false }
     ]
   );
@@ -961,6 +1148,90 @@ test("hold right trim preserves next arrival and absorbs the automatic move", ()
       { id: "b", time: 8, moveDuration: 3, start: 5, end: 8 }
     ]
   );
+});
+
+test("hold left trim moves arrival while preserving the incoming move start", () => {
+  const leftExtended = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+      { id: "b", time: 12, moveDuration: 4, start: 8, end: 12 },
+      { id: "c", time: 18, moveDuration: 2, start: 16, end: 18 }
+    ],
+    action: "trim-hold-left",
+    sectionId: "b",
+    time: 10
+  });
+
+  assert.equal(leftExtended.statusKind, "updated");
+  assert.deepEqual(
+    leftExtended.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end
+    })),
+    [
+      { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+      { id: "b", time: 10, moveDuration: 2, start: 8, end: 10 },
+      { id: "c", time: 18, moveDuration: 2, start: 16, end: 18 }
+    ]
+  );
+  assert.equal(leftExtended.start, 10);
+  assert.equal(leftExtended.end, 16);
+  assert.equal(leftExtended.duration, 6);
+
+  const rightShortened = applyFormationTimelineEdit({
+    sections: leftExtended.sections,
+    action: "trim-hold-left",
+    sectionId: "b",
+    time: 13
+  });
+
+  assert.deepEqual(
+    rightShortened.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end
+    })),
+    [
+      { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+      { id: "b", time: 13, moveDuration: 5, start: 8, end: 13 },
+      { id: "c", time: 18, moveDuration: 2, start: 16, end: 18 }
+    ]
+  );
+});
+
+test("hold left trim clamps between incoming move start and next move start", () => {
+  const beforePreviousHold = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+      { id: "b", time: 12, moveDuration: 4, start: 8, end: 12 },
+      { id: "c", time: 18, moveDuration: 2, start: 16, end: 18 }
+    ],
+    action: "trim-hold-left",
+    sectionId: "b",
+    time: 2
+  });
+
+  assert.equal(beforePreviousHold.sections[1].time, 8);
+  assert.equal(beforePreviousHold.sections[1].moveDuration, 0);
+  assert.equal(beforePreviousHold.start, 8);
+  assert.equal(beforePreviousHold.end, 16);
+
+  const pastNextMove = applyFormationTimelineEdit({
+    sections: beforePreviousHold.sections,
+    action: "trim-hold-left",
+    sectionId: "b",
+    time: 20
+  });
+
+  assert.equal(pastNextMove.sections[1].time, 16);
+  assert.equal(pastNextMove.sections[1].moveDuration, 8);
+  assert.equal(pastNextMove.start, 16);
+  assert.equal(pastNextMove.end, 16);
 });
 
 test("movement keyframes clamp to segment-relative ratios and recalculate absolute time after trim", () => {

@@ -89,6 +89,7 @@ export function createV2EditorRuntime(input = {}) {
     timelineScrollX: Math.max(0, finiteNumber(input.timelineScrollX ?? input.timeline?.timelineScrollX ?? input.timeline?.scrollX, 0)),
     snapPixel: input.snapPixel ?? input.timeline?.snapPixel ?? null,
     timelineBlockedEdge: input.timelineBlockedEdge || input.timeline?.timelineBlockedEdge || null,
+    timelineBlockDragPreview: input.timelineBlockDragPreview || input.timeline?.timelineBlockDragPreview || null,
     timelineReorderGuide: input.timelineReorderGuide || input.timeline?.timelineReorderGuide || null,
     waveformBars: normalizeArray(input.waveformBars || input.timeline?.waveformBars)
   };
@@ -103,6 +104,7 @@ export function createV2EditorRuntime(input = {}) {
   };
   const topActions = [
     { key: "share", icon: "share", label: "공유", disabled: false },
+    { key: "export", icon: "download", label: "내보내기", disabled: false },
     { key: "more", icon: "more", label: "더보기", disabled: false }
   ];
   const transportActions = [
@@ -112,10 +114,14 @@ export function createV2EditorRuntime(input = {}) {
   ];
   const moreMenu = [
     { key: "settings", label: "Settings", hasSubmenu: true },
-    { key: "export-json", label: readonly ? "JSON 내보내기" : "프로젝트 파일 공유" },
-    { key: "export-png", label: "현재 PNG", disabled: !Boolean(input.canUseAdvancedExports) },
     { key: "project-info", label: shell.projectTitle },
     { key: "help", label: "Help / Shortcuts", disabled: true }
+  ];
+  const exportMenu = [
+    { key: "export-json", label: "프로젝트 JSON 내보내기" },
+    { key: "export-png", label: "현재 PNG", disabled: !Boolean(input.canUseAdvancedExports) },
+    { key: "export-all-png", label: "전체 대형 PNG", disabled: !Boolean(input.canUseAdvancedExports) },
+    { key: "print", label: "인쇄/PDF", disabled: !Boolean(input.canUseAdvancedExports) }
   ];
   const settingsMenu = [
     { key: "toggle-snap", label: "Snap", checked: Boolean(input.snapEnabled), disabled: readonly },
@@ -190,7 +196,9 @@ export function createV2EditorRuntime(input = {}) {
     timelinePointerDown: input.onTimelinePointerDown,
     timelinePointerMove: input.onTimelinePointerMove,
     timelinePointerUp: input.onTimelinePointerUp,
+    timelineViewportMeasured: input.onTimelineViewportMeasured,
     timelineWheel: input.onTimelineWheel,
+    zoomTimelineBy: input.zoomTimelineBy,
     toggleSnap: input.toggleSnap,
     toggleStageReferenceLabels: input.toggleStageReferenceLabels,
     toggleStageReferences: input.toggleStageReferences,
@@ -204,6 +212,7 @@ export function createV2EditorRuntime(input = {}) {
     actions,
     bottomRail,
     capabilities,
+    exportMenu,
     moreMenu,
     sections: sortedSections,
     selection,

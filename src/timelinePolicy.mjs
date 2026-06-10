@@ -31,6 +31,7 @@ export {
   formationTimelinePixels,
   layoutFormationBlocks,
   layoutTimelineVisualSegments,
+  movementTimelineLabel,
   resolveFormationAddTarget,
   snapFormationTime
 } from "./formationTimeline.mjs";
@@ -39,6 +40,7 @@ export {
   applyFormationTimelineEdit,
   reorderFormationSegments,
   resolveFormationBodyDrag,
+  resolveFormationPointDrop,
   resolveFormationReorderIndex,
   trimFormationSegment
 } from "./formationTimelineEdit.mjs";

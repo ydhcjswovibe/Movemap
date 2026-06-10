@@ -47,10 +47,13 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.equal(runtime.capabilities.canDelete, true);
   assert.equal(runtime.capabilities.canUndo, true);
   assert.equal(runtime.capabilities.canRedo, false);
-  assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "more"]);
+  assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
   assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "performer-role", "clear-selection"]);
+  assert.deepEqual(runtime.exportMenu.map((item) => item.key), ["export-json", "export-png", "export-all-png", "print"]);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-json").label, "프로젝트 JSON 내보내기");
   assert.equal(runtime.moreMenu[0].key, "settings");
+  assert.equal(runtime.moreMenu.some((item) => item.key.startsWith("export-") || item.key === "print"), false);
   assert.equal(runtime.settingsMenu[0].key, "toggle-snap");
   assert.equal(runtime.actions.selectPerformer, selectPerformer);
   assert.equal(runtime.actions.selectFormation, onFormationSelect);
@@ -134,7 +137,9 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
   });
 
   assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-formation", "delete-formation", "timeline", "clear-selection"]);
-  assert.equal(runtime.moreMenu.find((item) => item.key === "export-png").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "export-all-png").disabled, false);
+  assert.equal(runtime.exportMenu.find((item) => item.key === "print").disabled, false);
   assert.deepEqual(
     runtime.settingsMenu.map((item) => [item.key, item.checked, Boolean(item.disabled)]),
     [
@@ -150,7 +155,9 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
     snapEnabled: true
   });
   assert.equal(readonlyRuntime.settingsMenu.find((item) => item.key === "toggle-snap").disabled, true);
-  assert.equal(readonlyRuntime.moreMenu.find((item) => item.key === "export-png").disabled, true);
+  assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-png").disabled, true);
+  assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-all-png").disabled, true);
+  assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "print").disabled, true);
 });
 
 test("V2 coordinate adapter maps client pixels to stage meters and clamps to bounds", () => {

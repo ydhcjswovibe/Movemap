@@ -65,6 +65,13 @@ function timelineStyle(leftPx, widthPx) {
   };
 }
 
+function segmentDurationLabel(segment) {
+  const rawDuration = Number(segment?.durationSeconds ?? segment?.duration);
+  if (!Number.isFinite(rawDuration)) return "";
+  const duration = Math.max(0, rawDuration);
+  return `${Number.isInteger(duration) ? duration.toFixed(0) : duration.toFixed(1)}s`;
+}
+
 function tickStyle(tick, index) {
   return {
     "--tick-left": `${Math.max(0, Number(tick.pixel ?? tick.x ?? index * 80) || 0)}px`
@@ -108,10 +115,14 @@ function buildDemoViewModel(model) {
       },
       moreMenu: [
         { key: "settings", label: "Settings", hasSubmenu: true },
-        { key: "export-json", label: "프로젝트 파일 공유" },
-        { key: "export-png", label: "현재 PNG", disabled: true },
         { key: "project-info", label: "Finale Scene" },
         { key: "help", label: "Help / Shortcuts", disabled: true }
+      ],
+      exportMenu: [
+        { key: "export-json", label: "프로젝트 JSON 내보내기" },
+        { key: "export-png", label: "현재 PNG", disabled: true },
+        { key: "export-all-png", label: "전체 대형 PNG", disabled: true },
+        { key: "print", label: "인쇄/PDF", disabled: true }
       ],
       settingsMenu: [
         { key: "toggle-snap", label: "Snap", checked: true },
@@ -145,6 +156,7 @@ function buildDemoViewModel(model) {
     actions: model.actions || {},
     activeTab: model.activeTab || "Stage",
     bottomRail: model.bottomRail || [],
+    exportMenu: model.exportMenu || [],
     moreMenu: model.moreMenu || [],
     settingsMenu: model.settingsMenu || [],
     share: model.share || {},
@@ -152,7 +164,7 @@ function buildDemoViewModel(model) {
   };
 }
 
-function IconButton({ icon, label, className = "", primary = false, active = false, onClick, disabled = false }) {
+function IconButton({ icon, label, className = "", primary = false, active = false, onClick, disabled = false, children = null }) {
   return (
     <button
       className={`v2-icon-button ${primary ? "is-primary" : ""} ${active ? "is-active" : ""} ${className}`}
@@ -163,7 +175,7 @@ function IconButton({ icon, label, className = "", primary = false, active = fal
       disabled={disabled}
       aria-disabled={disabled}
     >
-      <CoolIcon name={icon} />
+      {children || <CoolIcon name={icon} />}
     </button>
   );
 }
@@ -171,6 +183,7 @@ function IconButton({ icon, label, className = "", primary = false, active = fal
 function V2VisualEditor({ model, actions = {} }) {
   const topbarRef = useRef(null);
   const stageSurfaceRef = useRef(null);
+  const timelineTouchRef = useRef(null);
   const tokenGestureRef = useRef(null);
   const settingsHoverTimerRef = useRef(null);
   const suppressNextTokenClickRef = useRef(false);
@@ -189,12 +202,71 @@ function V2VisualEditor({ model, actions = {} }) {
   const currentSectionId = timeline.currentSectionId || "";
   const timelineContentWidth = Math.max(320, Number(timeline.timelineContentWidth ?? timeline.contentWidth) || 320);
   const timelineScrollX = Math.max(0, Number(timeline.timelineScrollX ?? timeline.scrollX) || 0);
-  const playheadLeft = Math.max(0, Number(timeline.playheadPixel) || 0);
+  const rawPlayheadLeft = Number(timeline.playheadPixel);
+  const playheadLeft = Number.isFinite(rawPlayheadLeft) ? rawPlayheadLeft : 0;
   const visualSegments = (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments)?.length ? (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments) : demoTimelineSegments;
   const waveformSamples = timeline.waveformBars?.length ? timeline.waveformBars.slice(0, 96) : demoWaveformSamples;
   const timelineContentStyle = {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
+  };
+  const blockDragPreview = timeline.timelineBlockDragPreview || null;
+  const blockDragPreviewAction = blockDragPreview?.dropAction || "";
+  const blockDragSourceRect = blockDragPreview?.sourceRect || {};
+  const floatingBlockWidth = Math.max(56, Math.min(180, Number(blockDragSourceRect.width || blockDragPreview?.dropWidthPx) || 76));
+  const floatingBlockHeight = Math.max(28, Math.min(74, Number(blockDragSourceRect.height) || 42));
+  const floatingBlockStyle = blockDragPreview ? {
+    width: `${floatingBlockWidth}px`,
+    minHeight: `${floatingBlockHeight}px`,
+    transform: `translate3d(${Math.round((Number(blockDragPreview.pointerClientX) || 0) - floatingBlockWidth / 2)}px, ${Math.round((Number(blockDragPreview.pointerClientY) || 0) - floatingBlockHeight / 2)}px, 0)`
+  } : null;
+  const dropPreviewStyle = blockDragPreview ? {
+    "--drop-left": `${Math.max(0, Number(blockDragPreview.dropLeftPx) || 0)}px`,
+    "--drop-width": `${Math.max(48, Number(blockDragPreview.dropWidthPx) || floatingBlockWidth)}px`
+  } : null;
+  const setTimelineViewportNode = (node) => {
+    if (model?.timelineViewportRef) model.timelineViewportRef.current = node;
+    if (node) runtimeActions.timelineViewportMeasured?.(node.getBoundingClientRect().width || 0);
+  };
+  const touchAsPointerEvent = (event, touch, type) => ({
+    button: 0,
+    buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    currentTarget: event.currentTarget,
+    isPrimary: true,
+    pointerId: touch.identifier + 1000,
+    pointerType: "touch",
+    preventDefault: () => event.preventDefault(),
+    stopPropagation: () => event.stopPropagation(),
+    type
+  });
+  const handleTimelineTouchStart = (event, source = { kind: "surface" }) => {
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    timelineTouchRef.current = { identifier: touch.identifier, source };
+    runtimeActions.timelinePointerDown?.(touchAsPointerEvent(event, touch, "pointerdown"), source);
+  };
+  const handlePlayheadPointerDown = (event) => {
+    event.stopPropagation();
+    runtimeActions.timelinePointerDown?.(event, { kind: "playhead" });
+  };
+  const handleTimelineTouchMove = (event) => {
+    const activeTouch = timelineTouchRef.current;
+    if (!activeTouch) return;
+    const touch = Array.from(event.changedTouches || []).find((item) => item.identifier === activeTouch.identifier)
+      || Array.from(event.touches || []).find((item) => item.identifier === activeTouch.identifier);
+    if (!touch) return;
+    runtimeActions.timelinePointerMove?.(touchAsPointerEvent(event, touch, "pointermove"));
+  };
+  const handleTimelineTouchEnd = (event) => {
+    const activeTouch = timelineTouchRef.current;
+    if (!activeTouch) return;
+    const touch = Array.from(event.changedTouches || []).find((item) => item.identifier === activeTouch.identifier);
+    if (!touch) return;
+    const type = event.type === "touchcancel" ? "pointercancel" : "pointerup";
+    runtimeActions.timelinePointerUp?.(touchAsPointerEvent(event, touch, type));
+    timelineTouchRef.current = null;
   };
   const closeTopMenus = () => {
     if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
@@ -208,6 +280,13 @@ function V2VisualEditor({ model, actions = {} }) {
       closeTopMenus();
     } else if (key === "export-png") {
       runtimeActions.exportPng?.();
+      closeTopMenus();
+    } else if (key === "export-all-png") {
+      runtimeActions.exportAllPng?.();
+      closeTopMenus();
+    } else if (key === "print") {
+      if (runtimeActions.print) runtimeActions.print();
+      else if (typeof window !== "undefined") window.print();
       closeTopMenus();
     }
   };
@@ -283,14 +362,50 @@ function V2VisualEditor({ model, actions = {} }) {
                     <span>보기 링크</span>
                     {share.shareUrl ? <a href={share.shareUrl}>열기</a> : <em>저장 후 생성</em>}
                     {share.shareUrl && <button type="button" onClick={() => runtimeActions.copyShareUrl?.()}>복사</button>}
+                    {share.canManageLinks && share.shareUrl && (
+                      <button type="button" onClick={() => runtimeActions.setShareLinkEnabled?.("view", share.viewLinkEnabled === false)}>
+                        {share.viewLinkEnabled === false ? "켜기" : "끄기"}
+                      </button>
+                    )}
                   </div>
                   {!share.readonly && (
                     <div className="v2-menu-link-row">
                       <span>편집 링크</span>
                       {share.editShareUrl ? <a href={share.editShareUrl}>열기</a> : <em>생성 대기</em>}
                       {share.editShareUrl && <button type="button" onClick={() => runtimeActions.copyEditShareUrl?.()}>복사</button>}
+                      {share.canManageLinks && share.editShareUrl && (
+                        <button type="button" onClick={() => runtimeActions.setShareLinkEnabled?.("edit", share.editLinkEnabled === false)}>
+                          {share.editLinkEnabled === false ? "켜기" : "끄기"}
+                        </button>
+                      )}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+            <div className="v2-menu-anchor">
+              <IconButton
+                icon="download"
+                label="내보내기"
+                active={openTopMenu === "export"}
+                onClick={() => {
+                  setSettingsSubmenuOpen(false);
+                  setOpenTopMenu((value) => value === "export" ? "" : "export");
+                }}
+              />
+              {openTopMenu === "export" && (
+                <div className="v2-top-menu v2-export-menu" role="menu" aria-label="내보내기 메뉴">
+                  {(view.exportMenu || []).map((item) => (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={Boolean(item.disabled)}
+                      key={item.key}
+                      onClick={() => runMenuAction(item.key)}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -441,12 +556,6 @@ function V2VisualEditor({ model, actions = {} }) {
                 </button>
               );
             })}
-
-            <div className="v2-zoom-rail" aria-label="Stage zoom controls">
-              <IconButton icon="add" label="확대" />
-              <IconButton icon="zoom-minus" label="축소" />
-              <IconButton icon="expand" label="중앙 맞춤" />
-            </div>
           </div>
         </section>
 
@@ -460,7 +569,21 @@ function V2VisualEditor({ model, actions = {} }) {
 
         <section className="v2-timeline" data-v2-timeline aria-label="Formation timeline" onWheel={runtimeActions.timelineWheel}>
           <div className="v2-ruler">
-            <div className="v2-timeline-viewport">
+            <div className="v2-timeline-tools" aria-label="Timeline zoom controls">
+              <IconButton icon="zoom-minus" label="타임라인 축소" className="v2-timeline-zoom-button" onClick={() => runtimeActions.zoomTimelineBy?.(0.88)}>-</IconButton>
+              <IconButton icon="add" label="타임라인 확대" className="v2-timeline-zoom-button" onClick={() => runtimeActions.zoomTimelineBy?.(1.14)}>+</IconButton>
+            </div>
+            <div
+              className="v2-timeline-viewport"
+              onPointerDown={(event) => runtimeActions.timelinePointerDown?.(event, { kind: "ruler" })}
+              onPointerMove={runtimeActions.timelinePointerMove}
+              onPointerUp={runtimeActions.timelinePointerUp}
+              onPointerCancel={runtimeActions.timelinePointerUp}
+              onTouchStart={(event) => handleTimelineTouchStart(event, { kind: "ruler" })}
+              onTouchMove={handleTimelineTouchMove}
+              onTouchEnd={handleTimelineTouchEnd}
+              onTouchCancel={handleTimelineTouchEnd}
+            >
               <div className="v2-timeline-content" style={timelineContentStyle}>
                 {(timeline.timelineTicks?.length ? timeline.timelineTicks : view.timeline.timelineTicks || []).map((tick, index) => (
                   <span
@@ -471,7 +594,13 @@ function V2VisualEditor({ model, actions = {} }) {
                   </span>
                 ))}
               </div>
-              <span className="v2-playhead v2-playhead-ruler" data-v2-playhead="ruler" style={{ "--playhead-left": `${playheadLeft}px` }} aria-hidden="true" />
+              <span
+                className="v2-playhead v2-playhead-ruler"
+                data-v2-playhead="ruler"
+                style={{ "--playhead-left": `${playheadLeft}px` }}
+                aria-hidden="true"
+                onPointerDown={handlePlayheadPointerDown}
+              />
             </div>
           </div>
 
@@ -483,56 +612,93 @@ function V2VisualEditor({ model, actions = {} }) {
             <div className="v2-formation-lane">
               <div
                 className="v2-timeline-viewport"
-                ref={model?.timelineViewportRef || null}
-                onPointerDown={runtimeActions.timelinePointerDown}
+                ref={setTimelineViewportNode}
+                onPointerDown={(event) => runtimeActions.timelinePointerDown?.(event, { kind: "surface" })}
                 onPointerMove={runtimeActions.timelinePointerMove}
                 onPointerUp={runtimeActions.timelinePointerUp}
                 onPointerCancel={runtimeActions.timelinePointerUp}
+                onTouchStart={(event) => handleTimelineTouchStart(event, { kind: "surface" })}
+                onTouchMove={handleTimelineTouchMove}
+                onTouchEnd={handleTimelineTouchEnd}
+                onTouchCancel={handleTimelineTouchEnd}
               >
                 <div className="v2-timeline-content" style={timelineContentStyle}>
                   {visualSegments.map((segment, index) => {
                     const targetSectionId = segment.toSectionId || segment.sectionId || "";
                     const section = sections.find((item) => item.id === targetSectionId) || sections[index] || {};
                     const isMove = segment.kind === "move";
+                    const segmentBadge = segment.label || (isMove ? `M${index + 1}` : `F${index + 1}`);
+                    const segmentTitle = isMove ? "Move" : section.name || "대형";
+                    const durationLabel = segmentDurationLabel(segment);
                     const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
                     const moveSelected = isMove && section.id && section.id === selectedSectionId;
                     const sectionCurrent = section.id && section.id === currentSectionId;
+                    const blockedEdge = timeline.timelineBlockedEdge?.sectionId === section.id ? timeline.timelineBlockedEdge.edge : "";
                     return (
                       <button
                         key={`${segment.kind || "hold"}-${segment.fromSectionId || section.id || index}-${segment.toSectionId || section.id || index}-${index}`}
                         className={[
                           isMove ? "v2-move-block" : "v2-formation-block",
                           (sectionSelected || moveSelected) ? "is-selected" : "",
-                          sectionCurrent ? "is-current" : ""
+                          sectionCurrent ? "is-current" : "",
+                          !isMove && blockDragPreview?.sectionId === section.id ? "is-dragging-source" : "",
+                          blockedEdge ? `is-blocked-${blockedEdge}` : ""
                         ].filter(Boolean).join(" ")}
                         data-v2-formation-block={section.id || segment.sectionId || ""}
                         data-v2-segment-kind={segment.kind || "hold"}
+                        data-v2-segment-label={segmentBadge}
+                        data-v2-segment-duration={durationLabel || undefined}
+                        data-v2-blocked-edge={blockedEdge || undefined}
                         style={timelineStyle(segment.leftPx, segment.widthPx)}
                         type="button"
-                        aria-label={isMove ? "Move transition" : `${section.name || segment.label || "Formation"} formation`}
+                        aria-label={isMove ? `${segmentBadge} Move transition ${durationLabel}` : `${segmentBadge} ${segmentTitle} formation ${durationLabel}`}
                         aria-pressed={sectionSelected}
                         onPointerDown={(event) => {
                           event.stopPropagation();
-                          if (!isMove && capabilities.canEditTimeline && section.id) {
-                            runtimeActions.formationPointerDown?.(event, section, sections.findIndex((item) => item.id === section.id), "body");
+                          if (isMove) {
+                            runtimeActions.timelinePointerDown?.(event, { kind: "move-block", sectionId: section.id || "" });
+                          } else if (section.id) {
+                            runtimeActions.formationPointerDown?.(
+                              event,
+                              section,
+                              sections.findIndex((item) => item.id === section.id),
+                              "body",
+                              { kind: "hold-block", sectionId: section.id }
+                            );
+                          } else {
+                            runtimeActions.timelinePointerDown?.(event, { kind: "hold-block", sectionId: "" });
                           }
                         }}
                         onClick={() => {
                           if (section.id) runtimeActions.selectFormation?.(section);
                         }}
                       >
-                        {isMove ? "Move" : section.name || segment.label}
+                        <span className="v2-segment-badge">{segmentBadge}</span>
+                        <span className="v2-segment-name">{segmentTitle}</span>
+                        {durationLabel && <span className="v2-segment-duration">{durationLabel}</span>}
                         {!isMove && capabilities.canEditTimeline && segment.resizable && (
-                          <span
-                            className="v2-timeline-handle v2-timeline-handle-right"
-                            data-v2-timeline-handle="hold-right"
-                            data-v2-section-id={section.id || ""}
-                            aria-hidden="true"
-                            onPointerDown={(event) => {
-                              event.stopPropagation();
-                              runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
-                            }}
-                          />
+                          <>
+                            <span
+                              className="v2-timeline-handle v2-timeline-handle-left"
+                              data-v2-timeline-handle="hold-left"
+                              data-v2-section-id={section.id || ""}
+                              aria-hidden="true"
+                              onPointerDown={(event) => {
+                                event.stopPropagation();
+                                runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
+                              }}
+                            />
+                            <span
+                              className="v2-timeline-handle v2-timeline-handle-right"
+                              data-v2-timeline-handle="hold-right"
+                              data-v2-section-id={section.id || ""}
+                              aria-hidden="true"
+                              onPointerDown={(event) => {
+                                event.stopPropagation();
+                                runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
+                              }}
+                            />
+                          </>
                         )}
                         {isMove && moveSelected && capabilities.canEditTimeline && (
                           <span
@@ -549,11 +715,48 @@ function V2VisualEditor({ model, actions = {} }) {
                       </button>
                     );
                   })}
+                  {timeline.timelineReorderGuide && (
+                    <span
+                      className={[
+                        "v2-reorder-preview",
+                        timeline.timelineReorderGuide.isEndSlot ? "is-end-slot" : ""
+                      ].filter(Boolean).join(" ")}
+                      data-v2-reorder-preview
+                      style={{ "--reorder-left": `${timeline.timelineReorderGuide.leftPx}px` }}
+                      aria-hidden="true"
+                    >
+                      <span>{timeline.timelineReorderGuide.slotLabel}</span>
+                    </span>
+                  )}
+                  {blockDragPreview && (
+                    <span
+                      className={[
+                        "v2-drop-preview-slot",
+                        blockDragPreviewAction ? `is-${blockDragPreviewAction}` : "",
+                        blockDragPreview.isEndSlot ? "is-end-slot" : "",
+                        blockDragPreview.blockedEdge ? "is-blocked" : ""
+                      ].filter(Boolean).join(" ")}
+                      data-v2-drop-preview
+                      data-v2-drop-action={blockDragPreviewAction || undefined}
+                      data-v2-reorder-preview
+                      data-v2-blocked-edge={blockDragPreview.blockedEdge || undefined}
+                      style={dropPreviewStyle}
+                      aria-hidden="true"
+                    >
+                      <span>{blockDragPreview.dropLabel || (blockDragPreview.isEndSlot ? "마지막에 배치" : "여기에 배치")}</span>
+                    </span>
+                  )}
                 </div>
                 {timeline.snapPixel !== null && timeline.snapPixel !== undefined && (
                   <span className="v2-snapline" style={{ "--snap-left": `${timeline.snapPixel}px` }} aria-hidden="true" />
                 )}
-                <span className="v2-track-playhead" data-v2-playhead="formation" style={{ "--playhead-left": `${playheadLeft}px` }} aria-hidden="true" />
+                <span
+                  className="v2-track-playhead"
+                  data-v2-playhead="formation"
+                  style={{ "--playhead-left": `${playheadLeft}px` }}
+                  aria-hidden="true"
+                  onPointerDown={handlePlayheadPointerDown}
+                />
               </div>
             </div>
           </div>
@@ -564,8 +767,25 @@ function V2VisualEditor({ model, actions = {} }) {
               {capabilities.canAddAudio && <button className="v2-track-add-button" type="button" aria-label="음악 추가" onClick={runtimeActions.addAudio}>+</button>}
             </div>
             <div className="v2-waveform" aria-hidden="true" data-v2-waveform>
-              <div className="v2-timeline-viewport">
-                <div className="v2-timeline-content v2-waveform-content" style={timelineContentStyle}>
+              <div
+                className="v2-timeline-viewport"
+                onPointerDown={(event) => runtimeActions.timelinePointerDown?.(event, { kind: "audio-lane" })}
+                onPointerMove={runtimeActions.timelinePointerMove}
+                onPointerUp={runtimeActions.timelinePointerUp}
+                onPointerCancel={runtimeActions.timelinePointerUp}
+                onTouchStart={(event) => handleTimelineTouchStart(event, { kind: "audio-lane" })}
+                onTouchMove={handleTimelineTouchMove}
+                onTouchEnd={handleTimelineTouchEnd}
+                onTouchCancel={handleTimelineTouchEnd}
+              >
+                <div
+                  className="v2-timeline-content v2-waveform-content"
+                  style={timelineContentStyle}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    runtimeActions.timelinePointerDown?.(event, { kind: "waveform" });
+                  }}
+                >
                   {waveformSamples.map((sample, index) => (
                     <span
                       key={`${sample}-${index}`}
@@ -576,11 +796,31 @@ function V2VisualEditor({ model, actions = {} }) {
                     />
                   ))}
                 </div>
-                <span className="v2-track-playhead" data-v2-playhead="audio" style={{ "--playhead-left": `${playheadLeft}px` }} aria-hidden="true" />
+                <span
+                  className="v2-track-playhead"
+                  data-v2-playhead="audio"
+                  style={{ "--playhead-left": `${playheadLeft}px` }}
+                  aria-hidden="true"
+                  onPointerDown={handlePlayheadPointerDown}
+                />
               </div>
             </div>
           </div>
         </section>
+
+        {blockDragPreview && floatingBlockStyle && (
+          <div
+            className={[
+              "v2-floating-block-preview",
+              blockDragPreview.blockedEdge ? "is-blocked" : ""
+            ].filter(Boolean).join(" ")}
+            data-v2-floating-block-preview
+            style={floatingBlockStyle}
+            aria-hidden="true"
+          >
+            <span>{blockDragPreview.label || "Formation"}</span>
+          </div>
+        )}
 
         <nav className="v2-bottom-rail" data-v2-bottom-rail aria-label="Selected item actions">
           {(view.bottomRail || []).map((action) => (
