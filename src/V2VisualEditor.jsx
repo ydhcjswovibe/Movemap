@@ -93,7 +93,17 @@ function buildDemoViewModel(model) {
         performers: demoPerformers,
         visiblePositions: Object.fromEntries(demoPerformers.map((performer) => [performer.id, { x: performer.x, y: performer.y }])),
         stageDimensions: { width: 100, height: 100 },
-        frontZone: { y: 69 }
+        frontZone: { y: 69 },
+        grid: { columns: 100, rows: 100, centerXPercent: 50, centerYPercent: 50 },
+        audienceGuideYPercent: 69,
+        referenceGuides: [],
+        referenceLabelsVisible: false,
+        referencesVisible: false
+      },
+      stageInfoLine: {
+        visible: true,
+        leftLabel: "Diamond Form",
+        rightLabel: "Snap on · 100x100 · 1m grid"
       },
       bottomRail: [
         { key: "stage", icon: "settings", label: "Stage", mode: "Stage", active: true },
@@ -205,6 +215,7 @@ function buildDemoViewModel(model) {
     moreMenu: model.moreMenu || [],
     settingsMenu: model.settingsMenu || [],
     stageTask: model.stageTask || {},
+    stageInfoLine: model.stageInfoLine || {},
     timelineTask: model.timelineTask || {},
     share: model.share || {},
     sections: model.timeline.sortedSections || model.sortedSections || model.sections || []
@@ -237,13 +248,28 @@ function V2VisualEditor({ model, actions = {} }) {
   const [openTopMenu, setOpenTopMenu] = useState("");
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
   const view = buildDemoViewModel(model);
-  const { shell, stage, selection, timeline, sections, share } = view;
+  const { shell, stage, stageInfoLine, selection, timeline, sections, share } = view;
   const runtimeActions = { ...(view.actions || {}), ...actions };
   const capabilities = view.capabilities || {};
   const activeTab = taskTabs.includes(view.activeTab) ? view.activeTab : "Stage";
   const stageDimensions = stage.stageDimensions || { width: 100, height: 100 };
   const stageWidth = Math.max(1, Number(stageDimensions.width) || 100);
   const stageHeight = Math.max(1, Number(stageDimensions.height) || 100);
+  const stageGrid = stage.grid || {
+    columns: Math.max(1, Math.round(stageWidth)),
+    rows: Math.max(1, Math.round(stageHeight)),
+    centerXPercent: 50,
+    centerYPercent: 50
+  };
+  const stageGuideRows = Math.max(1, Number(stageGrid.rows) || 1);
+  const stageGuideColumns = Math.max(1, Number(stageGrid.columns) || 1);
+  const audienceGuideY = clampPercent(Number(stage.audienceGuideYPercent) || ((stage.frontZone?.y ?? stageHeight * 0.69) / stageHeight) * 100);
+  const stageSurfaceStyle = {
+    "--v2-stage-cols": stageGuideColumns,
+    "--v2-stage-rows": stageGuideRows,
+    "--v2-audience-y": `${audienceGuideY}%`,
+    "--v2-stage-aspect": `${stageWidth} / ${stageHeight}`
+  };
   const selectedPerformerIds = new Set(selection.selectedPerformerIds || []);
   const selectedSectionId = selection.selectedSectionId || selection.selectedSection?.id || "";
   const currentSectionId = timeline.currentSectionId || "";
@@ -274,6 +300,22 @@ function V2VisualEditor({ model, actions = {} }) {
   const setTimelineViewportNode = (node) => {
     if (model?.timelineViewportRef) model.timelineViewportRef.current = node;
     if (node) runtimeActions.timelineViewportMeasured?.(node.getBoundingClientRect().width || 0);
+  };
+  const referenceLabelStyle = (reference) => {
+    const lineMidX = ((Number(reference.x1Percent) || 0) + (Number(reference.x2Percent) || 0)) / 2;
+    const horizontalLine = reference.type !== "point" && Math.abs((Number(reference.y1Percent) || 0) - (Number(reference.y2Percent) || 0)) < 0.1;
+    const left = reference.type === "point"
+      ? reference.xPercent
+      : horizontalLine && reference.tone === "front"
+        ? Math.max(16, Math.min(84, (Number(reference.x1Percent) || 0) + 22))
+        : lineMidX;
+    const top = reference.type === "point"
+      ? reference.yPercent
+      : ((Number(reference.y1Percent) || 0) + (Number(reference.y2Percent) || 0)) / 2;
+    return {
+      "--guide-label-x": `${clampPercent(left)}%`,
+      "--guide-label-y": `${clampPercent(top)}%`
+    };
   };
   const touchAsPointerEvent = (event, touch, type) => ({
     button: 0,
@@ -544,9 +586,16 @@ function V2VisualEditor({ model, actions = {} }) {
         </header>
 
         <section className="v2-stage-wrap" data-v2-stage aria-label="Stage">
+          {stageInfoLine?.visible !== false && (
+            <div className="v2-stage-info-line" data-v2-stage-info-line>
+              <span>{stageInfoLine?.leftLabel || "No formation"}</span>
+              <span>{stageInfoLine?.rightLabel || "Snap on · 12x8 · 1m grid"}</span>
+            </div>
+          )}
           <div
             className="v2-stage-surface"
             ref={stageSurfaceRef}
+            style={stageSurfaceStyle}
             onPointerMove={(event) => {
               const gesture = tokenGestureRef.current;
               if (gesture?.pointerId === event.pointerId && Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 3) {
@@ -568,8 +617,40 @@ function V2VisualEditor({ model, actions = {} }) {
             }}
             onClick={(event) => runtimeActions.stageTap?.(event, stageSurfaceRef.current)}
           >
-            <div className="v2-stage-crosshair" aria-hidden="true" />
-            <div className="v2-center-diamond" aria-hidden="true" />
+            <div className="v2-stage-grid" data-v2-stage-grid aria-hidden="true" />
+            {stage.referencesVisible && (
+              <div className="v2-stage-guide-layer" data-v2-stage-guides aria-hidden="true">
+                <svg className="v2-stage-reference-svg" viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false">
+                  {(stage.referenceGuides || []).map((reference) => reference.type === "point" ? (
+                    <circle
+                      key={reference.id}
+                      className={`v2-stage-guide-point v2-stage-guide-${reference.tone || "neutral"}`}
+                      cx={clampPercent(reference.xPercent)}
+                      cy={clampPercent(reference.yPercent)}
+                      r="1.1"
+                    />
+                  ) : (
+                    <line
+                      key={reference.id}
+                      className={`v2-stage-guide-line v2-stage-guide-${reference.tone || "neutral"}`}
+                      x1={clampPercent(reference.x1Percent)}
+                      y1={clampPercent(reference.y1Percent)}
+                      x2={clampPercent(reference.x2Percent)}
+                      y2={clampPercent(reference.y2Percent)}
+                    />
+                  ))}
+                </svg>
+                {stage.referenceLabelsVisible && (stage.referenceGuides || []).map((reference) => (
+                  <span
+                    key={`${reference.id}-label`}
+                    className={`v2-stage-guide-label v2-stage-guide-label-${reference.tone || "neutral"}`}
+                    style={referenceLabelStyle(reference)}
+                  >
+                    {reference.label}
+                  </span>
+                ))}
+              </div>
+            )}
             {activeTab === "Cast" && (
               <div className="v2-cast-task-surface" data-v2-tab-surface="Cast" aria-label="Cast roster">
                 <div className="v2-task-summary">
@@ -644,9 +725,9 @@ function V2VisualEditor({ model, actions = {} }) {
             )}
             <div
               className="v2-audience-zone"
-              style={{ "--front-zone-y": `${clampPercent(((stage.frontZone?.y ?? stageHeight * 0.69) / stageHeight) * 100)}%` }}
+              data-v2-audience-guide
             >
-              <span>관객</span>
+              {stage.referenceLabelsVisible && <span>관객</span>}
             </div>
 
             {(stage.performers || []).map((performer) => {
@@ -738,6 +819,7 @@ function V2VisualEditor({ model, actions = {} }) {
                 {(timeline.timelineTicks?.length ? timeline.timelineTicks : view.timeline.timelineTicks || []).map((tick, index) => (
                   <span
                     key={`${tick.label}-${tick.time ?? index}`}
+                    className={tick.importance === "major" ? "is-major" : tick.importance === "minor" ? "is-minor" : "is-micro"}
                     style={tickStyle(tick, index)}
                   >
                     {tick.label}

@@ -352,6 +352,9 @@ test.describe("connected v2 editor route", () => {
     await expect(timeline.getByRole("button", { name: "음악 추가" })).toBeVisible();
     await expect(timeline.locator("[data-v2-waveform] span:not(.v2-track-playhead)")).toHaveCount(96);
     await expect(root.getByText("BPM")).toHaveCount(0);
+    const infoLine = root.locator("[data-v2-stage-info-line]");
+    await expect(infoLine).toBeVisible();
+    await expect(infoLine).toContainText("Snap on · 12x8 · 1m grid");
 
     const tokenA1 = root.locator('[data-v2-performer-token="a1"]');
     const tokenB2 = root.locator('[data-v2-performer-token="b2"]');
@@ -361,6 +364,7 @@ test.describe("connected v2 editor route", () => {
     await tokenB2.click();
     await expect(tokenA1).toHaveAttribute("aria-pressed", "false");
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
+    await expect(infoLine).toContainText("B2 · groupB");
 
     const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -380,22 +384,34 @@ test.describe("connected v2 editor route", () => {
     await expect(introBlock).toHaveAttribute("aria-pressed", "false");
     await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
     await expect(tokenB2).toHaveAttribute("aria-pressed", "false");
+    await expect(infoLine).toContainText("Diamond Form");
 
     await expect(root.locator('[data-v2-segment-kind="move"]')).toBeVisible();
     await expect(root.locator('[data-v2-playhead="ruler"]')).toBeVisible();
     await expect(root.locator('[data-v2-playhead="formation"]')).toBeVisible();
     await expect(root.locator('[data-v2-playhead="audio"]')).toBeVisible();
+    await expect(root.locator(".v2-ruler span.is-micro")).not.toHaveCount(0);
+    await expect(root.locator(".v2-ruler span.is-minor", { hasText: "5s" })).toHaveCount(1);
+    await expect(root.locator(".v2-ruler span.is-major", { hasText: "0s" })).toHaveCount(1);
     await tokenB2.click();
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
+    await expect(infoLine).toContainText("B2 · groupB");
 
     const boxes = await root.evaluate((node) => {
       const rectFor = (selector) => {
         const rect = node.querySelector(selector)?.getBoundingClientRect();
-        return rect ? { y: rect.y, width: rect.width, height: rect.height, bottom: rect.bottom, center: rect.y + rect.height / 2 } : null;
+        return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bottom: rect.bottom, center: rect.y + rect.height / 2 } : null;
       };
       return {
+        topbar: rectFor(".v2-topbar"),
+        infoLine: rectFor("[data-v2-stage-info-line]"),
         stage: rectFor("[data-v2-stage]"),
+        stageSurface: rectFor(".v2-stage-surface"),
+        transport: rectFor(".v2-transport"),
+        playButton: rectFor(".v2-transport .v2-play-button"),
+        timecode: rectFor(".v2-timecode"),
         timeline: rectFor("[data-v2-timeline]"),
+        ruler: rectFor(".v2-ruler"),
         regularToken: rectFor(".v2-token:not(.is-selected)"),
         regularTokenTransform: getComputedStyle(node.querySelector(".v2-token:not(.is-selected)")).transform,
         selectedToken: rectFor(".v2-token.is-selected"),
@@ -420,8 +436,21 @@ test.describe("connected v2 editor route", () => {
       };
     });
 
-    expect(boxes.stage.height).toBeGreaterThan(boxes.timeline.height);
-    expect(boxes.stage.height).toBeGreaterThanOrEqual(460);
+    expect(boxes.infoLine.height).toBeGreaterThanOrEqual(28);
+    expect(boxes.infoLine.height).toBeLessThanOrEqual(32);
+    expect(Math.abs(boxes.infoLine.y - boxes.topbar.bottom)).toBeLessThanOrEqual(1);
+    expect(boxes.stageSurface.y).toBeGreaterThanOrEqual(boxes.infoLine.bottom - 1);
+    expect(Math.abs(boxes.stageSurface.bottom - boxes.stage.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.stageSurface.bottom - boxes.transport.y)).toBeLessThanOrEqual(1);
+    expect(boxes.transport.height).toBeGreaterThanOrEqual(48);
+    expect(boxes.transport.height).toBeLessThanOrEqual(52);
+    expect(boxes.playButton.width).toBeGreaterThanOrEqual(40);
+    expect(boxes.playButton.height).toBeGreaterThanOrEqual(40);
+    expect(boxes.timecode.height).toBeGreaterThanOrEqual(40);
+    expect(Math.abs(boxes.stageSurface.width / boxes.stageSurface.height - 1.5)).toBeLessThanOrEqual(0.02);
+    expect(Math.abs((boxes.stageSurface.width / 12) - (boxes.stageSurface.height / 8))).toBeLessThanOrEqual(0.5);
+    expect(boxes.timeline.height).toBeGreaterThanOrEqual(238);
+    expect(boxes.timeline.height).toBeLessThanOrEqual(246);
     expect(Math.abs(boxes.selectedToken.width - boxes.regularToken.width)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.selectedToken.height - boxes.regularToken.height)).toBeLessThanOrEqual(1);
     expect(boxes.selectedTokenRing).toContain("rgb");
@@ -434,13 +463,17 @@ test.describe("connected v2 editor route", () => {
     expect(boxes.moveBlockTransitionProperty).toBe("none");
     expect(boxes.trackAddTransitionProperty).toBe("none");
     expect(boxes.bottomIconTransitionProperty).toBe("none");
-    expect(boxes.timeline.height).toBeGreaterThanOrEqual(220);
-    expect(boxes.timeline.height).toBeLessThanOrEqual(260);
+    expect(boxes.holdBlock.height).toBeGreaterThanOrEqual(boxes.formationLane.height * 0.8);
     expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.moveBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
     expect(boxes.moveBlock.height).toBeLessThan(boxes.holdBlock.height);
     expect(Math.abs(boxes.waveform.center - boxes.musicLane.center)).toBeLessThanOrEqual(1);
-    expect(boxes.timeline.bottom).toBeLessThanOrEqual(boxes.rail.y + 1);
+    expect(Math.abs(boxes.transport.bottom - boxes.timeline.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.ruler.y - boxes.timeline.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.formationLane.y - boxes.ruler.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.musicLane.y - boxes.formationLane.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.musicLane.bottom - boxes.timeline.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.timeline.bottom - boxes.rail.y)).toBeLessThanOrEqual(1);
     expect(boxes.rail.bottom).toBeLessThanOrEqual(boxes.viewportHeight + 1);
 
     const actionButtonBox = await bottomRail.getByRole("button").first().boundingBox();
@@ -450,7 +483,7 @@ test.describe("connected v2 editor route", () => {
 
     await expectInsideViewport(page, timeline);
     await expectInsideViewport(page, bottomRail);
-    await page.screenshot({ path: "test-results/v2-visual-mobile-390.png", fullPage: false });
+    await page.screenshot({ path: "test-results/v2-stage-timeline-bottom-390x844.png", fullPage: false });
   });
 
   test("new V2 projects reveal added formations for immediate block editing", async ({ page }) => {
@@ -1606,6 +1639,42 @@ test.describe("connected v2 editor route", () => {
     const stageSurface = root.locator('[data-v2-tab-surface="Stage"]');
     await expect(stageSurface).toHaveCount(0);
     await expect(root.locator("[data-v2-stage]").getByRole("button", { name: "Stage references" })).toHaveCount(0);
+    const visualStage = root.locator("[data-v2-stage]");
+    const stageInfoLine = root.locator("[data-v2-stage-info-line]");
+    await expect(stageInfoLine).toBeVisible();
+    await expect(stageInfoLine).toContainText("Snap on · 12x8 · 1m grid");
+    await expect(visualStage.locator("[data-v2-stage-grid]")).toBeVisible();
+    await expect(visualStage.locator("[data-v2-stage-guides]")).toBeVisible();
+    const guideMetrics = await visualStage.locator(".v2-stage-surface").evaluate((surface) => {
+      const rect = surface.getBoundingClientRect();
+      const grid = surface.querySelector("[data-v2-stage-grid]");
+      const center = surface.querySelector("line.v2-stage-guide-neutral");
+      const front = surface.querySelector("line.v2-stage-guide-front");
+      const audience = surface.querySelector("[data-v2-audience-guide]");
+      const audienceRect = audience?.getBoundingClientRect();
+      const style = grid ? getComputedStyle(grid) : null;
+      return {
+        audienceTopRatio: audienceRect ? Math.round(((audienceRect.top - rect.top) / rect.height) * 100) : null,
+        centerX: center?.getAttribute("x1"),
+        frontY: front?.getAttribute("y1"),
+        gridBackgroundSize: style?.backgroundSize || ""
+      };
+    });
+    expect(guideMetrics.centerX).toBe("50");
+    expect(guideMetrics.frontY).toBe("75");
+    expect(guideMetrics.audienceTopRatio).toBe(75);
+    expect(guideMetrics.gridBackgroundSize).toContain("8.333");
+    expect(guideMetrics.gridBackgroundSize).toContain("12.5");
+    const stageAspect = await visualStage.locator(".v2-stage-surface").evaluate((surface) => {
+      const rect = surface.getBoundingClientRect();
+      return {
+        ratio: Number((rect.width / rect.height).toFixed(2)),
+        cellWidth: Number((rect.width / 12).toFixed(2)),
+        cellHeight: Number((rect.height / 8).toFixed(2))
+      };
+    });
+    expect(stageAspect.ratio).toBeCloseTo(1.5, 1);
+    expect(Math.abs(stageAspect.cellWidth - stageAspect.cellHeight)).toBeLessThanOrEqual(0.5);
     await rail.getByRole("button", { name: "Timeline" }).click();
     await expect(rail.getByRole("button", { name: "Timeline" })).toHaveClass(/is-active/);
     const timelineSurface = root.locator('[data-v2-tab-surface="Timeline"]');
@@ -1648,6 +1717,22 @@ test.describe("connected v2 editor route", () => {
     const beforeSnap = await snap.getAttribute("aria-checked");
     await snap.click();
     await expect(snap).toHaveAttribute("aria-checked", beforeSnap === "true" ? "false" : "true");
+    await expect(stageInfoLine).toContainText(beforeSnap === "true" ? "Snap off · 12x8 · free move" : "Snap on · 12x8 · 1m grid");
+    const stageReferences = settingsMenu.getByRole("menuitemcheckbox", { name: /Stage references/ });
+    await expect(stageReferences).toHaveAttribute("aria-checked", "true");
+    await stageReferences.click();
+    await expect(stageReferences).toHaveAttribute("aria-checked", "false");
+    await expect(visualStage.locator("[data-v2-stage-grid]")).toBeVisible();
+    await expect(visualStage.locator("[data-v2-stage-guides]")).toHaveCount(0);
+    await stageReferences.click();
+    await expect(stageReferences).toHaveAttribute("aria-checked", "true");
+    await expect(visualStage.locator("[data-v2-stage-guides]")).toBeVisible();
+    const referenceLabels = settingsMenu.getByRole("menuitemcheckbox", { name: /Reference labels/ });
+    await expect(referenceLabels).toHaveAttribute("aria-checked", "true");
+    await referenceLabels.click();
+    await expect(referenceLabels).toHaveAttribute("aria-checked", "false");
+    await expect(visualStage.locator(".v2-stage-guide-label")).toHaveCount(0);
+    await expect(visualStage.locator("[data-v2-stage-guides]")).toBeVisible();
     await settingsMenuItem.click();
     await expect(settingsMenu).toHaveCount(0);
     await expect(settingsMenuItem).toContainText("›");
@@ -1731,6 +1816,8 @@ test.describe("connected v2 editor route", () => {
 
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
+    await expect(root.locator("[data-v2-stage-info-line]")).toBeVisible();
+    await expect(root.locator("[data-v2-stage-info-line]")).toContainText("Snap on · 12x8 · 1m grid");
     await expect(root.locator(".v2-track-add-button")).toHaveCount(0);
     await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Stage" })).toBeEnabled();
     await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Timeline" })).toBeEnabled();

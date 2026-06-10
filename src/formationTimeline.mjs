@@ -213,17 +213,25 @@ export function buildTimelineTicks(duration, options = {}) {
   const viewportWidth = Math.max(0, Number(options.viewportWidth) || 0);
   const targetPixelSpacing = 88;
   const rawInterval = pixelsPerSecond ? targetPixelSpacing / pixelsPerSecond : 0;
-  const interval = pixelsPerSecond
+  const requestedInterval = Number(options.intervalSeconds);
+  const interval = Number.isFinite(requestedInterval) && requestedInterval > 0
+    ? requestedInterval
+    : pixelsPerSecond
     ? rawInterval <= 0.5 ? 0.5 : rawInterval <= 1 ? 1 : rawInterval <= 2 ? 2 : rawInterval <= 5 ? 5 : rawInterval <= 10 ? 10 : 30
     : safeDuration <= 30 ? 5 : safeDuration <= 90 ? 10 : 30;
+  const majorInterval = Math.max(interval, Number(options.majorIntervalSeconds) || 0);
+  const labelInterval = Math.max(interval, Number(options.labelIntervalSeconds) || interval);
   const ticks = [];
   const startTime = pixelsPerSecond && viewportWidth ? Math.max(0, Math.floor(pixelsToTime(scrollX, pixelsPerSecond) / interval) * interval) : 0;
   const endTime = pixelsPerSecond && viewportWidth ? Math.min(safeDuration, pixelsToTime(scrollX + viewportWidth, pixelsPerSecond) + interval) : safeDuration;
   for (let time = startTime; time <= endTime + 0.0001; time += interval) {
     const roundedTime = Math.round(time * 10) / 10;
+    const isMajor = majorInterval && Math.abs((roundedTime / majorInterval) - Math.round(roundedTime / majorInterval)) < 0.0001;
+    const hasLabel = labelInterval && Math.abs((roundedTime / labelInterval) - Math.round(roundedTime / labelInterval)) < 0.0001;
     ticks.push({
       time: roundedTime,
-      label: interval < 1 ? `${roundedTime.toFixed(1)}s` : `${Math.round(roundedTime)}s`,
+      label: hasLabel ? (interval < 1 ? `${roundedTime.toFixed(1)}s` : `${Math.round(roundedTime)}s`) : "",
+      importance: isMajor ? "major" : hasLabel ? "minor" : "micro",
       percent: timeToPercent(roundedTime, safeDuration),
       pixel: timeToPixels(roundedTime, pixelsPerSecond || safeDuration)
     });

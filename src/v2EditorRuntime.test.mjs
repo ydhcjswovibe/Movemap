@@ -276,6 +276,87 @@ test("V2 Stage task model exposes setting state and selected performer summary",
   assert.equal(emptyRuntime.stageTask.canOpenRoleActions, false);
 });
 
+test("V2 runtime exposes a readonly-visible Stage info line", () => {
+  const runtime = createV2EditorRuntime({
+    performers: [
+      { id: "a1", label: "A1", name: "Ari", role: "lead", group: "groupA" },
+      { id: "b2", label: "B2", name: "Bo", role: "support", group: "groupB" }
+    ],
+    readonly: true,
+    selectedPerformerId: "b2",
+    selectedPerformerIds: ["b2"],
+    selectedSection: { id: "diamond", name: "Diamond Form" },
+    selectedSectionId: "diamond",
+    snapEnabled: true,
+    stageDimensions: { width: 12, height: 8 }
+  });
+
+  assert.deepEqual(runtime.stageInfoLine, {
+    visible: true,
+    leftLabel: "B2 · groupB",
+    rightLabel: "Snap on · 12x8 · 1m grid"
+  });
+});
+
+test("V2 Stage info line falls back to formation context and snap-off wording", () => {
+  const selectedRuntime = createV2EditorRuntime({
+    mobileContextSelection: "formation",
+    selectedSection: { id: "diamond", name: "Diamond Form" },
+    selectedSectionId: "diamond",
+    snapEnabled: false,
+    stageDimensions: { width: 12, height: 8 }
+  });
+  assert.equal(selectedRuntime.stageInfoLine.leftLabel, "Diamond Form");
+  assert.equal(selectedRuntime.stageInfoLine.rightLabel, "Snap off · 12x8 · free move");
+
+  const currentRuntime = createV2EditorRuntime({
+    currentSectionId: "finale",
+    sortedSections: [
+      { id: "intro", name: "Intro V" },
+      { id: "finale", name: "Finale Scene" }
+    ],
+    snapEnabled: true,
+    stageDimensions: { width: 12, height: 8 }
+  });
+  assert.equal(currentRuntime.stageInfoLine.leftLabel, "Finale Scene");
+  assert.equal(currentRuntime.stageInfoLine.rightLabel, "Snap on · 12x8 · 1m grid");
+});
+
+test("V2 stage visual model aligns the visible grid and guides to snap coordinates", () => {
+  const runtime = createV2EditorRuntime({
+    frontZone: { y: 5.6 },
+    readonly: false,
+    showStageReferenceLabels: true,
+    showStageReferences: true,
+    stageDimensions: { width: 12, height: 8 }
+  });
+
+  assert.deepEqual(runtime.stage.grid, {
+    columns: 12,
+    rows: 8,
+    centerXPercent: 50,
+    centerYPercent: 50
+  });
+  assert.equal(runtime.stage.audienceGuideYPercent, 75);
+  assert.equal(runtime.stage.referencesVisible, true);
+  assert.equal(runtime.stage.referenceLabelsVisible, true);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "front-line").yPercent, 75);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "center-line").xPercent, 50);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "left-hash").xPercent, 16.666666666666664);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "right-hash").xPercent, 83.33333333333334);
+
+  const hiddenRuntime = createV2EditorRuntime({
+    frontZone: { y: 5.6 },
+    showStageReferenceLabels: false,
+    showStageReferences: false,
+    stageDimensions: { width: 12, height: 8 }
+  });
+  assert.equal(hiddenRuntime.stage.referencesVisible, false);
+  assert.equal(hiddenRuntime.stage.referenceLabelsVisible, false);
+  assert.deepEqual(hiddenRuntime.stage.referenceGuides, []);
+  assert.equal(hiddenRuntime.stage.grid.columns, 12);
+});
+
 test("V2 Timeline task model summarizes selected formation and edit availability", () => {
   const runtime = createV2EditorRuntime({
     mobileContextSelection: "formation",

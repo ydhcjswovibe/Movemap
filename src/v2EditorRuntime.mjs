@@ -1,4 +1,5 @@
 import { clampStagePoint, normalizeStageDimensions } from "./stageGeometry.mjs";
+import { stageReferenceRenderItems } from "./stageReference.mjs";
 
 function finiteNumber(value, fallback = 0) {
   const number = Number(value);
@@ -47,6 +48,10 @@ function performerMetaLabel(performer) {
   return parts.length ? parts.join(" / ") : "No role";
 }
 
+function performerStageInfoLabel(performer) {
+  return String(performer?.label || performer?.name || performer?.id || "").trim() || "Performer";
+}
+
 function selectedPerformerSummaryFor(performers, selectedPerformerId, selectedPerformerIds, emptyStateLabel) {
   const ids = normalizeArray(selectedPerformerIds);
   const selected = performers.find((performer) => performer.id === selectedPerformerId)
@@ -70,6 +75,78 @@ function selectedPerformerSummaryFor(performers, selectedPerformerId, selectedPe
 
 function formatSeconds(value) {
   return `${finiteNumber(value, 0).toFixed(1)}s`;
+}
+
+function stageDimensionLabel(dimensions) {
+  return `${Math.round(finiteNumber(dimensions.width, 12))}x${Math.round(finiteNumber(dimensions.height, 8))}`;
+}
+
+function percentOf(value, max) {
+  const maximum = Math.max(1, finiteNumber(max, 1));
+  return (finiteNumber(value, 0) / maximum) * 100;
+}
+
+function snapStageMeter(value, max) {
+  const maximum = Math.max(1, finiteNumber(max, 1));
+  return Math.max(0, Math.min(maximum, Math.round(finiteNumber(value, 0))));
+}
+
+function stageGridFor(dimensions) {
+  return {
+    columns: Math.max(1, Math.round(dimensions.width)),
+    rows: Math.max(1, Math.round(dimensions.height)),
+    centerXPercent: percentOf(dimensions.width / 2, dimensions.width),
+    centerYPercent: percentOf(dimensions.height / 2, dimensions.height)
+  };
+}
+
+function stageGuideForReference(reference, dimensions) {
+  const guide = {
+    id: reference.id,
+    type: reference.type,
+    label: reference.label,
+    tone: reference.tone,
+    style: reference.style || {}
+  };
+  if (reference.type === "point") {
+    const x = snapStageMeter(reference.x, dimensions.width);
+    const y = snapStageMeter(reference.y, dimensions.height);
+    return {
+      ...guide,
+      x,
+      y,
+      xPercent: percentOf(x, dimensions.width),
+      yPercent: percentOf(y, dimensions.height)
+    };
+  }
+  const x1 = snapStageMeter(reference.x1, dimensions.width);
+  const y1 = snapStageMeter(reference.y1, dimensions.height);
+  const x2 = snapStageMeter(reference.x2, dimensions.width);
+  const y2 = snapStageMeter(reference.y2, dimensions.height);
+  return {
+    ...guide,
+    x1,
+    y1,
+    x2,
+    y2,
+    x1Percent: percentOf(x1, dimensions.width),
+    y1Percent: percentOf(y1, dimensions.height),
+    x2Percent: percentOf(x2, dimensions.width),
+    y2Percent: percentOf(y2, dimensions.height),
+    ...(x1 === x2 ? { xPercent: percentOf(x1, dimensions.width) } : {}),
+    ...(y1 === y2 ? { yPercent: percentOf(y1, dimensions.height) } : {})
+  };
+}
+
+function stageReferenceGuidesFor(input, dimensions) {
+  const referencesVisible = input.showStageReferences !== false;
+  if (!referencesVisible) return [];
+  return stageReferenceRenderItems(input.stageReferences || input.stage?.stageReferences, {
+    frontZone: input.frontZone || input.stage?.frontZone,
+    showLabels: input.showStageReferenceLabels !== false,
+    stage: dimensions,
+    visible: true
+  }).map((reference) => stageGuideForReference(reference, dimensions));
 }
 
 function formationTimingFor(section) {
@@ -97,6 +174,8 @@ export function createV2EditorRuntime(input = {}) {
   const canDuplicate = !readonly && (hasPerformerSelection || hasFormationSelection);
   const canDelete = !readonly && (hasPerformerSelection || Boolean(hasFormationSelection && sortedSections.length > 1));
   const activeTab = activeTabFor(input);
+  const currentSectionId = currentSectionIdFor(input);
+  const currentSection = normalizeArray(input.sortedSections || input.timeline?.sortedSections).find((section) => section.id === currentSectionId) || null;
 
   const shell = {
     projectTitle: input.projectTitle || input.shell?.projectTitle || input.title || "Movemap",
@@ -108,12 +187,17 @@ export function createV2EditorRuntime(input = {}) {
   const stage = {
     dragPositions: input.dragPositions || input.stage?.dragPositions || null,
     frontZone: input.frontZone || input.stage?.frontZone || null,
+    grid: stageGridFor(stageDimensions),
     performers: normalizeArray(input.performers || input.stage?.performers),
+    referenceGuides: stageReferenceGuidesFor(input, stageDimensions),
+    referenceLabelsVisible: input.showStageReferences !== false && input.showStageReferenceLabels !== false,
+    referencesVisible: input.showStageReferences !== false,
     stageDimensions,
+    audienceGuideYPercent: percentOf(snapStageMeter((input.frontZone || input.stage?.frontZone)?.y ?? stageDimensions.height * 0.7, stageDimensions.height), stageDimensions.height),
     visiblePositions: input.visiblePositions || input.stage?.visiblePositions || {}
   };
   const selection = {
-    currentSectionId: currentSectionIdFor(input),
+    currentSectionId,
     selectedPerformerId,
     selectedPerformerIds,
     selectedSection,
@@ -160,6 +244,17 @@ export function createV2EditorRuntime(input = {}) {
     canOpenRoleActions: !readonly && Boolean(selectedPerformerId),
     canDuplicate: capabilities.canDuplicate && hasPerformerSelection,
     canDelete: capabilities.canDelete && hasPerformerSelection
+  };
+  const stageInfoPerformer = stage.performers.find((performer) => performer.id === selectedPerformerId)
+    || stage.performers.find((performer) => selectedPerformerIds.includes(performer.id))
+    || null;
+  const stageInfoFormation = selectedSection || currentSection || sortedSections[0] || null;
+  const stageInfoLine = {
+    visible: true,
+    leftLabel: stageInfoPerformer
+      ? `${performerStageInfoLabel(stageInfoPerformer)} · ${String(stageInfoPerformer.group || stageInfoPerformer.role || "No role").trim()}`
+      : String(stageInfoFormation?.name || stageInfoFormation?.label || stageInfoFormation?.id || "No formation").trim(),
+    rightLabel: `${input.snapEnabled === false ? "Snap off" : "Snap on"} · ${stageDimensionLabel(stageDimensions)} · ${input.snapEnabled === false ? "free move" : "1m grid"}`
   };
   const topActions = [
     { key: "share", icon: "share", label: "공유", disabled: false },
@@ -342,6 +437,7 @@ export function createV2EditorRuntime(input = {}) {
     share,
     shell,
     stage,
+    stageInfoLine,
     stageTask,
     timeline,
     timelineTask,

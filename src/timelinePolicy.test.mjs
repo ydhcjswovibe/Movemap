@@ -264,6 +264,23 @@ test("buildTimelineTicks uses readable intervals and includes the final duration
   assert.equal(ticks.at(-1).percent, 100);
 });
 
+test("buildTimelineTicks can render micro ticks with labeled minor and major intervals", () => {
+  const ticks = buildTimelineTicks(12, {
+    intervalSeconds: 1,
+    labelIntervalSeconds: 5,
+    majorIntervalSeconds: 10,
+    pixelsPerSecond: 56,
+    scrollX: 0,
+    viewportWidth: 620
+  });
+
+  assert.deepEqual(ticks.slice(0, 6).map((tick) => tick.time), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(ticks.slice(0, 6).map((tick) => tick.label), ["0s", "", "", "", "", "5s"]);
+  assert.equal(ticks.find((tick) => tick.time === 1).importance, "micro");
+  assert.equal(ticks.find((tick) => tick.time === 5).importance, "minor");
+  assert.equal(ticks.find((tick) => tick.time === 10).importance, "major");
+});
+
 test("buildWaveformBars returns deterministic normalized bar heights", () => {
   const bars = buildWaveformBars(8);
 

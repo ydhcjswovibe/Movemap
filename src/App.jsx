@@ -1168,6 +1168,9 @@ function App() {
   const v2TimelineScrollX = clampValue(timelineScrollX, 0, v2TimelineMaxScrollX());
   const v2PlayheadPixel = clamp(currentTime, 0, v2TimelineDuration) * timelinePixelsPerSecond - v2TimelineScrollX;
   const v2TimelineTicks = useMemo(() => buildTimelineTicks(v2TimelineDuration, {
+    intervalSeconds: 1,
+    labelIntervalSeconds: 5,
+    majorIntervalSeconds: 10,
     pixelsPerSecond: timelinePixelsPerSecond,
     scrollX: timelineScrollX,
     viewportWidth: timelineViewportWidth
