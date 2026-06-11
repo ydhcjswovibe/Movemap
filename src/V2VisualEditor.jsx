@@ -1219,7 +1219,7 @@ function V2VisualEditor({ model, actions = {} }) {
                 const section = sectionById.get(targetSectionId) || sections[index] || {};
                 const isMove = segment.kind === "move";
                 const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
-                if (isMove || !section.id || !capabilities.canEditTimeline || !(segment.resizable || sectionSelected)) return null;
+                if (isMove || !section.id || !capabilities.canEditTimeline || !sectionSelected) return null;
                 const sectionIndex = sections.findIndex((item) => item.id === section.id);
                 return (
                   <React.Fragment key={`handles-${segment.kind || "hold"}-${section.id}-${index}`}>

@@ -1261,10 +1261,31 @@ test.describe("connected v2 editor route", () => {
     await page.waitForTimeout(100);
 
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+    const finaleBlock = root.locator('[data-v2-formation-block="finale"][data-v2-segment-kind="hold"]');
+    const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
     await diamondBlock.click();
     await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
     const leftHandle = root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]');
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]');
+    await expect(leftHandle).toBeVisible();
+    await expect(rightHandle).toBeVisible();
+    await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="intro"]')).toHaveCount(0);
+    await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="finale"]')).toHaveCount(0);
+
+    await finaleBlock.click();
+    await expect(finaleBlock).toHaveAttribute("aria-pressed", "true");
+    await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="diamond"]')).toHaveCount(0);
+    await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="finale"]')).toBeVisible();
+    await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="finale"]')).toBeVisible();
+
+    await introBlock.click();
+    await expect(introBlock).toHaveAttribute("aria-pressed", "true");
+    await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="intro"]')).toHaveCount(0);
+    await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]')).toBeVisible();
+    await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="finale"]')).toHaveCount(0);
+
+    await diamondBlock.click();
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
     await expect(leftHandle).toBeVisible();
     await expect(rightHandle).toBeVisible();
 
