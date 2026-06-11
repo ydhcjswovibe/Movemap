@@ -1288,6 +1288,26 @@ test.describe("connected v2 editor route", () => {
     await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
     await expect(leftHandle).toBeVisible();
     await expect(rightHandle).toBeVisible();
+    await expect.poll(() => root.evaluate(() => {
+      const block = document.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+      const left = document.querySelector('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]');
+      const right = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]');
+      if (!block || !left || !right) return null;
+      const blockRect = block.getBoundingClientRect();
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return {
+        leftTopDelta: Math.round(leftRect.top - blockRect.top),
+        leftBottomDelta: Math.round(leftRect.bottom - blockRect.bottom),
+        rightTopDelta: Math.round(rightRect.top - blockRect.top),
+        rightBottomDelta: Math.round(rightRect.bottom - blockRect.bottom)
+      };
+    })).toEqual({
+      leftTopDelta: 0,
+      leftBottomDelta: 0,
+      rightTopDelta: 0,
+      rightBottomDelta: 0
+    });
 
     const timingBefore = await v2TimingSnapshot(page);
     const navigationBefore = await v2TimelineNavigationState(root);
