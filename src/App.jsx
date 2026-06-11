@@ -48,7 +48,10 @@ import {
   quantizeTimelineTime,
   resolveFormationAddTarget,
   resolveFormationPointDrop,
-  snapFormationTime
+  snapFormationTime,
+  extractStoredWaveformFromFile,
+  waveformBarsForTimeline,
+  waveformMatchesAudio
 } from "./timelinePolicy.mjs";
 
 const STORAGE_KEY = "movemap-project";
@@ -311,6 +314,17 @@ function audioMetadataFromFile(file, storagePath, fingerprint) {
     bucket: MOVEMAP_AUDIO_BUCKET,
     publicUrl: audioPublicUrl(storagePath, supabaseConfig()),
     uploadedAt: new Date().toISOString()
+  };
+}
+
+function localAudioMetadataFromFile(file, fingerprint, waveform = null) {
+  return {
+    fileName: file.name,
+    size: file.size,
+    type: file.type || "audio/*",
+    lastModified: file.lastModified || 0,
+    fingerprint,
+    ...(waveform ? { waveform } : {})
   };
 }
 
@@ -840,6 +854,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioSrc, setAudioSrc] = useState("");
   const [audioUploadStatus, setAudioUploadStatus] = useState("idle");
+  const [audioWaveformStatus, setAudioWaveformStatus] = useState("idle");
   const [shareUrl, setShareUrl] = useState("");
   const [editShareUrl, setEditShareUrl] = useState("");
   const [status, setStatus] = useState("");
@@ -902,6 +917,7 @@ function App() {
   const localAudioUrlRef = useRef("");
   const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
+  const audioWaveformRequestRef = useRef(0);
   const isStitchEditorActive = isStitchMobileViewport && !isV2Route;
 
   function closeTopActionMenu() {
@@ -1009,6 +1025,7 @@ function App() {
       if (options.clearWhenMissing) {
         setAudioSrc("");
         setAudioUploadStatus("idle");
+        setAudioWaveformStatus("idle");
         pendingServerAudioLocalUrlRef.current = "";
       }
       return false;
@@ -1020,7 +1037,24 @@ function App() {
     pendingServerAudioLocalUrlRef.current = "";
     setAudioSrc(restoredAudioUrl);
     setAudioUploadStatus("uploaded");
+    setAudioWaveformStatus(waveformMatchesAudio(nextPlan?.audio?.waveform, nextPlan?.audio) ? "ready" : "idle");
     return true;
+  }
+
+  async function analyzeAudioWaveform(file, fingerprint, requestId) {
+    setAudioWaveformStatus("analyzing");
+    try {
+      const waveform = await extractStoredWaveformFromFile(file, { fingerprint });
+      if (audioWaveformRequestRef.current === requestId) {
+        setAudioWaveformStatus(waveform ? "ready" : "failed");
+      }
+      return waveform;
+    } catch {
+      if (audioWaveformRequestRef.current === requestId) {
+        setAudioWaveformStatus("failed");
+      }
+      return null;
+    }
   }
 
   useEffect(() => {
@@ -1180,7 +1214,7 @@ function App() {
     scrollX: timelineScrollX,
     viewportWidth: timelineViewportWidth
   }), [timelineMax, timelinePixelsPerSecond, timelineScrollX, timelineViewportWidth]);
-  const waveformBars = useMemo(() => buildWaveformBars(96), []);
+  const renderedWaveformStatus = waveformMatchesAudio(plan?.audio?.waveform, plan?.audio) ? "ready" : audioWaveformStatus;
   const playheadPixel = sliderTime * timelinePixelsPerSecond - timelineScrollX;
   const v2TimelineDuration = Math.max(
     duration || 0,
@@ -1191,6 +1225,16 @@ function App() {
   const v2TimelineContentWidth = Math.max(timelineViewportWidth, timelineContentWidth, v2TimelineDuration * timelinePixelsPerSecond + 80);
   const v2TimelineScrollX = clampValue(timelineScrollX, 0, v2TimelineMaxScrollX());
   const v2PlayheadPixel = clamp(currentTime, 0, v2TimelineDuration) * timelinePixelsPerSecond - v2TimelineScrollX;
+  const waveformPlayedPercent = v2TimelineDuration > 0 ? clamp((currentTime / v2TimelineDuration) * 100, 0, 100) : 0;
+  const waveformBars = useMemo(() => {
+    const storedWaveform = plan?.audio?.waveform;
+    if (waveformMatchesAudio(storedWaveform, plan?.audio)) {
+      const count = Math.max(96, Math.min(2400, Math.ceil(v2TimelineContentWidth / 5.5)));
+      const bars = waveformBarsForTimeline(storedWaveform, { count });
+      if (bars.length) return bars;
+    }
+    return buildWaveformBars(96);
+  }, [plan?.audio, v2TimelineContentWidth]);
   const v2TimelineTicks = useMemo(() => buildTimelineTicks(v2TimelineDuration, {
     intervalSeconds: 1,
     labelIntervalSeconds: 5,
@@ -3692,6 +3736,8 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
     const fingerprint = audioFingerprint(file);
+    const waveformRequestId = audioWaveformRequestRef.current + 1;
+    audioWaveformRequestRef.current = waveformRequestId;
     const restoredAudioUrl = resolveAudioUrl(plan.audio);
     const replacingAudio = Boolean(restoredAudioUrl || audioSrc);
     if (restoredAudioUrl && audioMatchesFile(plan.audio, file, fingerprint)) {
@@ -3706,6 +3752,19 @@ function App() {
       setAudioSrc(restoredAudioUrl);
       setAudioUploadStatus("uploaded");
       setStatus(`이미 저장된 서버 음악을 다시 연결했습니다: ${plan.audio.fileName || file.name}`);
+      if (waveformMatchesAudio(plan.audio?.waveform, plan.audio)) {
+        setAudioWaveformStatus("ready");
+      } else {
+        const waveform = await analyzeAudioWaveform(file, fingerprint, waveformRequestId);
+        if (waveform && audioWaveformRequestRef.current === waveformRequestId) {
+          updatePlan((current) => current ? ({
+            ...current,
+            audio: current?.audio && audioMatchesFile(current.audio, file, fingerprint)
+              ? { ...current.audio, waveform }
+              : current?.audio
+          }) : current, { history: false });
+        }
+      }
       event.target.value = "";
       return;
     }
@@ -3717,10 +3776,17 @@ function App() {
     rejectedAudioUrlsRef.current = new Set();
     setAudioSrc(localUrl);
     setAudioUploadStatus("uploading");
+    const waveformPromise = analyzeAudioWaveform(file, fingerprint, waveformRequestId);
     setStatus(replacingAudio ? "새 음악으로 교체하는 중..." : "음악을 선택했습니다. 서버에 업로드하는 중...");
     setStatusRecovery("");
     try {
-      const audio = await uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint, currentAuthRequest());
+      const [uploadedAudio, waveform] = await Promise.all([
+        uploadAudioToSupabase(file, plan?.localProjectId || plan?.title || "project", fingerprint, currentAuthRequest()),
+        waveformPromise
+      ]);
+      const audio = waveform && audioWaveformRequestRef.current === waveformRequestId
+        ? { ...uploadedAudio, waveform }
+        : uploadedAudio;
       updatePlan((current) => ({ ...current, audio }));
       rejectedAudioUrlsRef.current = new Set();
       setAudioSrc(resolveAudioUrl(audio));
@@ -3728,6 +3794,13 @@ function App() {
       setStatus(`음악 저장됨: ${audio.fileName}`);
       event.target.value = "";
     } catch (error) {
+      const waveform = await waveformPromise;
+      if (!replacingAudio && audioWaveformRequestRef.current === waveformRequestId) {
+        updatePlan((current) => current ? ({
+          ...current,
+          audio: localAudioMetadataFromFile(file, fingerprint, waveform)
+        }) : current, { history: false });
+      }
       setAudioUploadStatus("failed");
       setStatusRecovery(replacingAudio ? "audio" : "");
       setStatus(replacingAudio
@@ -4185,6 +4258,7 @@ function App() {
     setIsPlaying(false);
     setAudioSrc("");
     setAudioUploadStatus("idle");
+    setAudioWaveformStatus("idle");
     closeTopActionMenu();
     setIsToolDrawerOpen(false);
     setUndoStack([]);
@@ -5028,6 +5102,7 @@ function App() {
     undoPlan,
     visiblePositions,
     waveformBars,
+    waveformStatus: renderedWaveformStatus,
     zoomTimelineBy
   });
   const v2EditorModel = createV2EditorRuntime({
@@ -5093,6 +5168,8 @@ function App() {
     timelineBlockedEdge,
     timelineViewportWidth,
     timelineViewportRef,
+    waveformPlayedPercent,
+    waveformStatus: renderedWaveformStatus,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
     toggleStageReferences: () => setShowStageReferences((value) => !value),

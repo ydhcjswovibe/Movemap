@@ -191,7 +191,9 @@ export function createStitchEditorRuntime(input = {}) {
     timelineTicks: input.timelineTicks,
     timelineVisualSegments: input.timelineVisualSegments,
     timelineZoomLabel: input.timelineZoomLabel,
-    waveformBars: input.waveformBars
+    waveformBars: input.waveformBars,
+    waveformPlayedPercent: input.waveformPlayedPercent,
+    waveformStatus: input.waveformStatus
   };
   const selection = {
     selectedPerformerId: input.selectedPerformerId,

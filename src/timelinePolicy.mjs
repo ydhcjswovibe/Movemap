@@ -45,4 +45,10 @@ export {
   trimFormationSegment
 } from "./formationTimelineEdit.mjs";
 
-export { buildWaveformBars } from "./waveformPolicy.mjs";
+export {
+  buildStoredWaveformFromAudioBuffer,
+  buildWaveformBars,
+  extractStoredWaveformFromFile,
+  waveformBarsForTimeline,
+  waveformMatchesAudio
+} from "./waveformPolicy.mjs";

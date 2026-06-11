@@ -5,7 +5,6 @@ import "./v2VisualEditor.css";
 
 const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
 const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
-const V2_TIMELINE_HANDLE_HIT_WIDTH_PX = 24;
 
 const demoPerformers = [
   { id: "A3", label: "A3", role: "groupA", color: "#256fe8", x: 20, y: 20 },
@@ -293,28 +292,20 @@ function V2VisualEditor({ model, actions = {} }) {
   const currentSectionId = timeline.currentSectionId || "";
   const timelineContentWidth = Math.max(320, Number(timeline.timelineContentWidth ?? timeline.contentWidth) || 320);
   const timelineScrollX = Math.max(0, Number(timeline.timelineScrollX ?? timeline.scrollX) || 0);
-  const timelineViewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
   const rawPlayheadLeft = Number(timeline.playheadPixel);
   const playheadLeft = Number.isFinite(rawPlayheadLeft) ? rawPlayheadLeft : 0;
   const visualSegments = (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments)?.length ? (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments) : demoTimelineSegments;
-  const waveformSamples = timeline.waveformBars?.length ? timeline.waveformBars.slice(0, 96) : demoWaveformSamples;
+  const waveformSamples = timeline.waveformBars?.length ? timeline.waveformBars : demoWaveformSamples;
+  const waveformPlayedPercent = clampPercent(Number(timeline.waveformPlayedPercent) || 0);
+  const waveformStatus = timeline.waveformStatus || "idle";
   const timelineContentStyle = {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
   };
-  const timelineHandleStyle = (segment, edge) => {
-    if (!timelineViewportWidth || edge !== "right") return undefined;
-    const segmentLeft = Number(segment?.leftPx) || 0;
-    const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
-    const contentX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
-    const viewportX = contentX - timelineScrollX;
-    const halfHandle = V2_TIMELINE_HANDLE_HIT_WIDTH_PX / 2;
-    const clampedViewportX = Math.max(halfHandle, Math.min(Math.max(halfHandle, timelineViewportWidth - halfHandle), viewportX));
-    const localCenterX = clampedViewportX + timelineScrollX - segmentLeft;
-    return {
-      left: `${localCenterX - halfHandle}px`,
-      right: "auto"
-    };
+  const waveformContentStyle = {
+    ...timelineContentStyle,
+    "--waveform-played-percent": `${waveformPlayedPercent}%`,
+    "--waveform-count": waveformSamples.length
   };
   const blockDragPreview = timeline.timelineBlockDragPreview || null;
   const blockDragPreviewAction = blockDragPreview?.dropAction || "";
@@ -378,6 +369,13 @@ function V2VisualEditor({ model, actions = {} }) {
   const handlePlayheadPointerDown = (event) => {
     event.stopPropagation();
     runtimeActions.timelinePointerDown?.(event, { kind: "playhead" });
+  };
+  const isTimelineHandleEvent = (event) => Boolean(
+    event?.target?.closest?.("[data-v2-timeline-handle]")
+  );
+  const consumeTimelineHandleEvent = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
   };
   const beginBlockTapGesture = (event, section, isMove) => {
     blockTapGestureRef.current?.cleanup?.();
@@ -1064,9 +1062,11 @@ function V2VisualEditor({ model, actions = {} }) {
                         aria-label={isMove ? `${segmentBadge} Move transition ${durationLabel}` : `${segmentBadge} ${segmentTitle} formation ${durationLabel}`}
                         aria-pressed={sectionSelected}
                         onPointerDownCapture={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           beginBlockTapGesture(event, section, isMove);
                         }}
                         onMouseDownCapture={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           beginBlockTapGesture({
                             clientX: event.clientX,
                             clientY: event.clientY,
@@ -1075,6 +1075,7 @@ function V2VisualEditor({ model, actions = {} }) {
                           }, section, isMove);
                         }}
                         onMouseDown={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           beginBlockTapGesture({
                             clientX: event.clientX,
                             clientY: event.clientY,
@@ -1083,6 +1084,7 @@ function V2VisualEditor({ model, actions = {} }) {
                           }, section, isMove);
                         }}
                         onMouseUp={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           const gesture = blockTapGestureRef.current;
                           if (!gesture || isMove || !section.id || gesture.section?.id !== section.id) return;
                           gesture.cleanup?.();
@@ -1093,6 +1095,7 @@ function V2VisualEditor({ model, actions = {} }) {
                           }
                         }}
                         onPointerDown={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           event.stopPropagation();
                           if (isMove) {
                             runtimeActions.timelinePointerDown?.(event, { kind: "move-block", sectionId: section.id || "" });
@@ -1108,7 +1111,8 @@ function V2VisualEditor({ model, actions = {} }) {
                             runtimeActions.timelinePointerDown?.(event, { kind: "hold-block", sectionId: "" });
                           }
                         }}
-                        onClick={() => {
+                        onClick={(event) => {
+                          if (isTimelineHandleEvent(event)) return;
                           if (!isMove && section.id) runtimeActions.selectFormation?.(section);
                         }}
                       >
@@ -1122,22 +1126,24 @@ function V2VisualEditor({ model, actions = {} }) {
                               data-v2-timeline-handle="hold-left"
                               data-v2-section-id={section.id || ""}
                               aria-hidden="true"
-                              style={timelineHandleStyle(segment, "left")}
                               onPointerDown={(event) => {
-                                event.stopPropagation();
+                                consumeTimelineHandleEvent(event);
                                 runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
                               }}
+                              onMouseDown={consumeTimelineHandleEvent}
+                              onClick={consumeTimelineHandleEvent}
                             />
                             <span
                               className="v2-timeline-handle v2-timeline-handle-right"
                               data-v2-timeline-handle="hold-right"
                               data-v2-section-id={section.id || ""}
                               aria-hidden="true"
-                              style={timelineHandleStyle(segment, "right")}
                               onPointerDown={(event) => {
-                                event.stopPropagation();
+                                consumeTimelineHandleEvent(event);
                                 runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
                               }}
+                              onMouseDown={consumeTimelineHandleEvent}
+                              onClick={consumeTimelineHandleEvent}
                             />
                           </>
                         )}
@@ -1195,7 +1201,7 @@ function V2VisualEditor({ model, actions = {} }) {
               <CoolIcon name="note" />
               {capabilities.canAddAudio && <button className="v2-track-add-button" type="button" aria-label="음악 추가" onClick={runtimeActions.addAudio}>+</button>}
             </div>
-            <div className="v2-waveform" aria-hidden="true" data-v2-waveform>
+            <div className="v2-waveform" aria-hidden="true" data-v2-waveform data-v2-waveform-status={waveformStatus}>
               <div
                 className="v2-timeline-viewport"
                 onPointerDown={(event) => runtimeActions.timelinePointerDown?.(event, { kind: "audio-lane" })}
@@ -1209,7 +1215,7 @@ function V2VisualEditor({ model, actions = {} }) {
               >
                 <div
                   className="v2-timeline-content v2-waveform-content"
-                  style={timelineContentStyle}
+                  style={waveformContentStyle}
                   onPointerDown={(event) => {
                     event.stopPropagation();
                     runtimeActions.timelinePointerDown?.(event, { kind: "waveform" });
@@ -1220,7 +1226,8 @@ function V2VisualEditor({ model, actions = {} }) {
                       key={`${sample}-${index}`}
                       style={{
                         "--sample-height": `${Math.round(8 + sample * 38)}px`,
-                        "--sample-alpha": `${0.34 + sample * 0.6}`
+                        "--sample-alpha": `${0.34 + sample * 0.6}`,
+                        "--sample-left": `${((index + 0.5) / Math.max(1, waveformSamples.length)) * 100}%`
                       }}
                     />
                   ))}

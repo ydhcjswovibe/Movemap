@@ -245,7 +245,9 @@ export function createV2EditorRuntime(input = {}) {
     timelineBlockedEdge: input.timelineBlockedEdge || input.timeline?.timelineBlockedEdge || null,
     timelineBlockDragPreview: input.timelineBlockDragPreview || input.timeline?.timelineBlockDragPreview || null,
     timelineReorderGuide: input.timelineReorderGuide || input.timeline?.timelineReorderGuide || null,
-    waveformBars: normalizeArray(input.waveformBars || input.timeline?.waveformBars)
+    waveformBars: normalizeArray(input.waveformBars || input.timeline?.waveformBars),
+    waveformPlayedPercent: finiteNumber(input.waveformPlayedPercent ?? input.timeline?.waveformPlayedPercent, 0),
+    waveformStatus: input.waveformStatus || input.timeline?.waveformStatus || "idle"
   };
   const capabilities = {
     canAddAudio: !readonly,

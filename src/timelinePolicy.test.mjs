@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  buildStoredWaveformFromAudioBuffer,
   buildTimelineTicks,
   buildWaveformBars,
   calculateAnchoredZoomScrollX,
@@ -32,7 +33,9 @@ import {
   snapFormationTime,
   timeToPixels,
   timeToPercent,
-  trimFormationSegment
+  trimFormationSegment,
+  waveformBarsForTimeline,
+  waveformMatchesAudio
 } from "./timelinePolicy.mjs";
 
 const timelinePolicySource = readFileSync(new URL("./timelinePolicy.mjs", import.meta.url), "utf8");
@@ -287,6 +290,78 @@ test("buildWaveformBars returns deterministic normalized bar heights", () => {
   assert.equal(bars.length, 8);
   assert.deepEqual(bars, buildWaveformBars(8));
   assert.ok(bars.every((bar) => bar >= 0 && bar <= 1));
+});
+
+test("buildStoredWaveformFromAudioBuffer stores compact normalized peaks with audio metadata", () => {
+  const buffer = {
+    duration: 1,
+    sampleRate: 8,
+    numberOfChannels: 2,
+    getChannelData(channel) {
+      return channel === 0
+        ? Float32Array.from([0, 0.25, -0.5, 1, 0, 0, 0.2, -0.2])
+        : Float32Array.from([0.1, -0.2, 0.4, -0.8, 0, 0.75, -1, 0]);
+    }
+  };
+
+  const waveform = buildStoredWaveformFromAudioBuffer(buffer, {
+    fingerprint: "song-123",
+    generatedAt: "2026-06-11T00:00:00.000Z",
+    samplesPerSecond: 4
+  });
+
+  assert.deepEqual(waveform, {
+    version: 1,
+    samplesPerSecond: 4,
+    duration: 1,
+    fingerprint: "song-123",
+    generatedAt: "2026-06-11T00:00:00.000Z",
+    peaks: [64, 255, 191, 255]
+  });
+});
+
+test("waveform render helpers reject mismatched audio and expand stored peaks for timeline width", () => {
+  const audio = {
+    fingerprint: "song-123",
+    waveform: {
+      version: 1,
+      samplesPerSecond: 2,
+      duration: 2,
+      fingerprint: "song-123",
+      generatedAt: "2026-06-11T00:00:00.000Z",
+      peaks: [0, 128, 255, 64]
+    }
+  };
+
+  assert.equal(waveformMatchesAudio(audio.waveform, audio), true);
+  assert.equal(waveformMatchesAudio(audio.waveform, { fingerprint: "other" }), false);
+  assert.deepEqual(waveformBarsForTimeline(audio.waveform, { count: 8 }).map((value) => Number(value.toFixed(3))), [
+    0.18,
+    0.18,
+    0.502,
+    0.502,
+    1,
+    1,
+    0.251,
+    0.251
+  ]);
+});
+
+test("waveform render helpers can keep dense bars for long timelines", () => {
+  const waveform = {
+    version: 1,
+    samplesPerSecond: 10,
+    duration: 90,
+    fingerprint: "long-song",
+    generatedAt: "2026-06-11T00:00:00.000Z",
+    peaks: Array.from({ length: 900 }, (_, index) => index % 256)
+  };
+
+  const bars = waveformBarsForTimeline(waveform, { count: 900 });
+
+  assert.equal(bars.length, 900);
+  assert.equal(bars[0], 0.18);
+  assert.equal(Number(bars[255].toFixed(3)), 1);
 });
 
 function compactTiming(sections) {

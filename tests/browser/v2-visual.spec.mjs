@@ -111,6 +111,27 @@ function seededLongTimelineProject() {
   };
 }
 
+function seededWaveformProject() {
+  const project = seededV2Project();
+  return {
+    ...project,
+    audio: {
+      fileName: "fixture-song.mp3",
+      size: 123456,
+      type: "audio/mpeg",
+      fingerprint: "fixture-song-123456",
+      waveform: {
+        version: 1,
+        samplesPerSecond: 2,
+        duration: 2,
+        fingerprint: "fixture-song-123456",
+        generatedAt: "2026-06-11T00:00:00.000Z",
+        peaks: [0, 128, 255, 64]
+      }
+    }
+  };
+}
+
 function seededCompactMoveProject() {
   const project = seededV2Project();
   return {
@@ -157,6 +178,12 @@ async function expectInsideViewport(page, locator) {
 
 async function storedProject(page) {
   return page.evaluate((storageKey) => JSON.parse(localStorage.getItem(storageKey)), STORAGE_KEY);
+}
+
+async function waveformSampleHeights(root) {
+  return root.locator("[data-v2-waveform] span:not(.v2-track-playhead)").evaluateAll((nodes) => (
+    nodes.slice(0, 8).map((node) => getComputedStyle(node).getPropertyValue("--sample-height").trim())
+  ));
 }
 
 async function touchDrag(page, locator, deltaX, deltaY = 0, steps = 8) {
@@ -300,6 +327,12 @@ async function v2TimingSnapshot(page) {
       width: block.style.getPropertyValue("--segment-width")
     }))
   ));
+}
+
+async function expectNoV2CompetingTimelineGesture(root) {
+  await expect(root.locator("[data-v2-reorder-preview]")).toHaveCount(0);
+  await expect(root.locator(".v2-floating-block-preview")).toHaveCount(0);
+  await expect(root.locator("[data-v2-drop-action]")).toHaveCount(0);
 }
 
 async function v2ScrubState(page, root) {
@@ -488,6 +521,34 @@ test.describe("connected v2 editor route", () => {
     await expectInsideViewport(page, timeline);
     await expectInsideViewport(page, bottomRail);
     await page.screenshot({ path: "test-results/v2-stage-timeline-bottom-390x844.png", fullPage: false });
+  });
+
+  test("renders stored audio waveform peaks with played-region progress on v2", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page, seededWaveformProject());
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const waveform = root.locator("[data-v2-waveform]");
+    await expect(waveform).toHaveAttribute("data-v2-waveform-status", "ready");
+    await expect.poll(() => waveform.locator("span:not(.v2-track-playhead)").count()).toBeGreaterThan(96);
+    await expect.poll(() => waveformSampleHeights(root)).toEqual([
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px"
+    ]);
+
+    await root.locator(".v2-waveform-content").evaluate((node) => {
+      node.style.setProperty("--waveform-played-percent", "42%");
+    });
+    await expect.poll(() => root.locator(".v2-waveform-content").evaluate((node) => (
+      getComputedStyle(node).getPropertyValue("--waveform-played-percent").trim()
+    ))).toBe("42%");
   });
 
   test("recalculates V2 stage guides and token size from changed stage dimensions", async ({ page }) => {
@@ -1092,6 +1153,7 @@ test.describe("connected v2 editor route", () => {
     await expect(rightHandle).toBeVisible();
 
     const timingBefore = await v2TimingSnapshot(page);
+    const navigationBefore = await v2TimelineNavigationState(root);
     expect(timingBefore.find((section) => section.id === "diamond")).toMatchObject({
       time: 12,
       start: 8,
@@ -1113,13 +1175,16 @@ test.describe("connected v2 editor route", () => {
     expect(diamondAfterHoldLeftTrim.time).toBeLessThanOrEqual(10.7);
     expect(diamondAfterHoldLeftTrim.end).toBe(diamondAfterHoldLeftTrim.time);
     expect(diamondAfterHoldLeftTrim.moveDuration).toBeCloseTo(diamondAfterHoldLeftTrim.time - diamondAfterHoldLeftTrim.start, 5);
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
+    expect((await v2TimelineNavigationState(root)).transform).toBe(navigationBefore.transform);
+    await expectNoV2CompetingTimelineGesture(root);
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeEnabled();
   });
 
   test("readonly V2 routes do not render trim handles or mutate timing", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {
-      ...seededV2Project(),
+      ...seededWaveformProject(),
       title: "Readonly Timeline Fixture",
       shareLinks: {
         view: { projectId: "readonly-timeline-project", token: "", enabled: true },
@@ -1135,6 +1200,18 @@ test.describe("connected v2 editor route", () => {
     await page.goto("/share/readonly-timeline-project/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
+    await expect(root.locator("[data-v2-waveform]")).toHaveAttribute("data-v2-waveform-status", "ready");
+    await expect.poll(() => root.locator("[data-v2-waveform] span:not(.v2-track-playhead)").count()).toBeGreaterThan(96);
+    await expect.poll(() => waveformSampleHeights(root)).toEqual([
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px",
+      "15px"
+    ]);
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
     await diamondBlock.click();
     await expect(root.locator("[data-v2-timeline-handle]")).toHaveCount(0);
@@ -1826,6 +1903,7 @@ test.describe("connected v2 editor route", () => {
     await expect(introBlock).toHaveAttribute("aria-pressed", "true");
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
     await expect(rightHandle).toBeVisible();
+    const navigationBefore = await v2TimelineNavigationState(root);
     const shrinkHandleBox = await rightHandle.boundingBox();
     expect(shrinkHandleBox).not.toBeNull();
     await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2, shrinkHandleBox.y + shrinkHandleBox.height / 2);
@@ -1847,6 +1925,22 @@ test.describe("connected v2 editor route", () => {
       { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
       { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
     ]);
+    await expect(introBlock).toHaveAttribute("aria-pressed", "true");
+    expect((await v2TimelineNavigationState(root)).transform).toBe(navigationBefore.transform);
+    await expectNoV2CompetingTimelineGesture(root);
+
+    const postShrinkHitTarget = await page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const handleRect = handle?.getBoundingClientRect();
+      const hit = handleRect
+        ? document.elementFromPoint(handleRect.left + handleRect.width / 2, handleRect.top + handleRect.height / 2)
+        : null;
+      return {
+        hitHandle: hit?.getAttribute("data-v2-timeline-handle") || "",
+        hitSectionId: hit?.getAttribute("data-v2-section-id") || ""
+      };
+    });
+    expect(postShrinkHitTarget).toEqual({ hitHandle: "hold-right", hitSectionId: "intro" });
 
     const expandedHandleBox = await rightHandle.boundingBox();
     expect(expandedHandleBox).not.toBeNull();
@@ -1871,7 +1965,7 @@ test.describe("connected v2 editor route", () => {
     ]);
   });
 
-  test("V2 hold right trim remains reachable after shrinking near the lane edge", async ({ page }) => {
+  test("V2 hold right trim stays on the block edge while its hit target remains reachable after scroll", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactTimingProject = {
       ...seededV2Project(),
@@ -1909,13 +2003,57 @@ test.describe("connected v2 editor route", () => {
     const viewportBox = await viewport.boundingBox();
     expect(viewportBox).not.toBeNull();
     await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
-    await page.mouse.wheel(0, 180);
+    await page.mouse.wheel(0, 80);
     await page.waitForTimeout(100);
 
     const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
     await expect(introBlock).toHaveAttribute("aria-pressed", "true");
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
     await expect(rightHandle).toBeVisible();
+    const hitTargetState = await page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+      const moveBlock = document.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="move"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const moveRect = moveBlock?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const afterWidth = Number.parseFloat(after?.width || "0");
+      const afterRight = Number.parseFloat(after?.right || "0");
+      const visibleBarCenterX = handleRect && Number.isFinite(afterWidth) && Number.isFinite(afterRight)
+        ? handleRect.right - afterRight - afterWidth / 2
+        : null;
+      const hit = handleRect
+        ? document.elementFromPoint(handleRect.left + handleRect.width / 2, handleRect.top + handleRect.height / 2)
+        : null;
+      const moveCenterHit = moveRect
+        ? document.elementFromPoint(moveRect.left + moveRect.width / 2, moveRect.top + moveRect.height / 2)
+        : null;
+      const moveCenterBlock = moveCenterHit?.closest?.("[data-v2-segment-kind]") || null;
+      return {
+        hitHandle: hit?.getAttribute("data-v2-timeline-handle") || "",
+        hitSectionId: hit?.getAttribute("data-v2-section-id") || "",
+        moveCenterKind: moveCenterBlock?.getAttribute("data-v2-segment-kind") || "",
+        moveCenterSectionId: moveCenterBlock?.getAttribute("data-v2-formation-block") || "",
+        visibleBarDistanceFromBlockEdge: blockRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - blockRect.right)
+          : null,
+        visibleBarDistanceFromViewportEdge: viewportRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - viewportRect.left)
+          : null
+      };
+    });
+    expect(hitTargetState.hitHandle).toBe("hold-right");
+    expect(hitTargetState.hitSectionId).toBe("intro");
+    expect(hitTargetState.moveCenterKind).toBe("move");
+    expect(hitTargetState.moveCenterSectionId).toBe("diamond");
+    expect(hitTargetState.visibleBarDistanceFromBlockEdge).not.toBeNull();
+    expect(hitTargetState.visibleBarDistanceFromBlockEdge).toBeLessThanOrEqual(2);
+    expect(hitTargetState.visibleBarDistanceFromViewportEdge).not.toBeNull();
+    expect(hitTargetState.visibleBarDistanceFromViewportEdge).toBeGreaterThan(24);
+
     const shrinkHandleBox = await rightHandle.boundingBox();
     expect(shrinkHandleBox).not.toBeNull();
     await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2, shrinkHandleBox.y + shrinkHandleBox.height / 2);
@@ -1925,8 +2063,18 @@ test.describe("connected v2 editor route", () => {
 
     await expect.poll(async () => {
       const project = await storedProject(page);
-      return project.sections.find((section) => section.id === "diamond")?.time;
-    }).toBe(5);
+      return project.sections.map((section) => ({
+        id: section.id,
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
+      { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
+    ]);
 
     const expandedHandleBox = await rightHandle.boundingBox();
     expect(expandedHandleBox).not.toBeNull();
