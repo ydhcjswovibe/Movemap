@@ -1946,7 +1946,7 @@ test.describe("connected v2 editor route", () => {
     expect(guideMetrics.audienceInsideSurface).toBe(false);
     expect(guideMetrics.audienceTopAfterSurface).toBeGreaterThanOrEqual(0);
     expect(guideMetrics.audienceIsCautionZone).toBe(false);
-    expect(guideMetrics.audienceText).toBe("관객");
+    expect(guideMetrics.audienceText).toBe("");
     expect(guideMetrics.cautionBackground).not.toContain("radial-gradient");
     expect(guideMetrics.gridBackgroundImage).toContain("rgba(226, 232, 240, 0.18)");
     expect(guideMetrics.gridBackgroundSize).toContain("8.333");

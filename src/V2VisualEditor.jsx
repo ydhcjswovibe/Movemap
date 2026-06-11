@@ -318,7 +318,7 @@ function V2VisualEditor({ model, actions = {} }) {
     if (reference.id === "center-line") {
       return {
         "--guide-label-x": "50%",
-        "--guide-label-y": "6%"
+        "--guide-label-y": "0%"
       };
     }
     const lineMidX = ((Number(reference.x1Percent) || 0) + (Number(reference.x2Percent) || 0)) / 2;
@@ -733,7 +733,7 @@ function V2VisualEditor({ model, actions = {} }) {
                   .map((reference) => (
                   <span
                     key={`${reference.id}-label`}
-                    className={`v2-stage-guide-label v2-stage-guide-label-${reference.tone || "neutral"}`}
+                    className={`v2-stage-guide-label v2-stage-guide-label-${reference.tone || "neutral"} ${reference.id === "center-line" ? "v2-stage-guide-label-center" : ""}`}
                     style={referenceLabelStyle(reference)}
                   >
                     {reference.label}
@@ -876,7 +876,6 @@ function V2VisualEditor({ model, actions = {} }) {
                 <rect x="129" y="18" width="10" height="5" rx="2.5" />
                 <rect x="149" y="21" width="10" height="5" rx="2.5" />
               </g>
-              {stage.referenceLabelsVisible && <text x="110" y="10" textAnchor="middle">관객</text>}
             </svg>
           </div>
         </section>

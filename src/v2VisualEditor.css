@@ -556,6 +556,15 @@
   transform: translate(-50%, 42%);
 }
 
+.v2-stage-guide-label-center {
+  padding: 1px 3px;
+  background: transparent;
+  color: rgba(209, 217, 229, 0.62);
+  font-size: 8px;
+  font-weight: 760;
+  transform: translate(-50%, -155%);
+}
+
 .v2-cast-task-surface {
   position: absolute;
   left: 10px;
