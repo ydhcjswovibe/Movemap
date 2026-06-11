@@ -709,7 +709,9 @@ function V2VisualEditor({ model, actions = {} }) {
             {stage.referencesVisible && (
               <div className="v2-stage-guide-layer" data-v2-stage-guides aria-hidden="true">
                 <svg className="v2-stage-reference-svg" viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false">
-                  {(stage.referenceGuides || []).map((reference) => reference.type === "point" ? (
+                  {(stage.referenceGuides || [])
+                    .filter((reference) => !["front-line", "left-hash", "right-hash"].includes(reference.id))
+                    .map((reference) => reference.type === "point" ? (
                     <circle
                       key={reference.id}
                       className={`v2-stage-guide-point v2-stage-guide-${reference.tone || "neutral"}`}

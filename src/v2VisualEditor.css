@@ -551,7 +551,7 @@
   padding: 1px 3px;
   background: transparent;
   color: rgba(209, 217, 229, 0.62);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 760;
   transform: translate(-50%, 42%);
 }
@@ -560,7 +560,7 @@
   padding: 1px 3px;
   background: transparent;
   color: rgba(209, 217, 229, 0.62);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 760;
   transform: translate(-50%, -155%);
 }
@@ -749,8 +749,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-top: 1px solid rgba(255, 214, 151, 0.5);
-  background: linear-gradient(180deg, rgba(138, 54, 58, 0.16), rgba(11, 13, 16, 0.96));
+  border-top: 1px solid rgba(190, 201, 218, 0.24);
+  border-bottom: 1px solid rgba(108, 120, 138, 0.28);
+  background: linear-gradient(180deg, rgba(15, 18, 23, 0.98), rgba(9, 11, 15, 0.98));
   pointer-events: none;
 }
 
@@ -841,8 +842,9 @@
   grid-template-columns: 42px 168px 1fr 42px 42px;
   gap: 8px;
   padding: 4px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(108, 120, 138, 0.22);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: #12151a;
 }
 
 .v2-transport .v2-icon-button {

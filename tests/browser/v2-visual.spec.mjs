@@ -518,7 +518,6 @@ test.describe("connected v2 editor route", () => {
       const rect = surface.getBoundingClientRect();
       const grid = surface.querySelector("[data-v2-stage-grid]");
       const center = surface.querySelector("line.v2-stage-guide-neutral");
-      const front = surface.querySelector("line.v2-stage-guide-front");
       const audience = stageNode.querySelector("[data-v2-audience-guide]");
       const audienceRect = audience?.getBoundingClientRect();
       const caution = surface.querySelector("[data-v2-caution-zone]");
@@ -538,7 +537,6 @@ test.describe("connected v2 editor route", () => {
         centerX: center?.getAttribute("x1"),
         centerY1: center?.getAttribute("y1"),
         centerY2: center?.getAttribute("y2"),
-        frontY: front?.getAttribute("y1"),
         gridBackgroundSize: style?.backgroundSize || "",
         tokenWidth: tokenRect?.width || 0,
         expectedTokenSize: Math.max(18, Math.min(34, Math.min(cellWidth, cellHeight) * 0.8))
@@ -549,7 +547,6 @@ test.describe("connected v2 editor route", () => {
     expect(metrics.centerX).toBe("50");
     expect(metrics.centerY1).toBe("0");
     expect(metrics.centerY2).toBe("100");
-    expect(metrics.frontY).toBe("66.66666666666666");
     expect(metrics.cautionTopRatio).toBe(67);
     expect(metrics.audienceInsideSurface).toBe(false);
     expect(metrics.audienceTopAfterSurface).toBeGreaterThanOrEqual(0);
@@ -1904,7 +1901,6 @@ test.describe("connected v2 editor route", () => {
       const rect = surface.getBoundingClientRect();
       const grid = surface.querySelector("[data-v2-stage-grid]");
       const center = surface.querySelector("line.v2-stage-guide-neutral");
-      const front = surface.querySelector("line.v2-stage-guide-front");
       const audience = stageNode.querySelector("[data-v2-audience-guide]");
       const caution = surface.querySelector("[data-v2-caution-zone]");
       const audienceRect = audience?.getBoundingClientRect();
@@ -1928,7 +1924,6 @@ test.describe("connected v2 editor route", () => {
         centerX: center?.getAttribute("x1"),
         centerY1: center?.getAttribute("y1"),
         centerY2: center?.getAttribute("y2"),
-        frontY: front?.getAttribute("y1"),
         gridBackgroundImage: style?.backgroundImage || "",
         gridBackgroundSize: style?.backgroundSize || "",
         tokenHeight: tokenRect?.height || 0,
@@ -1941,7 +1936,6 @@ test.describe("connected v2 editor route", () => {
     expect(guideMetrics.centerX).toBe("50");
     expect(guideMetrics.centerY1).toBe("0");
     expect(guideMetrics.centerY2).toBe("100");
-    expect(guideMetrics.frontY).toBe("75");
     expect(guideMetrics.cautionTopRatio).toBe(75);
     expect(guideMetrics.audienceInsideSurface).toBe(false);
     expect(guideMetrics.audienceTopAfterSurface).toBeGreaterThanOrEqual(0);
