@@ -2453,6 +2453,107 @@ test.describe("connected v2 editor route", () => {
       { offset: 24, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" }
     ]);
 
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 220);
+    await expect.poll(() => page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const hit = handleRect
+        ? document.elementFromPoint(handleRect.left + handleRect.width / 2, handleRect.top + handleRect.height / 2)
+        : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.right - viewportRect.left : null,
+        handleCenterViewportX: handleRect && viewportRect ? handleRect.left + handleRect.width / 2 - viewportRect.left : null,
+        hitHandle: hit?.getAttribute("data-v2-timeline-handle") || "",
+        hitSectionId: hit?.getAttribute("data-v2-section-id") || "",
+        afterOpacity: after?.opacity || "",
+        afterVisibility: after?.visibility || ""
+      };
+    })).toMatchObject({
+      hitHandle: "hold-right",
+      hitSectionId: "intro",
+      afterOpacity: "0"
+    });
+    const offscreenEdgeState = await page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.right - viewportRect.left : null,
+        handleCenterViewportX: handleRect && viewportRect ? handleRect.left + handleRect.width / 2 - viewportRect.left : null,
+        viewportWidth: viewportRect?.width ?? null,
+        afterOpacity: after?.opacity || "",
+        afterVisibility: after?.visibility || ""
+      };
+    });
+    expect(offscreenEdgeState.edgeViewportX).not.toBeNull();
+    expect(offscreenEdgeState.edgeViewportX).toBeLessThan(-1);
+    expect(offscreenEdgeState.handleCenterViewportX).not.toBeNull();
+    expect(offscreenEdgeState.handleCenterViewportX).toBeGreaterThanOrEqual(0);
+    expect(offscreenEdgeState.handleCenterViewportX).toBeLessThanOrEqual(offscreenEdgeState.viewportWidth);
+    expect(offscreenEdgeState.afterVisibility).not.toBe("visible");
+
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, -220);
+    await expect.poll(() => page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const afterWidth = Number.parseFloat(after?.width || "0");
+      const afterRight = Number.parseFloat(after?.right || "0");
+      const visibleBarCenterX = handleRect && Number.isFinite(afterWidth) && Number.isFinite(afterRight)
+        ? handleRect.right - afterRight - afterWidth / 2
+        : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.right - viewportRect.left : null,
+        visibleBarDistanceFromBlockEdge: blockRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - blockRect.right)
+          : null,
+        afterOpacity: after?.opacity || "",
+        afterVisibility: after?.visibility || ""
+      };
+    })).toMatchObject({
+      afterOpacity: "1",
+      afterVisibility: "visible"
+    });
+    const restoredEdgeState = await page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+      const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const afterWidth = Number.parseFloat(after?.width || "0");
+      const afterRight = Number.parseFloat(after?.right || "0");
+      const visibleBarCenterX = handleRect && Number.isFinite(afterWidth) && Number.isFinite(afterRight)
+        ? handleRect.right - afterRight - afterWidth / 2
+        : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.right - viewportRect.left : null,
+        visibleBarDistanceFromBlockEdge: blockRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - blockRect.right)
+          : null
+      };
+    });
+    expect(restoredEdgeState.edgeViewportX).not.toBeNull();
+    expect(restoredEdgeState.edgeViewportX).toBeGreaterThanOrEqual(0);
+    expect(restoredEdgeState.visibleBarDistanceFromBlockEdge).not.toBeNull();
+    expect(restoredEdgeState.visibleBarDistanceFromBlockEdge).toBeLessThanOrEqual(2);
+
     const shrinkHandleBox = await rightHandle.boundingBox();
     expect(shrinkHandleBox).not.toBeNull();
     const shrinkStartX = shrinkHandleBox.x + shrinkHandleBox.width / 2 + 16;
@@ -2498,6 +2599,65 @@ test.describe("connected v2 editor route", () => {
       { id: "diamond", start: 5, end: 6, time: 6, moveDuration: 1 },
       { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
+
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 620);
+    const finaleBlock = root.locator('[data-v2-formation-block="finale"][data-v2-segment-kind="hold"]');
+    await finaleBlock.click();
+    await expect(finaleBlock).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await expect.poll(() => page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-left"][data-v2-section-id="finale"]');
+      const block = document.querySelector('[data-v2-formation-block="finale"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const afterWidth = Number.parseFloat(after?.width || "0");
+      const afterLeft = Number.parseFloat(after?.left || "0");
+      const visibleBarCenterX = handleRect && Number.isFinite(afterWidth) && Number.isFinite(afterLeft)
+        ? handleRect.left + afterLeft + afterWidth / 2
+        : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.left - viewportRect.left : null,
+        viewportWidth: viewportRect?.width ?? null,
+        visibleBarDistanceFromBlockEdge: blockRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - blockRect.left)
+          : null,
+        afterOpacity: after?.opacity || "",
+        afterVisibility: after?.visibility || ""
+      };
+    })).toMatchObject({
+      afterOpacity: "1",
+      afterVisibility: "visible"
+    });
+    const leftBoundaryEdgeState = await page.evaluate(() => {
+      const handle = document.querySelector('[data-v2-timeline-handle="hold-left"][data-v2-section-id="finale"]');
+      const block = document.querySelector('[data-v2-formation-block="finale"][data-v2-segment-kind="hold"]');
+      const viewport = document.querySelector(".v2-formation-lane .v2-timeline-viewport");
+      const handleRect = handle?.getBoundingClientRect();
+      const blockRect = block?.getBoundingClientRect();
+      const viewportRect = viewport?.getBoundingClientRect();
+      const after = handle ? getComputedStyle(handle, "::after") : null;
+      const afterWidth = Number.parseFloat(after?.width || "0");
+      const afterLeft = Number.parseFloat(after?.left || "0");
+      const visibleBarCenterX = handleRect && Number.isFinite(afterWidth) && Number.isFinite(afterLeft)
+        ? handleRect.left + afterLeft + afterWidth / 2
+        : null;
+      return {
+        edgeViewportX: blockRect && viewportRect ? blockRect.left - viewportRect.left : null,
+        viewportWidth: viewportRect?.width ?? null,
+        visibleBarDistanceFromBlockEdge: blockRect && visibleBarCenterX !== null
+          ? Math.abs(visibleBarCenterX - blockRect.left)
+          : null
+      };
+    });
+    expect(leftBoundaryEdgeState.edgeViewportX).not.toBeNull();
+    expect(leftBoundaryEdgeState.edgeViewportX).toBeLessThanOrEqual(leftBoundaryEdgeState.viewportWidth);
+    expect(leftBoundaryEdgeState.edgeViewportX).toBeGreaterThan(leftBoundaryEdgeState.viewportWidth - 28);
+    expect(leftBoundaryEdgeState.visibleBarDistanceFromBlockEdge).not.toBeNull();
+    expect(leftBoundaryEdgeState.visibleBarDistanceFromBlockEdge).toBeLessThanOrEqual(2);
   });
 
   test("pointercancel clears V2 hold trim drag indicators", async ({ page }) => {

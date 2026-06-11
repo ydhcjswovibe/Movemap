@@ -1500,6 +1500,15 @@
   z-index: 32;
 }
 
+.v2-timeline-handle-left.is-selected {
+  z-index: 33;
+}
+
+.v2-timeline-handle.is-selected:not(.is-edge-visible)::after {
+  opacity: 0;
+  visibility: hidden;
+}
+
 .v2-timeline-handle::after {
   content: "";
   position: absolute;
@@ -1520,7 +1529,7 @@
 }
 
 .v2-timeline-handle-left.is-selected.is-edge-visible::after {
-  left: calc(50% - var(--v2-timeline-handle-pill-width) / 2);
+  left: calc(50% + var(--v2-timeline-handle-pill-shift) - var(--v2-timeline-handle-pill-width) / 2);
   right: auto;
 }
 

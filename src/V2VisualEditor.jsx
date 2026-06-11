@@ -311,7 +311,7 @@ function V2VisualEditor({ model, actions = {} }) {
     const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
     const edgeVisible = !viewportWidth || (rawViewportX >= 0 && rawViewportX <= viewportWidth);
     const handleHitWidth = selected && edgeVisible ? 56 : 44;
-    if (!viewportWidth || !edgeVisible) {
+    if (!viewportWidth || (!selected && !edgeVisible)) {
       return {
         left: `${rawViewportX}px`,
         "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
