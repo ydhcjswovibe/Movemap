@@ -416,6 +416,49 @@ test("applyFormationTimelineEdit adds a default four-second hold plus four-secon
   assertSequentialTiming(result.sections);
 });
 
+test("applyFormationTimelineEdit force append ignores playhead time and preserves the last hold", () => {
+  const sections = [
+    { id: "intro", time: 0, start: 0, end: 0, moveDuration: 0, moveMode: "hold" },
+    { id: "f2", time: 4, start: 2, end: 4, moveDuration: 2 }
+  ];
+  const result = applyFormationTimelineEdit({
+    sections,
+    action: "add-after",
+    section: { id: "f3" },
+    time: 12.4,
+    forceSequentialAppend: true
+  });
+
+  assert.equal(result.selectedSectionId, "f3");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "f2", start: 2, end: 4, time: 4, moveDuration: 2 },
+    { id: "f3", start: 8, end: 12, time: 12, moveDuration: 4 }
+  ]);
+  assertSequentialTiming(result.sections);
+});
+
+test("applyFormationTimelineEdit force append starts after an explicit last hold duration", () => {
+  const sections = [
+    { id: "intro", time: 0, start: 0, end: 0, moveDuration: 0, moveMode: "hold" },
+    { id: "f2", time: 4, start: 2, end: 4, moveDuration: 2, holdDuration: 5 }
+  ];
+  const result = applyFormationTimelineEdit({
+    sections,
+    action: "add-after",
+    section: { id: "f3" },
+    time: 8,
+    forceSequentialAppend: true
+  });
+
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "f2", start: 2, end: 4, time: 4, moveDuration: 2 },
+    { id: "f3", start: 9, end: 13, time: 13, moveDuration: 4 }
+  ]);
+  assertSequentialTiming(result.sections);
+});
+
 test("applyFormationTimelineEdit preserves formation payloads through add, trim, move, and reorder", () => {
   const sections = [
     {
@@ -516,7 +559,7 @@ test("resolveFormationPointDrop lengthens the last move instead of the previous 
   assert.equal(result.action, "time-move");
   assert.deepEqual(compactTiming(result.sections), [
     { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
-    { id: "b", start: 4, end: 20, time: 20, moveDuration: 16 }
+    { id: "b", start: 4.5, end: 20, time: 20, moveDuration: 15.5 }
   ]);
   assertSequentialTiming(result.sections);
 });
@@ -989,10 +1032,10 @@ test("compat resolveFormationBodyDrag delegates body movement until adjacent bou
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "b", deltaTime: 2, timelineMax: 20 }),
     {
-      action: "move",
+      action: "blocked",
       index: 1,
-      start: 10,
-      end: 14,
+      start: 9.5,
+      end: 13.5,
       duration: 4,
       toIndex: null
     }
@@ -1003,8 +1046,8 @@ test("compat resolveFormationBodyDrag delegates body movement until adjacent bou
     {
       action: "blocked",
       index: 1,
-      start: 10,
-      end: 14,
+      start: 9.5,
+      end: 13.5,
       duration: 4,
       toIndex: null
     }
@@ -1049,8 +1092,8 @@ test("compat resolveFormationBodyDrag reports block movement bounds without reor
     {
       action: "blocked",
       index: 1,
-      start: 14,
-      end: 18,
+      start: 13.5,
+      end: 17.5,
       duration: 4,
       toIndex: null
     }
@@ -1061,8 +1104,8 @@ test("compat resolveFormationBodyDrag reports block movement bounds without reor
     {
       action: "blocked",
       index: 2,
-      start: 8,
-      end: 11,
+      start: 8.5,
+      end: 11.5,
       duration: 3,
       toIndex: null
     }
@@ -1093,8 +1136,8 @@ test("compat resolveFormationBodyDrag delegates adjacent reorder preview behavio
     {
       action: "blocked",
       index: 2,
-      start: 4,
-      end: 8,
+      start: 4.5,
+      end: 8.5,
       duration: 4,
       toIndex: null
     }
@@ -1276,12 +1319,32 @@ test("hold right trim expansion grows only the selected hold until the next form
   );
 });
 
-test("hold right trim propagates only through a zero-move adjacent formation chain", () => {
+test("hold right trim keeps the next move at the half-second minimum", () => {
   const result = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 0, moveDuration: 0 },
-      { id: "b", time: 4, moveDuration: 0 },
-      { id: "c", time: 8, moveDuration: 0 },
+      { id: "b", time: 8, moveDuration: 4 },
+      { id: "c", time: 16, moveDuration: 4 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "a",
+    time: 7.9
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "a", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "b", start: 7.5, end: 8, time: 8, moveDuration: 0.5 },
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+});
+
+test("hold right trim propagates through a half-second-minimum adjacent formation chain", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 4, moveDuration: 0.5 },
+      { id: "c", time: 8, moveDuration: 0.5 },
       { id: "d", time: 16, moveDuration: 4 }
     ],
     action: "trim-hold-right",
@@ -1292,9 +1355,9 @@ test("hold right trim propagates only through a zero-move adjacent formation cha
   assert.equal(result.statusKind, "updated");
   assert.deepEqual(compactTiming(result.sections), [
     { id: "a", start: 0, end: 0, time: 0, moveDuration: 0 },
-    { id: "b", start: 6, end: 6, time: 6, moveDuration: 0 },
-    { id: "c", start: 10, end: 10, time: 10, moveDuration: 0 },
-    { id: "d", start: 14, end: 16, time: 16, moveDuration: 2 }
+    { id: "b", start: 6, end: 6.5, time: 6.5, moveDuration: 0.5 },
+    { id: "c", start: 10, end: 10.5, time: 10.5, moveDuration: 0.5 },
+    { id: "d", start: 14.5, end: 16, time: 16, moveDuration: 1.5 }
   ]);
 });
 
@@ -1395,9 +1458,9 @@ test("hold left trim clamps against the previous formation until propagation is 
     time: 2
   });
 
-  assert.equal(beforePreviousHold.sections[1].time, 8);
-  assert.equal(beforePreviousHold.sections[1].moveDuration, 0);
-  assert.equal(beforePreviousHold.start, 8);
+  assert.equal(beforePreviousHold.sections[1].time, 8.5);
+  assert.equal(beforePreviousHold.sections[1].moveDuration, 0.5);
+  assert.equal(beforePreviousHold.start, 8.5);
   assert.equal(beforePreviousHold.end, 16);
 
   const pastNextMove = applyFormationTimelineEdit({
@@ -1407,9 +1470,9 @@ test("hold left trim clamps against the previous formation until propagation is 
     time: 20
   });
 
-  assert.equal(pastNextMove.sections[1].time, 16);
-  assert.equal(pastNextMove.sections[1].moveDuration, 8);
-  assert.equal(pastNextMove.start, 16);
+  assert.equal(pastNextMove.sections[1].time, 15.5);
+  assert.equal(pastNextMove.sections[1].moveDuration, 7.5);
+  assert.equal(pastNextMove.start, 15.5);
   assert.equal(pastNextMove.end, 16);
 });
 
@@ -1435,6 +1498,33 @@ test("hold body move keeps surrounding formations fixed and changes both adjacen
   assert.equal(result.start, 10);
   assert.equal(result.end, 14);
   assert.equal(result.duration, 4);
+});
+
+test("hold body move blocks before adjacent moves shrink below the half-second minimum", () => {
+  const sections = [
+    { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+    { id: "b", time: 8, moveDuration: 4, start: 4, end: 8 },
+    { id: "c", time: 16, moveDuration: 4, start: 12, end: 16 }
+  ];
+  const leftBlocked = applyFormationTimelineEdit({
+    sections,
+    action: "move-body",
+    sectionId: "b",
+    deltaTime: -3.6,
+    timelineMax: 24
+  });
+  const rightBlocked = applyFormationTimelineEdit({
+    sections,
+    action: "move-body",
+    sectionId: "b",
+    deltaTime: 3.6,
+    timelineMax: 24
+  });
+
+  assert.equal(leftBlocked.statusKind, "blocked");
+  assert.deepEqual(compactTiming(leftBlocked.sections), compactTiming(sections));
+  assert.equal(rightBlocked.statusKind, "blocked");
+  assert.deepEqual(compactTiming(rightBlocked.sections), compactTiming(sections));
 });
 
 test("last hold left trim moves arrival and inversely updates hold duration", () => {

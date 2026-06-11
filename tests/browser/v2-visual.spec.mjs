@@ -728,6 +728,63 @@ test.describe("connected v2 editor route", () => {
     })))).not.toEqual(timingBefore);
   });
 
+  test("V2 force append ignores current playback time and preserves the F2 hold block", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const twoFormationProject = {
+      ...seededV2Project(),
+      sections: [
+        {
+          ...seededV2Project().sections[0],
+          time: 0,
+          moveDuration: 0,
+          start: 0,
+          end: 0
+        },
+        {
+          ...seededV2Project().sections[1],
+          time: 4,
+          moveDuration: 2,
+          start: 2,
+          end: 4
+        }
+      ]
+    };
+    await seedProject(page, twoFormationProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const f2Block = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+    await expect(f2Block).toHaveAttribute("data-v2-segment-duration", "4s");
+    const f2WidthBefore = await f2Block.evaluate((node) => node.getBoundingClientRect().width);
+    await page.evaluate(() => {
+      const audio = document.querySelector("audio");
+      Object.defineProperty(audio, "currentTime", { configurable: true, value: 12.4 });
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    await expect.poll(() => page.evaluate(() => document.querySelector("audio")?.currentTime)).toBe(12.4);
+
+    await root.getByRole("button", { name: "대형 추가" }).click();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.map((section) => ({
+        name: section.id === "intro" || section.id === "diamond" ? section.id : "added",
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { name: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { name: "diamond", start: 2, end: 4, time: 4, moveDuration: 2 },
+      { name: "added", start: 8, end: 12, time: 12, moveDuration: 4 }
+    ]);
+    await expect(f2Block).toHaveAttribute("data-v2-segment-duration", "4s");
+    await expect.poll(() => f2Block.evaluate((node) => node.getBoundingClientRect().width)).toBe(f2WidthBefore);
+    const addedBlock = root.locator('[data-v2-segment-kind="hold"]').last();
+    await expect(addedBlock).toHaveAttribute("data-v2-segment-duration", "4s");
+  });
+
   test("moves a selected V2 performer to empty stage space and clears selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
@@ -2057,7 +2114,7 @@ test.describe("connected v2 editor route", () => {
     ]);
   });
 
-  test("V2 hold right trim propagates only through a zero-move adjacent chain", async ({ page }) => {
+  test("V2 hold right trim propagates through a half-second-minimum adjacent chain", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const chainProject = {
       ...seededV2Project(),
@@ -2122,9 +2179,9 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 6, end: 6, time: 6, moveDuration: 0 },
-      { id: "bridge", start: 10, end: 10, time: 10, moveDuration: 0 },
-      { id: "finale", start: 14, end: 16, time: 16, moveDuration: 2 }
+      { id: "diamond", start: 6, end: 6.5, time: 6.5, moveDuration: 0.5 },
+      { id: "bridge", start: 10.5, end: 11, time: 11, moveDuration: 0.5 },
+      { id: "finale", start: 15, end: 16, time: 16, moveDuration: 1 }
     ]);
     await expectNoV2CompetingTimelineGesture(root);
   });

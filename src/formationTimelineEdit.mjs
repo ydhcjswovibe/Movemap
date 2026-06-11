@@ -2,6 +2,8 @@ import { DEFAULT_FORMATION_SEGMENT_SECONDS, TIMELINE_TIME_STEP, clampFormationSp
 
 import { applySectionTiming, normalizeFormationSections, sortFormationSections } from "./formationTimeline.mjs";
 
+const MIN_FORMATION_BLOCK_SECONDS = 0.5;
+
 function blockedFormationEdit(sections, sectionId, statusKind = "blocked", extra = {}) {
   return {
     sections: normalizeFormationSections(sections),
@@ -21,6 +23,10 @@ function sectionHoldDuration(section) {
   return quantizeTimelineDelta(Math.max(0, Number(section?.holdDuration) || DEFAULT_FORMATION_SEGMENT_SECONDS));
 }
 
+function minMoveDurationForIndex(index) {
+  return index <= 0 ? 0 : MIN_FORMATION_BLOCK_SECONDS;
+}
+
 function sectionHoldEnd(normalized, index) {
   const nextSection = normalized[index + 1] || null;
   if (nextSection) return quantizeTimelineTime(pointMoveStart(nextSection));
@@ -28,19 +34,21 @@ function sectionHoldEnd(normalized, index) {
   return quantizeTimelineTime(pointTime(section) + sectionHoldDuration(section));
 }
 
-function setSectionMoveStart(section, nextStart) {
+function setSectionMoveStart(section, nextStart, minMoveDuration = 0) {
   const end = quantizeTimelineTime(pointTime(section));
-  return applySectionTiming(section, Math.min(end, quantizeTimelineTime(nextStart)), end);
+  const latestStart = quantizeTimelineTime(Math.max(0, end - Math.max(0, minMoveDuration)));
+  return applySectionTiming(section, Math.min(latestStart, quantizeTimelineTime(nextStart)), end);
 }
 
-function setSectionArrival(section, nextArrival) {
+function setSectionArrival(section, nextArrival, minMoveDuration = 0) {
   const moveStart = quantizeTimelineTime(pointMoveStart(section));
-  return applySectionTiming(section, moveStart, Math.max(moveStart, quantizeTimelineTime(nextArrival)));
+  return applySectionTiming(section, moveStart, Math.max(moveStart + minMoveDuration, quantizeTimelineTime(nextArrival)));
 }
 
-function setLastSectionHoldStart(section, nextArrival, holdEnd) {
+function setLastSectionHoldStart(section, nextArrival, holdEnd, minMoveDuration = 0, minHoldDuration = 0) {
   const moveStart = quantizeTimelineTime(pointMoveStart(section));
-  const arrival = quantizeTimelineTime(Math.max(moveStart, nextArrival));
+  const latestArrival = quantizeTimelineTime(Math.max(moveStart + minMoveDuration, quantizeTimelineTime(holdEnd) - minHoldDuration));
+  const arrival = quantizeTimelineTime(clampValue(Math.max(moveStart + minMoveDuration, nextArrival), moveStart + minMoveDuration, latestArrival));
   return {
     ...applySectionTiming(section, moveStart, arrival),
     holdDuration: quantizeTimelineDelta(Math.max(0, quantizeTimelineTime(holdEnd) - arrival))
@@ -51,33 +59,44 @@ function setHoldRightEdgeWithPropagation(normalized, index, requestedHoldEnd) {
   const nextSections = [...normalized];
   const currentArrival = quantizeTimelineTime(pointTime(nextSections[index]));
   let holdEnd = quantizeTimelineTime(Math.max(currentArrival, requestedHoldEnd));
+  let actualHoldEnd = holdEnd;
 
   for (let currentIndex = index; currentIndex < nextSections.length - 1; currentIndex += 1) {
     const nextIndex = currentIndex + 1;
     const nextSection = nextSections[nextIndex];
     const nextArrival = quantizeTimelineTime(pointTime(nextSection));
+    const minMoveDuration = minMoveDurationForIndex(nextIndex);
 
     if (holdEnd <= nextArrival) {
-      nextSections[nextIndex] = setSectionMoveStart(nextSection, holdEnd);
-      return nextSections;
+      const nextStart = quantizeTimelineTime(Math.min(holdEnd, Math.max(0, nextArrival - minMoveDuration)));
+      actualHoldEnd = nextStart;
+      nextSections[nextIndex] = setSectionMoveStart(nextSection, nextStart, minMoveDuration);
+      return { sections: nextSections, holdEnd: actualHoldEnd };
     }
 
-    const overflow = quantizeTimelineDelta(holdEnd - nextArrival);
-    nextSections[nextIndex] = applySectionTiming(nextSection, holdEnd, holdEnd);
-    holdEnd = quantizeTimelineTime(sectionHoldEnd(nextSections, nextIndex) + overflow);
+    const nextMoveStart = holdEnd;
+    const nextEnd = quantizeTimelineTime(nextMoveStart + minMoveDuration);
+    const delta = quantizeTimelineDelta(nextEnd - nextArrival);
+    nextSections[nextIndex] = applySectionTiming(nextSection, nextMoveStart, nextEnd);
+    actualHoldEnd = nextMoveStart;
+    holdEnd = quantizeTimelineTime(sectionHoldEnd(normalized, nextIndex) + delta);
   }
 
-  return nextSections;
+  return { sections: nextSections, holdEnd: actualHoldEnd };
 }
 
 // Action helpers keep all formation-time invariants behind the dispatcher.
-function addFormationAfterEdit(normalized, { sectionId, section, time }) {
+function addFormationAfterEdit(normalized, { sectionId, section, time, forceSequentialAppend = false }) {
   const previous = normalized.at(-1) || null;
   const previousEnd = previous ? pointTime(previous) : 0;
   const holdDuration = DEFAULT_FORMATION_SEGMENT_SECONDS;
   const moveDuration = DEFAULT_FORMATION_SEGMENT_SECONDS;
   const requestedEnd = Number.isFinite(Number(time)) ? quantizeTimelineTime(time) : quantizeTimelineTime(previousEnd + holdDuration + moveDuration);
-  const end = quantizeTimelineTime(Math.max(previousEnd + holdDuration + moveDuration, requestedEnd));
+  const sequentialStart = previous ? quantizeTimelineTime(previousEnd + sectionHoldDuration(previous)) : 0;
+  const sequentialEnd = quantizeTimelineTime(sequentialStart + moveDuration);
+  const end = forceSequentialAppend
+    ? sequentialEnd
+    : quantizeTimelineTime(Math.max(previousEnd + holdDuration + moveDuration, requestedEnd));
   const start = quantizeTimelineTime(end - moveDuration);
   const sectionPayload = section || { id: sectionId };
   const nextSection = applySectionTiming({
@@ -94,7 +113,7 @@ function trimFormationLeftEdit(normalized, sectionId, index, time) {
   const current = normalized[index];
   const end = quantizeTimelineTime(pointTime(current));
   const previousEnd = quantizeTimelineTime(pointTime(normalized[index - 1]));
-  const nextStart = quantizeTimelineTime(clampValue(time, previousEnd, end));
+  const nextStart = quantizeTimelineTime(clampValue(time, previousEnd, end - minMoveDurationForIndex(index)));
   const nextSections = normalized.map((item) => (
     item.id === sectionId ? applySectionTiming(item, nextStart, end) : item
   ));
@@ -125,7 +144,7 @@ function trimFormationRightEdit(normalized, sectionId, index, time) {
   const current = normalized[index];
   const start = quantizeTimelineTime(pointMoveStart(current));
   const end = quantizeTimelineTime(pointTime(current));
-  const requestedEnd = quantizeTimelineTime(Math.max(start, Number(time) || 0));
+  const requestedEnd = quantizeTimelineTime(Math.max(start + minMoveDurationForIndex(index), Number(time) || 0));
   const signedDelta = requestedEnd - end;
   const shiftedFollowing = shiftFollowingSectionsForRightTrim(normalized, index, end, signedDelta);
   const nextSections = shiftedFollowing.map((item, itemIndex) => (
@@ -140,7 +159,7 @@ function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
   const current = normalized[index];
   const currentArrival = quantizeTimelineTime(pointTime(current));
   if (!nextSection) {
-    const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
+    const holdEnd = quantizeTimelineTime(Math.max(currentArrival + MIN_FORMATION_BLOCK_SECONDS, Number(time) || 0));
     const duration = quantizeTimelineDelta(holdEnd - currentArrival);
     const nextSections = normalized.map((item, itemIndex) => (
       itemIndex === index ? { ...item, holdDuration: duration } : item
@@ -156,14 +175,15 @@ function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
   }
 
   const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
-  const nextSections = setHoldRightEdgeWithPropagation(normalized, index, holdEnd);
+  const result = setHoldRightEdgeWithPropagation(normalized, index, holdEnd);
+  const actualHoldEnd = result.holdEnd;
   return {
-    sections: normalizeFormationSections(nextSections),
+    sections: normalizeFormationSections(result.sections),
     selectedSectionId: sectionId,
     statusKind: "updated",
     start: currentArrival,
-    end: holdEnd,
-    duration: quantizeTimelineDelta(holdEnd - currentArrival)
+    end: actualHoldEnd,
+    duration: quantizeTimelineDelta(actualHoldEnd - currentArrival)
   };
 }
 
@@ -175,12 +195,14 @@ function trimFormationHoldLeftEdit(normalized, sectionId, index, time) {
   const holdEnd = nextSection
     ? quantizeTimelineTime(pointMoveStart(nextSection))
     : sectionHoldEnd(normalized, index);
-  const nextArrival = quantizeTimelineTime(clampValue(Number(time) || 0, moveStart, holdEnd));
+  const minMoveDuration = minMoveDurationForIndex(index);
+  const minHoldDuration = MIN_FORMATION_BLOCK_SECONDS;
+  const nextArrival = quantizeTimelineTime(clampValue(Number(time) || 0, moveStart + minMoveDuration, holdEnd - minHoldDuration));
   const nextSections = normalized.map((item) => (
     item.id === sectionId
       ? nextSection
         ? applySectionTiming(item, moveStart, nextArrival)
-        : setLastSectionHoldStart(item, nextArrival, holdEnd)
+        : setLastSectionHoldStart(item, nextArrival, holdEnd, minMoveDuration, minHoldDuration)
       : item
   ));
   return {
@@ -201,8 +223,8 @@ function bodyDragBounds(current, previousSection, nextSection, timelineMax) {
     duration,
     start,
     end,
-    minStart: previousSection ? quantizeTimelineTime(pointTime(previousSection)) : 0,
-    maxEnd: nextSection ? quantizeTimelineTime(pointMoveStart(nextSection)) : quantizeTimelineTime(Math.max(Number(timelineMax) || 0, end))
+    minStart: previousSection ? quantizeTimelineTime(pointTime(previousSection) + minMoveDurationForIndex(1)) : 0,
+    maxEnd: nextSection ? quantizeTimelineTime(pointTime(nextSection) - minMoveDurationForIndex(1)) : quantizeTimelineTime(Math.max(Number(timelineMax) || 0, end))
   };
 }
 
@@ -221,7 +243,7 @@ function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, ti
   const rawStart = quantizeTimelineTime(holdStart + signedDelta);
   const rawEnd = quantizeTimelineTime(holdEnd + signedDelta);
   const maxEnd = nextSection
-    ? quantizeTimelineTime(pointTime(nextSection))
+    ? quantizeTimelineTime(pointTime(nextSection) - minMoveDurationForIndex(1))
     : quantizeTimelineTime(Math.max(Number(timelineMax) || 0, rawEnd));
   const span = clampFormationSpan({ start: rawStart, duration: holdDuration, minStart: bounds.minStart, maxEnd });
   const dragBounds = {
@@ -239,12 +261,12 @@ function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, ti
   let nextSections = normalized.map((item, itemIndex) => (
     itemIndex === index
       ? nextSection
-        ? setSectionArrival(item, rawStart)
-        : setLastSectionHoldStart(item, rawStart, rawEnd)
+        ? setSectionArrival(item, rawStart, minMoveDurationForIndex(index))
+        : setLastSectionHoldStart(item, rawStart, rawEnd, minMoveDurationForIndex(index), MIN_FORMATION_BLOCK_SECONDS)
       : item
   ));
   if (nextSection) {
-    nextSections = setHoldRightEdgeWithPropagation(nextSections, index, rawEnd);
+    nextSections = setHoldRightEdgeWithPropagation(nextSections, index, rawEnd).sections;
   }
   return { sections: normalizeFormationSections(nextSections), selectedSectionId: sectionId, statusKind: "updated", start: rawStart, end: rawEnd, duration: holdDuration };
 }
@@ -375,13 +397,14 @@ function moveFormationByPointerTime(normalized, sectionId, index, { pointerTime 
   const start = isLastSection
     ? bounds.minStart
     : quantizeTimelineTime(Math.max(0, end - bounds.duration));
-  if (start < bounds.minStart || end > bounds.maxEnd || end < start || (start === bounds.start && end === bounds.end)) {
+  const maxEnd = nextSection ? quantizeTimelineTime(pointMoveStart(nextSection)) : bounds.maxEnd;
+  if (start < bounds.minStart || end > maxEnd || end < start || (start === bounds.start && end === bounds.end)) {
     return pointDropBlocked(normalized, sectionId, {
       start: bounds.start,
       end: bounds.end,
       duration: bounds.duration,
       minStart: bounds.minStart,
-      maxEnd: bounds.maxEnd
+      maxEnd
     });
   }
   const nextSections = normalized.map((item) => (
@@ -465,13 +488,14 @@ export function applyFormationTimelineEdit({
   toIndex,
   section = null,
   timelineMax = 0,
-  reorderThresholdRatio = 2 / 3
+  reorderThresholdRatio = 2 / 3,
+  forceSequentialAppend = false
 } = {}) {
   const normalized = normalizeFormationSections(sections);
   const index = normalized.findIndex((item) => item.id === sectionId);
 
   if (action === "add-after") {
-    return addFormationAfterEdit(normalized, { sectionId, section, time });
+    return addFormationAfterEdit(normalized, { sectionId, section, time, forceSequentialAppend });
   }
 
   if (index < 0) return blockedFormationEdit(normalized, sectionId);

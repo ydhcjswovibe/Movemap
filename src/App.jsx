@@ -2906,7 +2906,8 @@ function App() {
       sections: sortedSections,
       action: "add-after",
       time,
-      section
+      section,
+      forceSequentialAppend: forceAppend
     });
     const addedSection = result.sections.find((item) => item.id === section.id) || section;
     updatePlan((current) => ({ ...current, sections: result.sections }));
