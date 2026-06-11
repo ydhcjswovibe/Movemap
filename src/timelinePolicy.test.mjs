@@ -557,7 +557,7 @@ test("applyFormationTimelineEdit right trim shrink pulls only contiguous followi
   assertSequentialTiming(result.sections);
 });
 
-test("applyFormationTimelineEdit body drag moves inside empty space without pushing neighbors", () => {
+test("applyFormationTimelineEdit body drag moves the hold block and adjusts adjacent moves", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
@@ -568,13 +568,13 @@ test("applyFormationTimelineEdit body drag moves inside empty space without push
 
   assert.deepEqual(compactTiming(result.sections), [
     { id: "intro", start: 0, end: 4, time: 4, moveDuration: 4 },
-    { id: "b", start: 7, end: 11, time: 11, moveDuration: 4 },
-    { id: "c", start: 14, end: 18, time: 18, moveDuration: 4 }
+    { id: "b", start: 4, end: 11, time: 11, moveDuration: 7 },
+    { id: "c", start: 17, end: 18, time: 18, moveDuration: 1 }
   ]);
   assertSequentialTiming(result.sections);
 });
 
-test("applyFormationTimelineEdit body drag reports reorder preview across neighbor threshold", () => {
+test("applyFormationTimelineEdit body drag blocks instead of reordering across neighbor bounds", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
@@ -583,12 +583,12 @@ test("applyFormationTimelineEdit body drag reports reorder preview across neighb
 
   const result = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "c", deltaTime: -5, timelineMax: 16 });
 
-  assert.equal(result.statusKind, "reorder-preview");
-  assert.equal(result.toIndex, 1);
+  assert.equal(result.statusKind, "blocked");
+  assert.equal(result.toIndex, undefined);
   assert.deepEqual(compactTiming(result.sections), compactTiming(sections));
 });
 
-test("applyFormationTimelineEdit first block body drag is reorder-only", () => {
+test("applyFormationTimelineEdit first block body drag remains anchored", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
@@ -596,16 +596,16 @@ test("applyFormationTimelineEdit first block body drag is reorder-only", () => {
   ];
 
   const smallDrag = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 1, timelineMax: 16 });
-  const reorderPreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
+  const largeDrag = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
 
   assert.equal(smallDrag.statusKind, "blocked");
   assert.deepEqual(compactTiming(smallDrag.sections), compactTiming(sections));
-  assert.equal(reorderPreview.statusKind, "reorder-preview");
-  assert.equal(reorderPreview.toIndex, 1);
-  assert.deepEqual(compactTiming(reorderPreview.sections), compactTiming(sections));
+  assert.equal(largeDrag.statusKind, "blocked");
+  assert.equal(largeDrag.toIndex, undefined);
+  assert.deepEqual(compactTiming(largeDrag.sections), compactTiming(sections));
 });
 
-test("applyFormationTimelineEdit first block body drag can preview multiple insertion positions", () => {
+test("applyFormationTimelineEdit first block body drag does not preview insertion positions", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
@@ -615,14 +615,14 @@ test("applyFormationTimelineEdit first block body drag can preview multiple inse
   const middlePreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
   const endPreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 11, timelineMax: 16 });
 
-  assert.equal(middlePreview.statusKind, "reorder-preview");
-  assert.equal(middlePreview.toIndex, 1);
-  assert.equal(endPreview.statusKind, "reorder-preview");
-  assert.equal(endPreview.toIndex, 2);
+  assert.equal(middlePreview.statusKind, "blocked");
+  assert.equal(middlePreview.toIndex, undefined);
+  assert.equal(endPreview.statusKind, "blocked");
+  assert.equal(endPreview.toIndex, undefined);
   assert.deepEqual(compactTiming(endPreview.sections), compactTiming(sections));
 });
 
-test("applyFormationTimelineEdit body drag can preview multiple positions to the left", () => {
+test("applyFormationTimelineEdit body drag blocks when the hold would cross previous bounds", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
@@ -632,10 +632,10 @@ test("applyFormationTimelineEdit body drag can preview multiple positions to the
   const middlePreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "c", deltaTime: -5, timelineMax: 16 });
   const frontPreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "c", deltaTime: -9, timelineMax: 16 });
 
-  assert.equal(middlePreview.statusKind, "reorder-preview");
-  assert.equal(middlePreview.toIndex, 1);
-  assert.equal(frontPreview.statusKind, "reorder-preview");
-  assert.equal(frontPreview.toIndex, 0);
+  assert.equal(middlePreview.statusKind, "blocked");
+  assert.equal(middlePreview.toIndex, undefined);
+  assert.equal(frontPreview.statusKind, "blocked");
+  assert.equal(frontPreview.toIndex, undefined);
   assert.deepEqual(compactTiming(frontPreview.sections), compactTiming(sections));
 });
 
@@ -969,12 +969,12 @@ test("compat reorder wrappers preserve compact movement durations while the firs
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "a", deltaTime: 8, timelineMax: 20 }),
     {
-      action: "reorder-preview",
+      action: "blocked",
       index: 0,
-      start: 1,
-      end: 5,
+      start: 0,
+      end: 4,
       duration: 4,
-      toIndex: 1
+      toIndex: null
     }
   );
 });
@@ -991,9 +991,9 @@ test("compat resolveFormationBodyDrag delegates body movement until adjacent bou
     {
       action: "move",
       index: 1,
-      start: 7,
-      end: 10,
-      duration: 3,
+      start: 10,
+      end: 14,
+      duration: 4,
       toIndex: null
     }
   );
@@ -1003,9 +1003,9 @@ test("compat resolveFormationBodyDrag delegates body movement until adjacent bou
     {
       action: "blocked",
       index: 1,
-      start: 9,
-      end: 12,
-      duration: 3,
+      start: 10,
+      end: 14,
+      duration: 4,
       toIndex: null
     }
   );
@@ -1023,15 +1023,15 @@ test("compat resolveFormationBodyDrag preserves tenth-second movement boundaries
     {
       action: "move",
       index: 1,
-      start: 6.1,
-      end: 9.1,
-      duration: 3,
+      start: 9.1,
+      end: 13.1,
+      duration: 4,
       toIndex: null
     }
   );
 });
 
-test("compat resolveFormationBodyDrag delegates reorder preview threshold behavior", () => {
+test("compat resolveFormationBodyDrag reports block movement bounds without reorder preview", () => {
   const sections = [
     { id: "a", time: 0, moveDuration: 0 },
     { id: "b", time: 8, moveDuration: 3 },
@@ -1047,24 +1047,24 @@ test("compat resolveFormationBodyDrag delegates reorder preview threshold behavi
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "b", deltaTime: 11.2, timelineMax: 30 }),
     {
-      action: "reorder-preview",
+      action: "blocked",
       index: 1,
-      start: 9,
-      end: 12,
-      duration: 3,
-      toIndex: 2
+      start: 14,
+      end: 18,
+      duration: 4,
+      toIndex: null
     }
   );
 
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "c", deltaTime: -13.1, timelineMax: 30 }),
     {
-      action: "reorder-preview",
+      action: "blocked",
       index: 2,
       start: 8,
-      end: 14,
-      duration: 6,
-      toIndex: 1
+      end: 11,
+      duration: 3,
+      toIndex: null
     }
   );
 });
@@ -1079,10 +1079,10 @@ test("compat resolveFormationBodyDrag delegates adjacent reorder preview behavio
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "c", deltaTime: -2, timelineMax: 12 }),
     {
-      action: "blocked",
+      action: "move",
       index: 2,
-      start: 4,
-      end: 8,
+      start: 6,
+      end: 10,
       duration: 4,
       toIndex: null
     }
@@ -1091,12 +1091,12 @@ test("compat resolveFormationBodyDrag delegates adjacent reorder preview behavio
   assert.deepEqual(
     resolveFormationBodyDrag({ sections, sectionId: "c", deltaTime: -5, timelineMax: 12 }),
     {
-      action: "reorder-preview",
+      action: "blocked",
       index: 2,
       start: 4,
       end: 8,
       duration: 4,
-      toIndex: 1
+      toIndex: null
     }
   );
 });
@@ -1189,7 +1189,7 @@ test("timeline visual segments split formation holds from automatic moves", () =
     [
       { kind: "hold", sectionId: "a", from: "a", to: "a", start: 0, end: 4, left: 0, width: 40, label: "F1", resizable: true },
       { kind: "move", sectionId: "b", from: "a", to: "b", start: 4, end: 8, left: 40, width: 40, label: "M1", resizable: false },
-      { kind: "hold", sectionId: "b", from: "b", to: "b", start: 8, end: 12, left: 80, width: 40, label: "F2", resizable: false }
+      { kind: "hold", sectionId: "b", from: "b", to: "b", start: 8, end: 12, left: 80, width: 40, label: "F2", resizable: true }
     ]
   );
 });
@@ -1215,7 +1215,7 @@ test("timeline visual segments render the first intro hold from its movement sta
   );
 });
 
-test("hold right trim ripples following blocks while preserving automatic move duration", () => {
+test("hold right trim shrinks only the next move while the next formation stays fixed", () => {
   const result = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 0, moveDuration: 0 },
@@ -1238,8 +1238,8 @@ test("hold right trim ripples following blocks while preserving automatic move d
     })),
     [
       { id: "a", time: 0, moveDuration: 0, start: 0, end: 0 },
-      { id: "b", time: 6, moveDuration: 4, start: 2, end: 6 },
-      { id: "c", time: 14, moveDuration: 4, start: 10, end: 14 }
+      { id: "b", time: 8, moveDuration: 6, start: 2, end: 8 },
+      { id: "c", time: 16, moveDuration: 4, start: 12, end: 16 }
     ]
   );
   assert.equal(result.start, 0);
@@ -1247,7 +1247,7 @@ test("hold right trim ripples following blocks while preserving automatic move d
   assert.equal(result.duration, 2);
 });
 
-test("hold right trim expansion pushes following blocks while preserving automatic move duration", () => {
+test("hold right trim expansion grows only the selected hold until the next formation is adjacent", () => {
   const result = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 0, moveDuration: 0 },
@@ -1270,13 +1270,66 @@ test("hold right trim expansion pushes following blocks while preserving automat
     })),
     [
       { id: "a", time: 0, moveDuration: 0, start: 0, end: 0 },
-      { id: "b", time: 9, moveDuration: 4, start: 5, end: 9 },
-      { id: "c", time: 17, moveDuration: 4, start: 13, end: 17 }
+      { id: "b", time: 8, moveDuration: 3, start: 5, end: 8 },
+      { id: "c", time: 16, moveDuration: 4, start: 12, end: 16 }
     ]
   );
 });
 
-test("hold left trim moves arrival while preserving the incoming move start", () => {
+test("hold right trim propagates only through a zero-move adjacent formation chain", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 4, moveDuration: 0 },
+      { id: "c", time: 8, moveDuration: 0 },
+      { id: "d", time: 16, moveDuration: 4 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "a",
+    time: 6
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "a", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "b", start: 6, end: 6, time: 6, moveDuration: 0 },
+    { id: "c", start: 10, end: 10, time: 10, moveDuration: 0 },
+    { id: "d", start: 14, end: 16, time: 16, moveDuration: 2 }
+  ]);
+});
+
+test("hold right trim updates the last formation hold duration", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 6, moveDuration: 2 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "b",
+    time: 11
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(
+    result.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end,
+      holdDuration: section.holdDuration
+    })),
+    [
+      { id: "a", time: 0, moveDuration: 0, start: 0, end: 0, holdDuration: undefined },
+      { id: "b", time: 6, moveDuration: 2, start: 4, end: 6, holdDuration: 5 }
+    ]
+  );
+  assert.equal(result.start, 6);
+  assert.equal(result.end, 11);
+  assert.equal(result.duration, 5);
+});
+
+test("hold left trim moves arrival while preserving neighboring formations", () => {
   const leftExtended = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
@@ -1330,7 +1383,7 @@ test("hold left trim moves arrival while preserving the incoming move start", ()
   );
 });
 
-test("hold left trim clamps between incoming move start and next move start", () => {
+test("hold left trim clamps against the previous formation until propagation is needed", () => {
   const beforePreviousHold = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
@@ -1358,6 +1411,61 @@ test("hold left trim clamps between incoming move start and next move start", ()
   assert.equal(pastNextMove.sections[1].moveDuration, 8);
   assert.equal(pastNextMove.start, 16);
   assert.equal(pastNextMove.end, 16);
+});
+
+test("hold body move keeps surrounding formations fixed and changes both adjacent moves", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 4, moveDuration: 4, start: 0, end: 4 },
+      { id: "b", time: 8, moveDuration: 4, start: 4, end: 8 },
+      { id: "c", time: 16, moveDuration: 4, start: 12, end: 16 }
+    ],
+    action: "move-body",
+    sectionId: "b",
+    deltaTime: 2,
+    timelineMax: 24
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "a", start: 0, end: 4, time: 4, moveDuration: 4 },
+    { id: "b", start: 4, end: 10, time: 10, moveDuration: 6 },
+    { id: "c", start: 14, end: 16, time: 16, moveDuration: 2 }
+  ]);
+  assert.equal(result.start, 10);
+  assert.equal(result.end, 14);
+  assert.equal(result.duration, 4);
+});
+
+test("last hold left trim moves arrival and inversely updates hold duration", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 6, moveDuration: 2, holdDuration: 5 }
+    ],
+    action: "trim-hold-left",
+    sectionId: "b",
+    time: 5
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(
+    result.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end,
+      holdDuration: section.holdDuration
+    })),
+    [
+      { id: "a", time: 0, moveDuration: 0, start: 0, end: 0, holdDuration: undefined },
+      { id: "b", time: 5, moveDuration: 1, start: 4, end: 5, holdDuration: 6 }
+    ]
+  );
+  assert.equal(result.start, 5);
+  assert.equal(result.end, 11);
+  assert.equal(result.duration, 6);
 });
 
 test("movement keyframes clamp to segment-relative ratios and recalculate absolute time after trim", () => {

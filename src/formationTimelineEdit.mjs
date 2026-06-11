@@ -17,6 +17,59 @@ function shiftSection(section, deltaTime) {
   return applySectionTiming(section, Math.max(0, end - duration), end);
 }
 
+function sectionHoldDuration(section) {
+  return quantizeTimelineDelta(Math.max(0, Number(section?.holdDuration) || DEFAULT_FORMATION_SEGMENT_SECONDS));
+}
+
+function sectionHoldEnd(normalized, index) {
+  const nextSection = normalized[index + 1] || null;
+  if (nextSection) return quantizeTimelineTime(pointMoveStart(nextSection));
+  const section = normalized[index];
+  return quantizeTimelineTime(pointTime(section) + sectionHoldDuration(section));
+}
+
+function setSectionMoveStart(section, nextStart) {
+  const end = quantizeTimelineTime(pointTime(section));
+  return applySectionTiming(section, Math.min(end, quantizeTimelineTime(nextStart)), end);
+}
+
+function setSectionArrival(section, nextArrival) {
+  const moveStart = quantizeTimelineTime(pointMoveStart(section));
+  return applySectionTiming(section, moveStart, Math.max(moveStart, quantizeTimelineTime(nextArrival)));
+}
+
+function setLastSectionHoldStart(section, nextArrival, holdEnd) {
+  const moveStart = quantizeTimelineTime(pointMoveStart(section));
+  const arrival = quantizeTimelineTime(Math.max(moveStart, nextArrival));
+  return {
+    ...applySectionTiming(section, moveStart, arrival),
+    holdDuration: quantizeTimelineDelta(Math.max(0, quantizeTimelineTime(holdEnd) - arrival))
+  };
+}
+
+function setHoldRightEdgeWithPropagation(normalized, index, requestedHoldEnd) {
+  const nextSections = [...normalized];
+  const currentArrival = quantizeTimelineTime(pointTime(nextSections[index]));
+  let holdEnd = quantizeTimelineTime(Math.max(currentArrival, requestedHoldEnd));
+
+  for (let currentIndex = index; currentIndex < nextSections.length - 1; currentIndex += 1) {
+    const nextIndex = currentIndex + 1;
+    const nextSection = nextSections[nextIndex];
+    const nextArrival = quantizeTimelineTime(pointTime(nextSection));
+
+    if (holdEnd <= nextArrival) {
+      nextSections[nextIndex] = setSectionMoveStart(nextSection, holdEnd);
+      return nextSections;
+    }
+
+    const overflow = quantizeTimelineDelta(holdEnd - nextArrival);
+    nextSections[nextIndex] = applySectionTiming(nextSection, holdEnd, holdEnd);
+    holdEnd = quantizeTimelineTime(sectionHoldEnd(nextSections, nextIndex) + overflow);
+  }
+
+  return nextSections;
+}
+
 // Action helpers keep all formation-time invariants behind the dispatcher.
 function addFormationAfterEdit(normalized, { sectionId, section, time }) {
   const previous = normalized.at(-1) || null;
@@ -84,16 +137,26 @@ function trimFormationRightEdit(normalized, sectionId, index, time) {
 
 function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
   const nextSection = normalized[index + 1] || null;
-  if (!nextSection) return blockedFormationEdit(normalized, sectionId);
-
   const current = normalized[index];
   const currentArrival = quantizeTimelineTime(pointTime(current));
-  const nextMoveStart = quantizeTimelineTime(pointMoveStart(nextSection));
+  if (!nextSection) {
+    const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
+    const duration = quantizeTimelineDelta(holdEnd - currentArrival);
+    const nextSections = normalized.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, holdDuration: duration } : item
+    ));
+    return {
+      sections: normalizeFormationSections(nextSections),
+      selectedSectionId: sectionId,
+      statusKind: "updated",
+      start: currentArrival,
+      end: holdEnd,
+      duration
+    };
+  }
+
   const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
-  const signedDelta = quantizeTimelineDelta(holdEnd - nextMoveStart);
-  const nextSections = normalized.map((item, itemIndex) => (
-    itemIndex > index ? shiftSection(item, signedDelta) : item
-  ));
+  const nextSections = setHoldRightEdgeWithPropagation(normalized, index, holdEnd);
   return {
     sections: normalizeFormationSections(nextSections),
     selectedSectionId: sectionId,
@@ -111,10 +174,14 @@ function trimFormationHoldLeftEdit(normalized, sectionId, index, time) {
   const currentArrival = quantizeTimelineTime(pointTime(current));
   const holdEnd = nextSection
     ? quantizeTimelineTime(pointMoveStart(nextSection))
-    : currentArrival;
+    : sectionHoldEnd(normalized, index);
   const nextArrival = quantizeTimelineTime(clampValue(Number(time) || 0, moveStart, holdEnd));
   const nextSections = normalized.map((item) => (
-    item.id === sectionId ? applySectionTiming(item, moveStart, nextArrival) : item
+    item.id === sectionId
+      ? nextSection
+        ? applySectionTiming(item, moveStart, nextArrival)
+        : setLastSectionHoldStart(item, nextArrival, holdEnd)
+      : item
   ));
   return {
     sections: normalizeFormationSections(nextSections),
@@ -139,59 +206,47 @@ function bodyDragBounds(current, previousSection, nextSection, timelineMax) {
   };
 }
 
-function bodyDragReorderPreview(normalized, sectionId, index, rawStart, rawEnd, thresholdRatio, dragBounds) {
-  const insertionTime = quantizeTimelineTime(rawStart);
-  const candidates = normalized.filter((section) => section.id !== sectionId);
-  let toIndex = candidates.length;
+function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, timelineMax = 0 } = {}) {
+  if (index === 0) return blockedFormationEdit(normalized, sectionId);
 
-  for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
-    const candidate = candidates[candidateIndex];
-    const candidateStart = quantizeTimelineTime(pointMoveStart(candidate));
-    const candidateDuration = quantizeTimelineDelta(pointMoveDuration(candidate));
-    const forwardThreshold = quantizeTimelineTime(candidateStart + candidateDuration * thresholdRatio);
-    const backwardThreshold = quantizeTimelineTime(candidateStart + candidateDuration * (1 - thresholdRatio));
-    const threshold = candidateIndex < index ? backwardThreshold : forwardThreshold;
-
-    if (insertionTime < threshold) {
-      toIndex = candidateIndex;
-      break;
-    }
-  }
-
-  if (toIndex === index) return null;
-  return blockedFormationEdit(normalized, sectionId, "reorder-preview", { ...dragBounds, toIndex });
-}
-
-function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, timelineMax = 0, reorderThresholdRatio = 2 / 3 } = {}) {
   const current = normalized[index];
   const previousSection = normalized[index - 1] || null;
   const nextSection = normalized[index + 1] || null;
   const bounds = bodyDragBounds(current, previousSection, nextSection, timelineMax);
+  const holdStart = quantizeTimelineTime(pointTime(current));
+  const holdEnd = sectionHoldEnd(normalized, index);
+  const holdDuration = quantizeTimelineDelta(holdEnd - holdStart);
   const quantizedDeltaTime = Math.abs(quantizeTimelineDelta(deltaTime));
   const signedDelta = Number(deltaTime) < 0 ? -quantizedDeltaTime : quantizedDeltaTime;
-  const rawStart = quantizeTimelineTime(bounds.start + signedDelta);
-  const rawEnd = quantizeTimelineTime(bounds.end + signedDelta);
-  const thresholdRatio = clampValue(Number(reorderThresholdRatio) || 0, 0, 1);
-  const span = clampFormationSpan({ start: rawStart, duration: bounds.duration, minStart: bounds.minStart, maxEnd: bounds.maxEnd });
+  const rawStart = quantizeTimelineTime(holdStart + signedDelta);
+  const rawEnd = quantizeTimelineTime(holdEnd + signedDelta);
+  const maxEnd = nextSection
+    ? quantizeTimelineTime(pointTime(nextSection))
+    : quantizeTimelineTime(Math.max(Number(timelineMax) || 0, rawEnd));
+  const span = clampFormationSpan({ start: rawStart, duration: holdDuration, minStart: bounds.minStart, maxEnd });
   const dragBounds = {
     start: span.start,
     end: span.end,
     duration: span.duration,
     minStart: bounds.minStart,
-    maxEnd: bounds.maxEnd
+    maxEnd
   };
 
-  const reorderPreview = bodyDragReorderPreview(normalized, sectionId, index, rawStart, rawEnd, thresholdRatio, dragBounds);
-  if (reorderPreview) return reorderPreview;
-
-  if (span.start !== rawStart || span.end !== rawEnd) {
+  if (span.start !== rawStart || span.end !== rawEnd || span.start < bounds.minStart) {
     return blockedFormationEdit(normalized, sectionId, "blocked", dragBounds);
   }
 
-  const nextSections = normalized.map((item) => (
-    item.id === sectionId ? applySectionTiming(item, rawStart, rawEnd) : item
+  let nextSections = normalized.map((item, itemIndex) => (
+    itemIndex === index
+      ? nextSection
+        ? setSectionArrival(item, rawStart)
+        : setLastSectionHoldStart(item, rawStart, rawEnd)
+      : item
   ));
-  return { sections: normalizeFormationSections(nextSections), selectedSectionId: sectionId, statusKind: "updated", start: rawStart, end: rawEnd, duration: bounds.duration };
+  if (nextSection) {
+    nextSections = setHoldRightEdgeWithPropagation(nextSections, index, rawEnd);
+  }
+  return { sections: normalizeFormationSections(nextSections), selectedSectionId: sectionId, statusKind: "updated", start: rawStart, end: rawEnd, duration: holdDuration };
 }
 
 function reorderFormationEdit(normalized, sectionId, index, toIndex) {

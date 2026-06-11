@@ -1196,6 +1196,13 @@ test.describe("connected v2 editor route", () => {
     await page.goto("/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 360);
+    await page.waitForTimeout(100);
+
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
     await diamondBlock.click();
     await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
@@ -1222,9 +1229,27 @@ test.describe("connected v2 editor route", () => {
       { offset: 8, hitHandle: "hold-left", hitSectionId: "diamond", hitSegmentKind: "" },
       { offset: 16, hitHandle: "hold-left", hitSectionId: "diamond", hitSegmentKind: "" }
     ]);
+    await expect.poll(() => page.evaluate(() => {
+      const block = document.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+      const blockRect = block?.getBoundingClientRect();
+      if (!blockRect) return [];
+      const y = blockRect.top + blockRect.height / 2;
+      return [-3, 0, 3].map((offset) => {
+        const hit = document.elementFromPoint(blockRect.left + offset, y);
+        return {
+          offset,
+          hitHandle: hit?.getAttribute("data-v2-timeline-handle") || "",
+          hitSectionId: hit?.getAttribute("data-v2-section-id") || ""
+        };
+      });
+    })).toEqual([
+      { offset: -3, hitHandle: "hold-left", hitSectionId: "diamond" },
+      { offset: 0, hitHandle: "hold-left", hitSectionId: "diamond" },
+      { offset: 3, hitHandle: "hold-left", hitSectionId: "diamond" }
+    ]);
     const handleBox = await leftHandle.boundingBox();
     expect(handleBox).not.toBeNull();
-    const handleStartX = handleBox.x + handleBox.width / 2 - 16;
+    const handleStartX = await diamondBlock.evaluate((node) => node.getBoundingClientRect().left);
     const handleStartY = handleBox.y + handleBox.height / 2;
     await page.mouse.move(handleStartX, handleStartY);
     await page.mouse.down();
@@ -1748,7 +1773,8 @@ test.describe("connected v2 editor route", () => {
     const beforePan = await v2TimelineNavigationState(root);
     const box = await diamondBlock.boundingBox();
     expect(box).not.toBeNull();
-    const startX = Math.max(viewportBox.x + 42, Math.min(viewportBox.x + viewportBox.width - 54, box.x + Math.min(box.width / 2, box.width - 18)));
+    const bodyStartX = box.x + Math.max(72, Math.min(box.width / 2, box.width - 72));
+    const startX = Math.max(viewportBox.x + 42, Math.min(viewportBox.x + viewportBox.width - 72, bodyStartX));
     const startY = box.y + box.height / 2;
 
     await page.mouse.move(startX, startY);
@@ -1863,7 +1889,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]')).toHaveCount(0);
   });
 
-  test("edits V2 hold timing with dual handles and keeps move blocks read-only", async ({ page }) => {
+  test("edits V2 hold timing with dual handles while keeping move blocks read-only", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactTimingProject = {
       ...seededV2Project(),
@@ -1916,9 +1942,9 @@ test.describe("connected v2 editor route", () => {
         finaleTimeMoved: finale.time > 18
       };
     }).toEqual({
-      diamondMoveDuration: 2,
-      diamondTimeMoved: true,
-      finaleTimeMoved: true
+      diamondMoveDuration: 0.5,
+      diamondTimeMoved: false,
+      finaleTimeMoved: false
     });
 
     await root.locator('[data-v2-segment-kind="move"][data-v2-formation-block="diamond"]').click();
@@ -1926,7 +1952,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.locator('[data-v2-segment-kind="move"][data-v2-formation-block="diamond"]')).not.toHaveClass(/is-selected/);
   });
 
-  test("V2 hold right trim shrinks and expands by rippling following blocks", async ({ page }) => {
+  test("V2 hold right trim changes the next move while later formations stay fixed", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactTimingProject = {
       ...seededV2Project(),
@@ -1988,8 +2014,8 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
-      { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
+      { id: "diamond", start: 3, end: 6, time: 6, moveDuration: 3 },
+      { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
     await expect(introBlock).toHaveAttribute("aria-pressed", "true");
     expect((await v2TimelineNavigationState(root)).transform).toBe(navigationBefore.transform);
@@ -2026,9 +2052,81 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 5, end: 7, time: 7, moveDuration: 2 },
-      { id: "finale", start: 15, end: 19, time: 19, moveDuration: 4 }
+      { id: "diamond", start: 5, end: 6, time: 6, moveDuration: 1 },
+      { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
+  });
+
+  test("V2 hold right trim propagates only through a zero-move adjacent chain", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const chainProject = {
+      ...seededV2Project(),
+      sections: [
+        {
+          ...seededV2Project().sections[0],
+          time: 0,
+          moveDuration: 0,
+          start: 0,
+          end: 0
+        },
+        {
+          ...seededV2Project().sections[1],
+          time: 4,
+          moveDuration: 0,
+          start: 4,
+          end: 4
+        },
+        {
+          ...seededV2Project().sections[1],
+          id: "bridge",
+          name: "Bridge Stack",
+          time: 8,
+          moveDuration: 0,
+          start: 8,
+          end: 8
+        },
+        {
+          ...seededV2Project().sections[1],
+          id: "finale",
+          name: "Finale Stack",
+          time: 16,
+          moveDuration: 4,
+          start: 12,
+          end: 16
+        }
+      ]
+    };
+    await seedProject(page, chainProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+    await expect(rightHandle).toBeVisible();
+    const handleBox = await rightHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + V2_TIMELINE_PIXELS_PER_SECOND * 2, startY, { steps: 8 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.map((section) => ({
+        id: section.id,
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { id: "diamond", start: 6, end: 6, time: 6, moveDuration: 0 },
+      { id: "bridge", start: 10, end: 10, time: 10, moveDuration: 0 },
+      { id: "finale", start: 14, end: 16, time: 16, moveDuration: 2 }
+    ]);
+    await expectNoV2CompetingTimelineGesture(root);
   });
 
   test("V2 hold right trim responds to touch drag from the widened handle target", async ({ page }) => {
@@ -2080,9 +2178,77 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
-      { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
+      { id: "diamond", start: 3, end: 6, time: 6, moveDuration: 3 },
+      { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
+    await expectNoV2CompetingTimelineGesture(root);
+  });
+
+  test("V2 last hold right trim updates the selected F2 hold duration", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const twoFormationProject = {
+      ...seededV2Project(),
+      sections: [
+        {
+          ...seededV2Project().sections[0],
+          time: 0,
+          moveDuration: 0,
+          start: 0,
+          end: 0
+        },
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        }
+      ]
+    };
+    await seedProject(page, twoFormationProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 280);
+    await page.waitForTimeout(100);
+
+    const f2Block = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+    await f2Block.click();
+    await expect(f2Block).toHaveAttribute("aria-pressed", "true");
+    const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]');
+    await expect(rightHandle).toBeVisible();
+    const widthBefore = await f2Block.evaluate((node) => node.getBoundingClientRect().width);
+    const handleBox = await rightHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const startX = handleBox.x + handleBox.width / 2 + 16;
+    const startY = handleBox.y + handleBox.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + V2_TIMELINE_PIXELS_PER_SECOND, startY, { steps: 6 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      const f2 = project.sections.find((section) => section.id === "diamond");
+      return {
+        time: f2.time,
+        start: f2.start,
+        end: f2.end,
+        moveDuration: f2.moveDuration,
+        holdDuration: f2.holdDuration
+      };
+    }).toEqual({
+      time: 6,
+      start: 4,
+      end: 6,
+      moveDuration: 2,
+      holdDuration: 5
+    });
+    await expect.poll(() => f2Block.evaluate((node) => node.getBoundingClientRect().width)).toBeGreaterThan(widthBefore);
     await expectNoV2CompetingTimelineGesture(root);
   });
 
@@ -2131,6 +2297,7 @@ test.describe("connected v2 editor route", () => {
     await expect(introBlock).toHaveAttribute("aria-pressed", "true");
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
     await expect(rightHandle).toBeVisible();
+    await expect.poll(() => rightHandle.evaluate((node) => node.getBoundingClientRect().width)).toBe(56);
     const hitTargetState = await page.evaluate(() => {
       const handle = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
       const block = document.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
@@ -2176,13 +2343,16 @@ test.describe("connected v2 editor route", () => {
     expect(hitTargetState.visibleBarDistanceFromViewportEdge).toBeGreaterThan(24);
     await expect.poll(() => v2TimelineHandleHitMap(
       page,
-      '[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]'
+      '[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]',
+      [-24, -16, -8, 0, 8, 16, 24]
     )).toEqual([
+      { offset: -24, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
       { offset: -16, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
       { offset: -8, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
       { offset: 0, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
       { offset: 8, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
-      { offset: 16, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" }
+      { offset: 16, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" },
+      { offset: 24, hitHandle: "hold-right", hitSectionId: "intro", hitSegmentKind: "" }
     ]);
 
     const shrinkHandleBox = await rightHandle.boundingBox();
@@ -2205,8 +2375,8 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
-      { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
+      { id: "diamond", start: 3, end: 6, time: 6, moveDuration: 3 },
+      { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
 
     const expandedHandleBox = await rightHandle.boundingBox();
@@ -2227,8 +2397,8 @@ test.describe("connected v2 editor route", () => {
       }));
     }).toEqual([
       { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
-      { id: "diamond", start: 5, end: 7, time: 7, moveDuration: 2 },
-      { id: "finale", start: 15, end: 19, time: 19, moveDuration: 4 }
+      { id: "diamond", start: 5, end: 6, time: 6, moveDuration: 1 },
+      { id: "finale", start: 14, end: 18, time: 18, moveDuration: 4 }
     ]);
   });
 

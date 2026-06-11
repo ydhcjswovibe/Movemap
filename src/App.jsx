@@ -413,7 +413,8 @@ function sectionsTimingSignature(sections) {
     section.id,
     quantizeTimelineTime(pointMoveStart(section)),
     quantizeTimelineTime(pointTime(section)),
-    quantizeTimelineTime(pointMoveDuration(section))
+    quantizeTimelineTime(pointMoveDuration(section)),
+    quantizeTimelineTime(Number(section.holdDuration) || 0)
   ].join(":")).join("|");
 }
 

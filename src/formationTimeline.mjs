@@ -146,9 +146,10 @@ export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, opt
     const nextSection = sortedSections[index + 1] || null;
     const arrivalTime = pointTime(section);
     const holdStartTime = index === 0 ? pointMoveStart(section) : arrivalTime;
+    const lastHoldDuration = quantizeTimelineTime(Math.max(0, Number(section.holdDuration) || defaultLastHoldSeconds));
     const holdEndTime = nextSection
       ? Math.max(holdStartTime, pointMoveStart(nextSection))
-      : quantizeTimelineTime(holdStartTime + defaultLastHoldSeconds);
+      : quantizeTimelineTime(holdStartTime + lastHoldDuration);
     const holdWidthPx = timeToPixels(holdEndTime - holdStartTime, scale);
     segments.push({
       kind: "hold",
@@ -163,7 +164,7 @@ export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, opt
       label: formationTimelineLabel(index),
       durationSeconds: quantizeTimelineDelta(holdEndTime - holdStartTime),
       isLastHold: !nextSection,
-      resizable: Boolean(nextSection)
+      resizable: true
     });
 
     if (!nextSection) return;

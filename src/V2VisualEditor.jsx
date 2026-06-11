@@ -303,11 +303,37 @@ function V2VisualEditor({ model, actions = {} }) {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
   };
-  const timelineHandleStyle = (segment, edge) => {
+  const timelineHandleStyle = (segment, edge, selected = false) => {
     const segmentLeft = Number(segment?.leftPx) || 0;
     const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
     const edgeX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
-    return { left: `clamp(44px, ${edgeX - timelineScrollX}px, calc(100% - 44px))` };
+    const rawViewportX = edgeX - timelineScrollX;
+    const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
+    const edgeVisible = !viewportWidth || (rawViewportX >= 0 && rawViewportX <= viewportWidth);
+    const handleHitWidth = selected && edgeVisible ? 56 : 44;
+    if (!viewportWidth || !edgeVisible) {
+      return {
+        left: `${rawViewportX}px`,
+        "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
+        "--v2-timeline-handle-pill-shift": "0px"
+      };
+    }
+    const clampInset = selected && edge === "left" ? handleHitWidth / 2 : handleHitWidth;
+    const clampedViewportX = Math.max(clampInset, Math.min(Math.max(clampInset, viewportWidth - clampInset), rawViewportX));
+    return {
+      left: `${clampedViewportX}px`,
+      "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
+      "--v2-timeline-handle-pill-shift": `${rawViewportX - clampedViewportX}px`
+    };
+  };
+  const timelineHandleEdgeVisible = (segment, edge) => {
+    const segmentLeft = Number(segment?.leftPx) || 0;
+    const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
+    const edgeX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
+    const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
+    if (!viewportWidth) return true;
+    const rawViewportX = edgeX - timelineScrollX;
+    return rawViewportX >= 0 && rawViewportX <= viewportWidth;
   };
   const waveformContentStyle = {
     ...timelineContentStyle,
@@ -1202,12 +1228,13 @@ function V2VisualEditor({ model, actions = {} }) {
                         className={[
                           "v2-timeline-handle",
                           "v2-timeline-handle-left",
-                          sectionSelected ? "is-selected" : ""
+                          sectionSelected ? "is-selected" : "",
+                          sectionSelected && timelineHandleEdgeVisible(segment, "left") ? "is-edge-visible" : ""
                         ].filter(Boolean).join(" ")}
                         data-v2-timeline-handle="hold-left"
                         data-v2-section-id={section.id || ""}
                         aria-hidden="true"
-                        style={timelineHandleStyle(segment, "left")}
+                        style={timelineHandleStyle(segment, "left", sectionSelected)}
                         onPointerDown={(event) => {
                           consumeTimelineHandleEvent(event);
                           runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
@@ -1220,12 +1247,13 @@ function V2VisualEditor({ model, actions = {} }) {
                       className={[
                         "v2-timeline-handle",
                         "v2-timeline-handle-right",
-                        sectionSelected ? "is-selected" : ""
+                        sectionSelected ? "is-selected" : "",
+                        sectionSelected && timelineHandleEdgeVisible(segment, "right") ? "is-edge-visible" : ""
                       ].filter(Boolean).join(" ")}
                       data-v2-timeline-handle="hold-right"
                       data-v2-section-id={section.id || ""}
                       aria-hidden="true"
-                      style={timelineHandleStyle(segment, "right")}
+                      style={timelineHandleStyle(segment, "right", sectionSelected)}
                       onPointerDown={(event) => {
                         consumeTimelineHandleEvent(event);
                         runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
