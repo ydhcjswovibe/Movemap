@@ -88,10 +88,11 @@ function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
 
   const current = normalized[index];
   const currentArrival = quantizeTimelineTime(pointTime(current));
-  const nextArrival = quantizeTimelineTime(pointTime(nextSection));
-  const holdEnd = quantizeTimelineTime(clampValue(Number(time) || 0, currentArrival, nextArrival));
-  const nextSections = normalized.map((item) => (
-    item.id === nextSection.id ? applySectionTiming(item, holdEnd, nextArrival) : item
+  const nextMoveStart = quantizeTimelineTime(pointMoveStart(nextSection));
+  const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
+  const signedDelta = quantizeTimelineDelta(holdEnd - nextMoveStart);
+  const nextSections = normalized.map((item, itemIndex) => (
+    itemIndex > index ? shiftSection(item, signedDelta) : item
   ));
   return {
     sections: normalizeFormationSections(nextSections),

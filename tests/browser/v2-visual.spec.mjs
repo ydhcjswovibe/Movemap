@@ -1106,11 +1106,13 @@ test.describe("connected v2 editor route", () => {
     await page.mouse.up();
 
     await expect.poll(() => v2TimingSnapshot(page).then((sections) => sections.find((section) => section.id === "diamond"))).toMatchObject({
-      time: 10.7,
-      start: 8,
-      end: 10.7,
-      moveDuration: 2.7
+      start: 8
     });
+    const diamondAfterHoldLeftTrim = (await v2TimingSnapshot(page)).find((section) => section.id === "diamond");
+    expect(diamondAfterHoldLeftTrim.time).toBeGreaterThan(10);
+    expect(diamondAfterHoldLeftTrim.time).toBeLessThanOrEqual(10.7);
+    expect(diamondAfterHoldLeftTrim.end).toBe(diamondAfterHoldLeftTrim.time);
+    expect(diamondAfterHoldLeftTrim.moveDuration).toBeCloseTo(diamondAfterHoldLeftTrim.time - diamondAfterHoldLeftTrim.start, 5);
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeEnabled();
   });
 
@@ -1296,6 +1298,99 @@ test.describe("connected v2 editor route", () => {
       moveDuration: section.moveDuration
     })));
     expect(timingAfter).toEqual(timingBefore);
+  });
+
+  test("dragging a V2 formation block does not select it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page, {
+      ...seededV2Project(),
+      sections: [
+        seededV2Project().sections[0],
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        }
+      ]
+    });
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 220);
+    await page.waitForTimeout(100);
+    const token = root.locator('[data-v2-performer-token="b2"]');
+    const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+    await token.click();
+    await expect(token).toHaveAttribute("aria-pressed", "true");
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
+
+    const box = await diamondBlock.boundingBox();
+    expect(box).not.toBeNull();
+    const visibleLeft = Math.max(box.x + 6, viewportBox.x + 6);
+    const visibleRight = Math.min(box.x + box.width - 6, viewportBox.x + viewportBox.width - 6);
+    expect(visibleRight).toBeGreaterThan(visibleLeft);
+    const startX = (visibleLeft + visibleRight) / 2;
+    const startY = box.y + box.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
+    await page.mouse.move(startX - 28, startY, { steps: 4 });
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
+    await page.mouse.up();
+    await expect(token).toHaveAttribute("aria-pressed", "true");
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("small pointer movement on a V2 formation block still selects it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page, {
+      ...seededV2Project(),
+      sections: [
+        seededV2Project().sections[0],
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        }
+      ]
+    });
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 220);
+    await page.waitForTimeout(100);
+    const token = root.locator('[data-v2-performer-token="b2"]');
+    const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+    await token.click();
+    await expect(token).toHaveAttribute("aria-pressed", "true");
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
+
+    const box = await diamondBlock.boundingBox();
+    expect(box).not.toBeNull();
+    const visibleLeft = Math.max(box.x + 6, viewportBox.x + 6);
+    const visibleRight = Math.min(box.x + box.width - 6, viewportBox.x + viewportBox.width - 6);
+    expect(visibleRight).toBeGreaterThan(visibleLeft);
+    const startX = (visibleLeft + visibleRight) / 2;
+    const startY = box.y + box.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 6, startY + 2, { steps: 2 });
+    await page.mouse.up();
+
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
+    await expect(token).toHaveAttribute("aria-pressed", "false");
   });
 
   test("short drag on a V2 move block pans without changing time or timing", async ({ page }) => {
@@ -1611,7 +1706,7 @@ test.describe("connected v2 editor route", () => {
     expect(timingAfter).toEqual(timingBefore);
   });
 
-  test("move block click selects the destination formation and clears performer selection", async ({ page }) => {
+  test("move block click stays read-only and preserves current selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/v2");
@@ -1622,11 +1717,12 @@ test.describe("connected v2 editor route", () => {
     await expect(token).toHaveAttribute("aria-pressed", "true");
 
     await root.locator('[data-v2-segment-kind="move"][data-v2-formation-block="diamond"]').click();
-    await expect(root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(token).toHaveAttribute("aria-pressed", "false");
+    await expect(root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]')).toHaveAttribute("aria-pressed", "false");
+    await expect(token).toHaveAttribute("aria-pressed", "true");
+    await expect(root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]')).toHaveCount(0);
   });
 
-  test("edits V2 hold and move timing with timeline handles", async ({ page }) => {
+  test("edits V2 hold timing with dual handles and keeps move blocks read-only", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactTimingProject = {
       ...seededV2Project(),
@@ -1671,51 +1767,191 @@ test.describe("connected v2 editor route", () => {
 
     await expect.poll(async () => {
       const project = await storedProject(page);
-      return project.sections.find((section) => section.id === "diamond").moveDuration;
-    }).toBeLessThan(2);
+      const diamond = project.sections.find((section) => section.id === "diamond");
+      const finale = project.sections.find((section) => section.id === "finale");
+      return {
+        diamondMoveDuration: diamond.moveDuration,
+        diamondTimeMoved: diamond.time > 6,
+        finaleTimeMoved: finale.time > 18
+      };
+    }).toEqual({
+      diamondMoveDuration: 2,
+      diamondTimeMoved: true,
+      finaleTimeMoved: true
+    });
 
     await root.locator('[data-v2-segment-kind="move"][data-v2-formation-block="diamond"]').click();
-    const moveHandle = root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]');
-    await expect(moveHandle).toBeVisible();
-    const moveBox = await moveHandle.boundingBox();
-    expect(moveBox).not.toBeNull();
-    const beforeDuration = await storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond").moveDuration);
-    const beforeAutoPan = await v2TimelineNavigationState(root);
-    const edgeProbeX = viewportBox.x + 60;
-    await page.mouse.move(moveBox.x + moveBox.width / 2, moveBox.y + moveBox.height / 2);
+    await expect(root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]')).toHaveCount(0);
+    await expect(root.locator('[data-v2-segment-kind="move"][data-v2-formation-block="diamond"]')).not.toHaveClass(/is-selected/);
+  });
+
+  test("V2 hold right trim shrinks and expands by rippling following blocks", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const compactTimingProject = {
+      ...seededV2Project(),
+      sections: [
+        {
+          ...seededV2Project().sections[0],
+          time: 0,
+          moveDuration: 0,
+          start: 0,
+          end: 0
+        },
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        },
+        {
+          ...seededV2Project().sections[1],
+          id: "finale",
+          name: "Finale Stack",
+          time: 18,
+          moveDuration: 4,
+          start: 14,
+          end: 18
+        }
+      ]
+    };
+    await seedProject(page, compactTimingProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+    await expect(introBlock).toHaveAttribute("aria-pressed", "true");
+    const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+    await expect(rightHandle).toBeVisible();
+    const shrinkHandleBox = await rightHandle.boundingBox();
+    expect(shrinkHandleBox).not.toBeNull();
+    await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2, shrinkHandleBox.y + shrinkHandleBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(edgeProbeX, moveBox.y + moveBox.height / 2, { steps: 8 });
-    await expect.poll(async () => (await v2TimelineNavigationState(root)).transform).not.toBe(beforeAutoPan.transform);
-    const edgeStartAutoPan = await v2TimelineNavigationState(root);
-    const edgeStartDuration = await storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond").moveDuration);
-    await page.mouse.move(edgeProbeX - 2, moveBox.y + moveBox.height / 2, { steps: 4 });
-    await page.evaluate(({ clientX, clientY }) => {
-      window.dispatchEvent(new PointerEvent("pointermove", {
-        bubbles: true,
-        button: 0,
-        buttons: 1,
-        clientX,
-        clientY,
-        pointerId: 1,
-        pointerType: "mouse"
-      }));
-    }, { clientX: edgeProbeX - 2, clientY: moveBox.y + moveBox.height / 2 });
-    await expect.poll(async () => (await v2TimelineNavigationState(root)).scrollX).toBeLessThan(edgeStartAutoPan.scrollX);
-    const edgeEndAutoPan = await v2TimelineNavigationState(root);
-    const edgeEndDuration = await storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond").moveDuration);
-    const autoPanDeltaPx = edgeStartAutoPan.scrollX - edgeEndAutoPan.scrollX;
-    const trimDeltaPx = (edgeEndDuration - edgeStartDuration) * V2_TIMELINE_PIXELS_PER_SECOND;
-    expect(Math.abs(trimDeltaPx - autoPanDeltaPx)).toBeLessThanOrEqual(V2_TIMELINE_PIXELS_PER_SECOND * V2_TIMELINE_TIME_STEP + 1);
+    await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2 - V2_TIMELINE_PIXELS_PER_SECOND, shrinkHandleBox.y + shrinkHandleBox.height / 2, { steps: 6 });
     await page.mouse.up();
 
     await expect.poll(async () => {
       const project = await storedProject(page);
-      return project.sections.find((section) => section.id === "diamond").moveDuration;
-    }).toBeGreaterThan(beforeDuration);
+      return project.sections.map((section) => ({
+        id: section.id,
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { id: "diamond", start: 3, end: 5, time: 5, moveDuration: 2 },
+      { id: "finale", start: 13, end: 17, time: 17, moveDuration: 4 }
+    ]);
 
+    const expandedHandleBox = await rightHandle.boundingBox();
+    expect(expandedHandleBox).not.toBeNull();
+    await page.mouse.move(expandedHandleBox.x + expandedHandleBox.width / 2, expandedHandleBox.y + expandedHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(expandedHandleBox.x + expandedHandleBox.width / 2 + V2_TIMELINE_PIXELS_PER_SECOND * 2, expandedHandleBox.y + expandedHandleBox.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.map((section) => ({
+        id: section.id,
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { id: "diamond", start: 5, end: 7, time: 7, moveDuration: 2 },
+      { id: "finale", start: 15, end: 19, time: 19, moveDuration: 4 }
+    ]);
   });
 
-  test("pointercancel clears V2 timeline drag indicators", async ({ page }) => {
+  test("V2 hold right trim remains reachable after shrinking near the lane edge", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const compactTimingProject = {
+      ...seededV2Project(),
+      sections: [
+        {
+          ...seededV2Project().sections[0],
+          time: 0,
+          moveDuration: 0,
+          start: 0,
+          end: 0
+        },
+        {
+          ...seededV2Project().sections[1],
+          time: 6,
+          moveDuration: 2,
+          start: 4,
+          end: 6
+        },
+        {
+          ...seededV2Project().sections[1],
+          id: "finale",
+          name: "Finale Stack",
+          time: 18,
+          moveDuration: 4,
+          start: 14,
+          end: 18
+        }
+      ]
+    };
+    await seedProject(page, compactTimingProject);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
+    const viewportBox = await viewport.boundingBox();
+    expect(viewportBox).not.toBeNull();
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height / 2);
+    await page.mouse.wheel(0, 180);
+    await page.waitForTimeout(100);
+
+    const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
+    await expect(introBlock).toHaveAttribute("aria-pressed", "true");
+    const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
+    await expect(rightHandle).toBeVisible();
+    const shrinkHandleBox = await rightHandle.boundingBox();
+    expect(shrinkHandleBox).not.toBeNull();
+    await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2, shrinkHandleBox.y + shrinkHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(shrinkHandleBox.x + shrinkHandleBox.width / 2 - V2_TIMELINE_PIXELS_PER_SECOND, shrinkHandleBox.y + shrinkHandleBox.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "diamond")?.time;
+    }).toBe(5);
+
+    const expandedHandleBox = await rightHandle.boundingBox();
+    expect(expandedHandleBox).not.toBeNull();
+    await page.mouse.move(expandedHandleBox.x + expandedHandleBox.width / 2, expandedHandleBox.y + expandedHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(expandedHandleBox.x + expandedHandleBox.width / 2 + V2_TIMELINE_PIXELS_PER_SECOND * 2, expandedHandleBox.y + expandedHandleBox.height / 2, { steps: 6 });
+    await page.mouse.up();
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.map((section) => ({
+        id: section.id,
+        start: section.start,
+        end: section.end,
+        time: section.time,
+        moveDuration: section.moveDuration
+      }));
+    }).toEqual([
+      { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+      { id: "diamond", start: 5, end: 7, time: 7, moveDuration: 2 },
+      { id: "finale", start: 15, end: 19, time: 19, moveDuration: 4 }
+    ]);
+  });
+
+  test("pointercancel clears V2 hold trim drag indicators", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const compactTimingProject = {
       ...seededV2Project(),
@@ -1734,15 +1970,15 @@ test.describe("connected v2 editor route", () => {
     await page.goto("/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
-    await root.locator('[data-v2-segment-kind="move"]').click();
-    const moveHandle = root.locator('[data-v2-timeline-handle="move-left"][data-v2-section-id="diamond"]');
-    await expect(moveHandle).toBeVisible();
-    const moveBox = await moveHandle.boundingBox();
-    expect(moveBox).not.toBeNull();
-    const startX = moveBox.x + moveBox.width / 2;
-    const startY = moveBox.y + moveBox.height / 2;
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    const holdHandle = root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]');
+    await expect(holdHandle).toBeVisible();
+    const handleBox = await holdHandle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
 
-    await moveHandle.dispatchEvent("pointerdown", {
+    await holdHandle.dispatchEvent("pointerdown", {
       button: 0,
       buttons: 1,
       clientX: startX,
@@ -1761,7 +1997,7 @@ test.describe("connected v2 editor route", () => {
         pointerType: "mouse"
       }));
     }, { clientX: startX - 280, clientY: startY });
-    await expect(root.locator('[data-v2-segment-kind="move"][data-v2-blocked-edge="left"]')).toHaveCount(1);
+    await expect(root.locator('[data-v2-formation-block="diamond"][data-v2-blocked-edge="left"]')).toHaveCount(1);
 
     await page.evaluate(({ clientX, clientY }) => {
       window.dispatchEvent(new PointerEvent("pointercancel", {

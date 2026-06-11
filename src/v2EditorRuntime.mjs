@@ -237,6 +237,8 @@ export function createV2EditorRuntime(input = {}) {
     timelineVisualSegments: normalizeArray(input.timelineVisualSegments || input.timeline?.timelineVisualSegments || input.timeline?.holdMoveSegments),
     contentWidth: Math.max(320, finiteNumber(input.timelineContentWidth ?? input.timeline?.contentWidth ?? input.timeline?.timelineContentWidth, 320)),
     timelineContentWidth: Math.max(320, finiteNumber(input.timelineContentWidth ?? input.timeline?.timelineContentWidth ?? input.timeline?.contentWidth, 320)),
+    viewportWidth: Math.max(0, finiteNumber(input.timelineViewportWidth ?? input.timeline?.viewportWidth ?? input.timeline?.timelineViewportWidth, 0)),
+    timelineViewportWidth: Math.max(0, finiteNumber(input.timelineViewportWidth ?? input.timeline?.timelineViewportWidth ?? input.timeline?.viewportWidth, 0)),
     scrollX: Math.max(0, finiteNumber(input.timelineScrollX ?? input.timeline?.scrollX ?? input.timeline?.timelineScrollX, 0)),
     timelineScrollX: Math.max(0, finiteNumber(input.timelineScrollX ?? input.timeline?.timelineScrollX ?? input.timeline?.scrollX, 0)),
     snapPixel: input.snapPixel ?? input.timeline?.snapPixel ?? null,

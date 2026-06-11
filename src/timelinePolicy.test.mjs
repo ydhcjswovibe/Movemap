@@ -1140,11 +1140,44 @@ test("timeline visual segments render the first intro hold from its movement sta
   );
 });
 
-test("hold right trim preserves next arrival and absorbs the automatic move", () => {
+test("hold right trim ripples following blocks while preserving automatic move duration", () => {
   const result = applyFormationTimelineEdit({
     sections: [
       { id: "a", time: 0, moveDuration: 0 },
-      { id: "b", time: 8, moveDuration: 4 }
+      { id: "b", time: 8, moveDuration: 4 },
+      { id: "c", time: 16, moveDuration: 4 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "a",
+    time: 2
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(
+    result.sections.map((section) => ({
+      id: section.id,
+      time: section.time,
+      moveDuration: section.moveDuration,
+      start: section.start,
+      end: section.end
+    })),
+    [
+      { id: "a", time: 0, moveDuration: 0, start: 0, end: 0 },
+      { id: "b", time: 6, moveDuration: 4, start: 2, end: 6 },
+      { id: "c", time: 14, moveDuration: 4, start: 10, end: 14 }
+    ]
+  );
+  assert.equal(result.start, 0);
+  assert.equal(result.end, 2);
+  assert.equal(result.duration, 2);
+});
+
+test("hold right trim expansion pushes following blocks while preserving automatic move duration", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "a", time: 0, moveDuration: 0 },
+      { id: "b", time: 8, moveDuration: 4 },
+      { id: "c", time: 16, moveDuration: 4 }
     ],
     action: "trim-hold-right",
     sectionId: "a",
@@ -1162,7 +1195,8 @@ test("hold right trim preserves next arrival and absorbs the automatic move", ()
     })),
     [
       { id: "a", time: 0, moveDuration: 0, start: 0, end: 0 },
-      { id: "b", time: 8, moveDuration: 3, start: 5, end: 8 }
+      { id: "b", time: 9, moveDuration: 4, start: 5, end: 9 },
+      { id: "c", time: 17, moveDuration: 4, start: 13, end: 17 }
     ]
   );
 });

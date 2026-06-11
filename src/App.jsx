@@ -124,6 +124,8 @@ const MOVE_MODES = {
 };
 const HISTORY_LIMIT = 50;
 const LONG_PRESS_MS = 450;
+const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
+const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
 const GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 const SNAP_GRID_X = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
@@ -132,6 +134,10 @@ const SNAP_GRID_Y = buildMeterGrid(STAGE_DIMENSION_LIMITS.max);
 function buildMeterGrid(max) {
   const count = Math.max(0, Math.floor(Number(max) || 0));
   return Array.from({ length: count + 1 }, (_, index) => index);
+}
+
+function v2BlockTapSlopForPointer(event) {
+  return event?.pointerType === "touch" ? V2_BLOCK_TAP_SLOP_TOUCH_PX : V2_BLOCK_TAP_SLOP_MOUSE_PX;
 }
 
 function uid(prefix) {
@@ -890,6 +896,7 @@ function App() {
   const interactiveEditSnapshotRef = useRef(null);
   const ignoreNextStageTapRef = useRef(false);
   const ignoreNextFormationClickRef = useRef(false);
+  const suppressV2FormationSelectUntilRef = useRef(0);
   const formationLongPressTimerRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const localAudioUrlRef = useRef("");
@@ -2023,14 +2030,9 @@ function App() {
       // Synthetic browser tests and cancelled gestures may not allow capture.
     }
     ignoreNextFormationClickRef.current = true;
-    setSelectedSectionId(section.id);
-    setSelectedPerformerId("");
-    setSelectedPerformerIds([]);
-    setSelectedPairKey("");
-    setMobileContextSelection("formation");
-
     const startClientX = event.clientX;
     const startClientY = event.clientY;
+    const dragThresholdPx = isV2Route && mode === "body" ? v2BlockTapSlopForPointer(event) : 4;
     const startArrival = pointTime(section);
     const startMoveStart = pointMoveStart(section);
     const startHoldEnd = sortedSections[index + 1] ? pointMoveStart(sortedSections[index + 1]) : startArrival;
@@ -2126,9 +2128,17 @@ function App() {
       const deltaPx = isV2Route && longPressConfirmed && mode === "body"
         ? (clientX - startClientX) + (nextBodyDragScrollX - startTimelineScrollX)
         : clientX - startClientX;
+      const gestureDistancePx = isV2Route && mode === "body"
+        ? Math.hypot(clientX - startClientX, clientY - startClientY)
+        : Math.abs(deltaPx);
       const deltaTime = deltaPx / timelinePixelsPerSecond;
-      const passedDragThreshold = Math.abs(deltaPx) >= 4;
-      if (passedDragThreshold) hasDragged = true;
+      const passedDragThreshold = gestureDistancePx > dragThresholdPx;
+      if (passedDragThreshold) {
+        hasDragged = true;
+        if (isV2Route && mode === "body" && !longPressConfirmed) {
+          suppressV2FormationSelectUntilRef.current = Date.now() + 350;
+        }
+      }
 
       if (mode === "left") {
         const rawStart = startMoveStart + deltaTime;
@@ -2245,6 +2255,7 @@ function App() {
         if (hasStartedEdit) finishInteractiveEdit(false);
         if (isV2Route) {
           seekV2TimelineToTime(v2TimeFromTimelineClientX(event.clientX));
+          selectFormationForMobileSurface(section);
         } else {
           jumpTo(section);
         }
@@ -2299,7 +2310,6 @@ function App() {
     if (!section || index < 0) return;
 
     const startClientX = event.clientX;
-    const startTimelineScrollX = timelineScrollX;
     const nextSection = sortedSections[index + 1] || null;
     const previousArrival = index > 0 ? pointTime(sortedSections[index - 1]) : 0;
     const startTime = mode === "hold-right"
@@ -2309,9 +2319,6 @@ function App() {
         : pointMoveStart(section);
     let lastSectionsSignature = sectionsTimingSignature(sortedSections);
     let hasEdited = false;
-    let lastClientX = startClientX;
-    let trimDragScrollX = startTimelineScrollX;
-    let accumulatedTrimDeltaPx = 0;
     beginInteractiveEdit();
 
     const replaceSectionsIfChanged = (nextSections) => {
@@ -2324,15 +2331,7 @@ function App() {
     };
 
     const commit = (clientX) => {
-      const previousScrollX = trimDragScrollX;
-      const nextScrollX = panV2TimelineNearEdge(clientX, previousScrollX);
-      const panDeltaPx = nextScrollX - previousScrollX;
-      const pointerDeltaPx = clientX - lastClientX;
-      const effectiveDeltaPx = panDeltaPx !== 0 ? panDeltaPx : pointerDeltaPx;
-      trimDragScrollX = nextScrollX;
-      accumulatedTrimDeltaPx += effectiveDeltaPx;
-      lastClientX = clientX;
-      const rawTime = startTime + accumulatedTrimDeltaPx / timelinePixelsPerSecond;
+      const rawTime = startTime + (clientX - startClientX) / timelinePixelsPerSecond;
       if (mode === "hold-right") {
         const rightLimit = Math.max(timelineMax, rawTime);
         const snap = snapTimelineTime(rawTime, section, pointTime(section), rightLimit);
@@ -4911,7 +4910,8 @@ function App() {
     return null;
   }
 
-  function selectFormationForMobileSurface(section) {
+  function selectFormationForMobileSurface(section, options = {}) {
+    if (!options.force && Date.now() < suppressV2FormationSelectUntilRef.current) return;
     setSelectedSectionId(section.id);
     setSelectedPerformerId("");
     setSelectedPerformerIds([]);
@@ -5091,6 +5091,7 @@ function App() {
     timelineTicks: v2TimelineTicks,
     timelineVisualSegments: v2TimelineVisualSegments,
     timelineBlockedEdge,
+    timelineViewportWidth,
     timelineViewportRef,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
