@@ -290,6 +290,7 @@ function V2VisualEditor({ model, actions = {} }) {
   const selectedPerformerIds = new Set(selection.selectedPerformerIds || []);
   const selectedSectionId = selection.selectedSectionId || selection.selectedSection?.id || "";
   const currentSectionId = timeline.currentSectionId || "";
+  const sectionById = useMemo(() => new Map(sections.map((section) => [section.id, section])), [sections]);
   const timelineContentWidth = Math.max(320, Number(timeline.timelineContentWidth ?? timeline.contentWidth) || 320);
   const timelineScrollX = Math.max(0, Number(timeline.timelineScrollX ?? timeline.scrollX) || 0);
   const rawPlayheadLeft = Number(timeline.playheadPixel);
@@ -301,6 +302,12 @@ function V2VisualEditor({ model, actions = {} }) {
   const timelineContentStyle = {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
+  };
+  const timelineHandleStyle = (segment, edge) => {
+    const segmentLeft = Number(segment?.leftPx) || 0;
+    const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
+    const edgeX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
+    return { left: `clamp(44px, ${edgeX - timelineScrollX}px, calc(100% - 44px))` };
   };
   const waveformContentStyle = {
     ...timelineContentStyle,
@@ -321,9 +328,17 @@ function V2VisualEditor({ model, actions = {} }) {
     "--drop-left": `${Math.max(0, Number(blockDragPreview.dropLeftPx) || 0)}px`,
     "--drop-width": `${Math.max(48, Number(blockDragPreview.dropWidthPx) || floatingBlockWidth)}px`
   } : null;
+  const resetTimelineViewportNativeScroll = (node) => {
+    if (!node) return;
+    if (node.scrollLeft !== 0) node.scrollLeft = 0;
+    if (node.scrollTop !== 0) node.scrollTop = 0;
+  };
   const setTimelineViewportNode = (node) => {
     if (model?.timelineViewportRef) model.timelineViewportRef.current = node;
-    if (node) runtimeActions.timelineViewportMeasured?.(node.getBoundingClientRect().width || 0);
+    if (node) {
+      resetTimelineViewportNativeScroll(node);
+      runtimeActions.timelineViewportMeasured?.(node.getBoundingClientRect().width || 0);
+    }
   };
   const referenceLabelStyle = (reference) => {
     if (reference.id === "center-line") {
@@ -378,7 +393,14 @@ function V2VisualEditor({ model, actions = {} }) {
     event.stopPropagation();
   };
   const beginBlockTapGesture = (event, section, isMove) => {
-    blockTapGestureRef.current?.cleanup?.();
+    const currentGesture = blockTapGestureRef.current;
+    if (
+      currentGesture?.section?.id === section?.id &&
+      Math.hypot((Number(event.clientX) || 0) - currentGesture.startX, (Number(event.clientY) || 0) - currentGesture.startY) <= 1
+    ) {
+      return;
+    }
+    currentGesture?.cleanup?.();
     if (isMove || !section?.id) {
       blockTapGestureRef.current = null;
       return;
@@ -1026,6 +1048,7 @@ function V2VisualEditor({ model, actions = {} }) {
                 onPointerMove={runtimeActions.timelinePointerMove}
                 onPointerUp={runtimeActions.timelinePointerUp}
                 onPointerCancel={runtimeActions.timelinePointerUp}
+                onScroll={(event) => resetTimelineViewportNativeScroll(event.currentTarget)}
                 onTouchStart={(event) => handleTimelineTouchStart(event, { kind: "surface" })}
                 onTouchMove={handleTimelineTouchMove}
                 onTouchEnd={handleTimelineTouchEnd}
@@ -1034,7 +1057,7 @@ function V2VisualEditor({ model, actions = {} }) {
                 <div className="v2-timeline-content" style={timelineContentStyle}>
                   {visualSegments.map((segment, index) => {
                     const targetSectionId = segment.toSectionId || segment.sectionId || "";
-                    const section = sections.find((item) => item.id === targetSectionId) || sections[index] || {};
+                    const section = sectionById.get(targetSectionId) || sections[index] || {};
                     const isMove = segment.kind === "move";
                     const segmentBadge = segment.label || (isMove ? `M${index + 1}` : `F${index + 1}`);
                     const segmentTitle = isMove ? "Move" : section.name || "대형";
@@ -1119,34 +1142,6 @@ function V2VisualEditor({ model, actions = {} }) {
                         <span className="v2-segment-badge">{segmentBadge}</span>
                         <span className="v2-segment-name">{segmentTitle}</span>
                         {durationLabel && <span className="v2-segment-duration">{durationLabel}</span>}
-                        {!isMove && capabilities.canEditTimeline && (segment.resizable || sectionSelected) && (
-                          <>
-                            <span
-                              className="v2-timeline-handle v2-timeline-handle-left"
-                              data-v2-timeline-handle="hold-left"
-                              data-v2-section-id={section.id || ""}
-                              aria-hidden="true"
-                              onPointerDown={(event) => {
-                                consumeTimelineHandleEvent(event);
-                                runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
-                              }}
-                              onMouseDown={consumeTimelineHandleEvent}
-                              onClick={consumeTimelineHandleEvent}
-                            />
-                            <span
-                              className="v2-timeline-handle v2-timeline-handle-right"
-                              data-v2-timeline-handle="hold-right"
-                              data-v2-section-id={section.id || ""}
-                              aria-hidden="true"
-                              onPointerDown={(event) => {
-                                consumeTimelineHandleEvent(event);
-                                runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
-                              }}
-                              onMouseDown={consumeTimelineHandleEvent}
-                              onClick={consumeTimelineHandleEvent}
-                            />
-                          </>
-                        )}
                       </button>
                     );
                   })}
@@ -1193,6 +1188,54 @@ function V2VisualEditor({ model, actions = {} }) {
                   onPointerDown={handlePlayheadPointerDown}
                 />
               </div>
+              {visualSegments.map((segment, index) => {
+                const targetSectionId = segment.toSectionId || segment.sectionId || "";
+                const section = sectionById.get(targetSectionId) || sections[index] || {};
+                const isMove = segment.kind === "move";
+                const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
+                if (isMove || !section.id || !capabilities.canEditTimeline || !(segment.resizable || sectionSelected)) return null;
+                const sectionIndex = sections.findIndex((item) => item.id === section.id);
+                return (
+                  <React.Fragment key={`handles-${segment.kind || "hold"}-${section.id}-${index}`}>
+                      {sectionIndex > 0 && (
+                        <span
+                        className={[
+                          "v2-timeline-handle",
+                          "v2-timeline-handle-left",
+                          sectionSelected ? "is-selected" : ""
+                        ].filter(Boolean).join(" ")}
+                        data-v2-timeline-handle="hold-left"
+                        data-v2-section-id={section.id || ""}
+                        aria-hidden="true"
+                        style={timelineHandleStyle(segment, "left")}
+                        onPointerDown={(event) => {
+                          consumeTimelineHandleEvent(event);
+                          runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
+                        }}
+                        onMouseDown={consumeTimelineHandleEvent}
+                        onClick={consumeTimelineHandleEvent}
+                      />
+                    )}
+                    <span
+                      className={[
+                        "v2-timeline-handle",
+                        "v2-timeline-handle-right",
+                        sectionSelected ? "is-selected" : ""
+                      ].filter(Boolean).join(" ")}
+                      data-v2-timeline-handle="hold-right"
+                      data-v2-section-id={section.id || ""}
+                      aria-hidden="true"
+                      style={timelineHandleStyle(segment, "right")}
+                      onPointerDown={(event) => {
+                        consumeTimelineHandleEvent(event);
+                        runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
+                      }}
+                      onMouseDown={consumeTimelineHandleEvent}
+                      onClick={consumeTimelineHandleEvent}
+                    />
+                  </React.Fragment>
+                );
+              })}
             </div>
           </div>
 

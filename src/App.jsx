@@ -26,6 +26,7 @@ import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
 import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clampStagePoint, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
 import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
+import { cappedWaveformBarCount, createFrameCoalescer } from "./interactionFrame.mjs";
 import {
   applyFormationTimelineEdit,
   applyMovementKeyframePositionPatch,
@@ -918,7 +919,43 @@ function App() {
   const pendingServerAudioLocalUrlRef = useRef("");
   const rejectedAudioUrlsRef = useRef(new Set());
   const audioWaveformRequestRef = useRef(0);
+  const v2TimelineFrameRef = useRef(null);
+  const v2TimelineFrameUpdateRef = useRef({});
   const isStitchEditorActive = isStitchMobileViewport && !isV2Route;
+
+  function applyV2TimelineFrameUpdate(update = {}) {
+    v2TimelineFrameUpdateRef.current = {};
+    if (Object.hasOwn(update, "scrollX")) setTimelineScrollX(update.scrollX);
+    if (Object.hasOwn(update, "currentTime")) setCurrentTime(update.currentTime);
+    if (Object.hasOwn(update, "snapTime")) setTimelineSnapTime(update.snapTime);
+    if (Object.hasOwn(update, "blockedEdge")) setTimelineBlockedEdge(update.blockedEdge);
+    if (Object.hasOwn(update, "blockDragPreview")) setV2TimelineBlockDragPreview(update.blockDragPreview);
+  }
+
+  function queueV2TimelineFrameUpdate(update) {
+    const nextUpdate = { ...v2TimelineFrameUpdateRef.current, ...update };
+    v2TimelineFrameUpdateRef.current = nextUpdate;
+    if (!v2TimelineFrameRef.current && typeof window !== "undefined") {
+      v2TimelineFrameRef.current = createFrameCoalescer(applyV2TimelineFrameUpdate, {
+        requestAnimationFrame: (callback) => window.requestAnimationFrame(callback),
+        cancelAnimationFrame: (frameId) => window.cancelAnimationFrame(frameId)
+      });
+    }
+    if (v2TimelineFrameRef.current) {
+      v2TimelineFrameRef.current.request(nextUpdate);
+    } else {
+      applyV2TimelineFrameUpdate(nextUpdate);
+    }
+  }
+
+  function flushV2TimelineFrameUpdate() {
+    v2TimelineFrameRef.current?.flush?.();
+  }
+
+  function cancelV2TimelineFrameUpdate() {
+    v2TimelineFrameRef.current?.cancel?.();
+    v2TimelineFrameUpdateRef.current = {};
+  }
 
   function closeTopActionMenu() {
     setTopActionMenu("");
@@ -1139,6 +1176,10 @@ function App() {
     return () => cancelAnimationFrame(frame);
   }, [isPlaying]);
 
+  useEffect(() => () => {
+    cancelV2TimelineFrameUpdate();
+  }, []);
+
   useEffect(() => {
     const viewport = timelineViewportRef.current;
     if (!viewport) return undefined;
@@ -1229,7 +1270,7 @@ function App() {
   const waveformBars = useMemo(() => {
     const storedWaveform = plan?.audio?.waveform;
     if (waveformMatchesAudio(storedWaveform, plan?.audio)) {
-      const count = Math.max(96, Math.min(2400, Math.ceil(v2TimelineContentWidth / 5.5)));
+      const count = cappedWaveformBarCount(v2TimelineContentWidth);
       const bars = waveformBarsForTimeline(storedWaveform, { count });
       if (bars.length) return bars;
     }
@@ -1388,6 +1429,7 @@ function App() {
 
   function resetTransientEditState() {
     clearLongPressTimer();
+    cancelV2TimelineFrameUpdate();
     setMagnetCandidateId("");
     setDragHint("");
     setDragPositions(null);
@@ -1727,7 +1769,7 @@ function App() {
       nextScrollX += viewportX - (rect.width - edgeZone);
     }
     nextScrollX = clampValue(nextScrollX, 0, Math.max(0, v2TimelineContentWidth - rect.width));
-    setTimelineScrollX(nextScrollX);
+    queueV2TimelineFrameUpdate({ scrollX: nextScrollX });
     return nextScrollX;
   }
 
@@ -1768,8 +1810,8 @@ function App() {
     }
     nextScrollX = clampValue(nextScrollX, 0, Math.max(0, v2TimelineContentWidth - rect.width));
     const nextTime = clamp(pixelsToTime(nextScrollX + viewportX, timelinePixelsPerSecond), 0, v2TimelineDuration);
-    setTimelineScrollX(nextScrollX);
-    seekV2TimelineToTime(nextTime);
+    if (audioRef.current) audioRef.current.currentTime = nextTime;
+    queueV2TimelineFrameUpdate({ scrollX: nextScrollX, currentTime: nextTime });
     return nextScrollX;
   }
 
@@ -1950,7 +1992,7 @@ function App() {
           Math.max(0, v2TimelineContentWidth - rect.width)
         );
         timelineGestureRef.current = { ...current, pointers, mode: "v2-pan", hasMoved: true };
-        setTimelineScrollX(nextScrollX);
+        queueV2TimelineFrameUpdate({ scrollX: nextScrollX });
       } else {
         timelineGestureRef.current = { ...current, pointers };
       }
@@ -2001,6 +2043,7 @@ function App() {
     } else if (!cancelled && current.mode === "pending" && !current.hasMoved) {
       seekTimelineToTime(current.tapTime);
     }
+    if (!cancelled) flushV2TimelineFrameUpdate();
     timelineGestureRef.current = { pointers, mode: "" };
   }
 
@@ -2225,7 +2268,7 @@ function App() {
             const viewport = timelineViewportRef.current;
             const rect = viewport?.getBoundingClientRect();
             const maxScrollX = rect?.width ? Math.max(0, v2TimelineContentWidth - rect.width) : v2TimelineMaxScrollX();
-            setTimelineScrollX(clampValue(startTimelineScrollX - deltaPx, 0, maxScrollX));
+            queueV2TimelineFrameUpdate({ scrollX: clampValue(startTimelineScrollX - deltaPx, 0, maxScrollX) });
           } else {
             seekTimelineToTime(timeFromTimelineClientX(clientX));
           }
@@ -2240,8 +2283,10 @@ function App() {
         pendingBodyDragResult = dragResult;
         const slotPreview = v2DragSlotPreviewForResult(dragResult, section, sourceRect);
         setTimelineReorderPreview(null);
-        setTimelineBlockedEdge(dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: "right" } : null);
-        setV2TimelineBlockDragPreview({
+        queueV2TimelineFrameUpdate({
+          snapTime: null,
+          blockedEdge: dragResult.statusKind === "blocked" ? { sectionId: section.id, edge: "right" } : null,
+          blockDragPreview: {
           sectionId: section.id,
           label: section.name || formationTimelineLabel(index),
           pointerClientX: clientX,
@@ -2256,6 +2301,7 @@ function App() {
             : null,
           ...slotPreview,
           blockedEdge: dragResult.statusKind === "blocked" ? "right" : slotPreview.blockedEdge
+          }
         });
       } else {
         const dragResult = applyFormationTimelineEdit({
@@ -2286,6 +2332,11 @@ function App() {
       window.removeEventListener("pointerup", finishGesture);
       window.removeEventListener("pointercancel", finishGesture);
       clearFormationLongPressTimer();
+      if (cancelled) {
+        cancelV2TimelineFrameUpdate();
+      } else {
+        flushV2TimelineFrameUpdate();
+      }
       setTimelineSnapTime(null);
       setTimelineReorderPreview(null);
       setTimelineBlockedEdge(null);
