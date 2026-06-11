@@ -407,6 +407,8 @@ test.describe("connected v2 editor route", () => {
         infoLine: rectFor("[data-v2-stage-info-line]"),
         stage: rectFor("[data-v2-stage]"),
         stageSurface: rectFor(".v2-stage-surface"),
+        audienceStrip: rectFor(".v2-audience-strip"),
+        audienceGuide: rectFor("[data-v2-audience-guide]"),
         transport: rectFor(".v2-transport"),
         playButton: rectFor(".v2-transport .v2-play-button"),
         timecode: rectFor(".v2-timecode"),
@@ -440,8 +442,10 @@ test.describe("connected v2 editor route", () => {
     expect(boxes.infoLine.height).toBeLessThanOrEqual(32);
     expect(Math.abs(boxes.infoLine.y - boxes.topbar.bottom)).toBeLessThanOrEqual(1);
     expect(boxes.stageSurface.y).toBeGreaterThanOrEqual(boxes.infoLine.bottom - 1);
-    expect(Math.abs(boxes.stageSurface.bottom - boxes.stage.bottom)).toBeLessThanOrEqual(1);
-    expect(Math.abs(boxes.stageSurface.bottom - boxes.transport.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.audienceStrip.y - boxes.stageSurface.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.audienceStrip.bottom - boxes.stage.bottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(boxes.audienceStrip.bottom - boxes.transport.y)).toBeLessThanOrEqual(1);
+    expect(boxes.audienceGuide.y).toBeGreaterThanOrEqual(boxes.stageSurface.bottom - 1);
     expect(boxes.transport.height).toBeGreaterThanOrEqual(48);
     expect(boxes.transport.height).toBeLessThanOrEqual(52);
     expect(boxes.playButton.width).toBeGreaterThanOrEqual(40);
@@ -484,6 +488,78 @@ test.describe("connected v2 editor route", () => {
     await expectInsideViewport(page, timeline);
     await expectInsideViewport(page, bottomRail);
     await page.screenshot({ path: "test-results/v2-stage-timeline-bottom-390x844.png", fullPage: false });
+  });
+
+  test("recalculates V2 stage guides and token size from changed stage dimensions", async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    const project = seededV2Project();
+    project.stage = { width: 10, height: 6 };
+    project.frontZone = { y: 4 };
+    project.stageReferences = [];
+    project.sections = project.sections.map((section) => ({
+      ...section,
+      positions: {
+        a1: { x: 2, y: 1 },
+        a2: { x: 4, y: 1 },
+        b1: { x: 6, y: 3 },
+        b2: { x: 8, y: 4 }
+      }
+    }));
+    await seedProject(page, project);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const visualStage = root.locator("[data-v2-stage]");
+    await expect(root.locator("[data-v2-stage-info-line]")).toContainText("Snap on · 10x6 · 1m grid");
+    await expect(visualStage.locator("[data-v2-stage-grid]")).toBeVisible();
+    const metrics = await visualStage.evaluate((stageNode) => {
+      const surface = stageNode.querySelector(".v2-stage-surface");
+      const surfaceRect = surface.getBoundingClientRect();
+      const rect = surface.getBoundingClientRect();
+      const grid = surface.querySelector("[data-v2-stage-grid]");
+      const center = surface.querySelector("line.v2-stage-guide-neutral");
+      const front = surface.querySelector("line.v2-stage-guide-front");
+      const audience = stageNode.querySelector("[data-v2-audience-guide]");
+      const audienceRect = audience?.getBoundingClientRect();
+      const caution = surface.querySelector("[data-v2-caution-zone]");
+      const token = surface.querySelector(".v2-token");
+      const tokenRect = token?.getBoundingClientRect();
+      const style = grid ? getComputedStyle(grid) : null;
+      const cautionStyle = caution ? getComputedStyle(caution) : null;
+      const cellWidth = rect.width / 10;
+      const cellHeight = rect.height / 6;
+      return {
+        aspect: Number((rect.width / rect.height).toFixed(2)),
+        audienceInsideSurface: Boolean(surface.querySelector("[data-v2-audience-guide]")),
+        audienceTopAfterSurface: audienceRect ? Math.round(audienceRect.top - surfaceRect.bottom) : null,
+        audienceIsCautionZone: audience?.hasAttribute("data-v2-caution-zone") || false,
+        cautionTopRatio: caution ? Math.round(((caution.getBoundingClientRect().top - rect.top) / rect.height) * 100) : null,
+        cautionBackground: cautionStyle?.backgroundImage || "",
+        centerX: center?.getAttribute("x1"),
+        centerY1: center?.getAttribute("y1"),
+        centerY2: center?.getAttribute("y2"),
+        frontY: front?.getAttribute("y1"),
+        gridBackgroundSize: style?.backgroundSize || "",
+        tokenWidth: tokenRect?.width || 0,
+        expectedTokenSize: Math.max(18, Math.min(34, Math.min(cellWidth, cellHeight) * 0.8))
+      };
+    });
+
+    expect(metrics.aspect).toBeCloseTo(1.67, 1);
+    expect(metrics.centerX).toBe("50");
+    expect(metrics.centerY1).toBe("0");
+    expect(metrics.centerY2).toBe("100");
+    expect(metrics.frontY).toBe("66.66666666666666");
+    expect(metrics.cautionTopRatio).toBe(67);
+    expect(metrics.audienceInsideSurface).toBe(false);
+    expect(metrics.audienceTopAfterSurface).toBeGreaterThanOrEqual(0);
+    expect(metrics.audienceIsCautionZone).toBe(false);
+    expect(metrics.cautionBackground).not.toContain("radial-gradient");
+    expect(metrics.gridBackgroundSize).toContain("10%");
+    expect(metrics.gridBackgroundSize).toContain("16.666");
+    expect(metrics.tokenWidth).toBeCloseTo(metrics.expectedTokenSize, 0);
+    expect(metrics.tokenWidth).toBeGreaterThanOrEqual(18);
+    expect(metrics.tokenWidth).toBeLessThanOrEqual(34);
   });
 
   test("new V2 projects reveal added formations for immediate block editing", async ({ page }) => {
@@ -643,6 +719,184 @@ test.describe("connected v2 editor route", () => {
     expect(intro.positions.a1.y).toBeGreaterThan(2);
     await expect(token).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator("[data-v2-visual-editor] .v2-token[aria-pressed='true']")).toHaveCount(0);
+  });
+
+  test("allows V2 performers on the top and audience-side edge rows", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const stageSurface = root.locator(".v2-stage-surface");
+    const token = root.locator('[data-v2-performer-token="a1"]');
+    const stageBox = await stageSurface.boundingBox();
+    expect(stageBox).not.toBeNull();
+
+    const dragTo = async (pointerId, clientX, clientY) => {
+      const tokenBox = await token.boundingBox();
+      expect(tokenBox).not.toBeNull();
+      const startX = tokenBox.x + tokenBox.width / 2;
+      const startY = tokenBox.y + tokenBox.height / 2;
+      await token.dispatchEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        clientX: startX,
+        clientY: startY,
+        isPrimary: true,
+        pointerId,
+        pointerType: "mouse"
+      });
+      await token.dispatchEvent("pointermove", {
+        bubbles: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY,
+        isPrimary: true,
+        pointerId,
+        pointerType: "mouse"
+      });
+      await token.dispatchEvent("pointerup", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+        clientX,
+        clientY,
+        isPrimary: true,
+        pointerId,
+        pointerType: "mouse"
+      });
+    };
+
+    await dragTo(717, stageBox.x + stageBox.width, stageBox.y + stageBox.height);
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "intro").positions.a1;
+    }).toEqual(expect.objectContaining({ x: 12, y: 8 }));
+
+    await dragTo(718, stageBox.x, stageBox.y);
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "intro").positions.a1;
+    }).toEqual(expect.objectContaining({ x: 0, y: 0 }));
+  });
+
+  test("previews V2 performer drag without mutating storage until pointerup", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const token = root.locator('[data-v2-performer-token="a1"]');
+    const beforeBox = await token.boundingBox();
+    expect(beforeBox).not.toBeNull();
+    const beforeProject = await storedProject(page);
+    const beforePosition = beforeProject.sections.find((section) => section.id === "intro").positions.a1;
+    const pointerId = 715;
+    const startX = beforeBox.x + beforeBox.width / 2;
+    const startY = beforeBox.y + beforeBox.height / 2;
+
+    await token.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await token.dispatchEvent("pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX + 84,
+      clientY: startY + 48,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+
+    await expect.poll(async () => token.evaluate((node) => ({
+      dragX: node.style.getPropertyValue("--v2-drag-x"),
+      dragY: node.style.getPropertyValue("--v2-drag-y")
+    }))).not.toEqual({ dragX: "", dragY: "" });
+    const midProject = await storedProject(page);
+    expect(midProject.sections.find((section) => section.id === "intro").positions.a1).toEqual(beforePosition);
+
+    await token.dispatchEvent("pointerup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: startX + 84,
+      clientY: startY + 48,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "intro").positions.a1;
+    }).not.toEqual(beforePosition);
+    await expect(token).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("cancels V2 performer drag preview without mutating storage", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const token = root.locator('[data-v2-performer-token="a1"]');
+    const beforeBox = await token.boundingBox();
+    expect(beforeBox).not.toBeNull();
+    const beforeProject = await storedProject(page);
+    const beforePosition = beforeProject.sections.find((section) => section.id === "intro").positions.a1;
+    const pointerId = 716;
+    const startX = beforeBox.x + beforeBox.width / 2;
+    const startY = beforeBox.y + beforeBox.height / 2;
+
+    await token.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await token.dispatchEvent("pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX + 84,
+      clientY: startY + 48,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await token.dispatchEvent("pointercancel", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: startX + 84,
+      clientY: startY + 48,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "intro").positions.a1;
+    }).toEqual(beforePosition);
+    await expect.poll(async () => token.evaluate((node) => ({
+      dragX: node.style.getPropertyValue("--v2-drag-x"),
+      dragY: node.style.getPropertyValue("--v2-drag-y")
+    }))).toEqual({ dragX: "", dragY: "" });
   });
 
   test("blocks V2 performer drag on readonly share routes", async ({ page }) => {
@@ -1645,26 +1899,63 @@ test.describe("connected v2 editor route", () => {
     await expect(stageInfoLine).toContainText("Snap on · 12x8 · 1m grid");
     await expect(visualStage.locator("[data-v2-stage-grid]")).toBeVisible();
     await expect(visualStage.locator("[data-v2-stage-guides]")).toBeVisible();
-    const guideMetrics = await visualStage.locator(".v2-stage-surface").evaluate((surface) => {
+    const guideMetrics = await visualStage.evaluate((stageNode) => {
+      const surface = stageNode.querySelector(".v2-stage-surface");
       const rect = surface.getBoundingClientRect();
       const grid = surface.querySelector("[data-v2-stage-grid]");
       const center = surface.querySelector("line.v2-stage-guide-neutral");
       const front = surface.querySelector("line.v2-stage-guide-front");
-      const audience = surface.querySelector("[data-v2-audience-guide]");
+      const audience = stageNode.querySelector("[data-v2-audience-guide]");
+      const caution = surface.querySelector("[data-v2-caution-zone]");
       const audienceRect = audience?.getBoundingClientRect();
+      const surfaceRect = surface.getBoundingClientRect();
+      const cautionRect = caution?.getBoundingClientRect();
       const style = grid ? getComputedStyle(grid) : null;
+      const cautionStyle = caution ? getComputedStyle(caution) : null;
+      const token = surface.querySelector(".v2-token");
+      const tokenRect = token?.getBoundingClientRect();
+      const tokenStyle = token ? getComputedStyle(token) : null;
+      const cellWidth = rect.width / 12;
+      const cellHeight = rect.height / 8;
       return {
-        audienceTopRatio: audienceRect ? Math.round(((audienceRect.top - rect.top) / rect.height) * 100) : null,
+        audienceInsideSurface: Boolean(surface.querySelector("[data-v2-audience-guide]")),
+        audienceTopAfterSurface: audienceRect ? Math.round(audienceRect.top - surfaceRect.bottom) : null,
+        audienceIsCautionZone: audience?.hasAttribute("data-v2-caution-zone") || false,
+        audienceText: audience?.textContent?.trim() || "",
+        cautionTopRatio: cautionRect ? Math.round(((cautionRect.top - rect.top) / rect.height) * 100) : null,
+        cautionBackground: cautionStyle?.backgroundImage || "",
+        cautionOpacity: cautionStyle?.opacity || "",
         centerX: center?.getAttribute("x1"),
+        centerY1: center?.getAttribute("y1"),
+        centerY2: center?.getAttribute("y2"),
         frontY: front?.getAttribute("y1"),
-        gridBackgroundSize: style?.backgroundSize || ""
+        gridBackgroundImage: style?.backgroundImage || "",
+        gridBackgroundSize: style?.backgroundSize || "",
+        tokenHeight: tokenRect?.height || 0,
+        tokenWidth: tokenRect?.width || 0,
+        expectedTokenSize: Math.max(18, Math.min(34, Math.min(cellWidth, cellHeight) * 0.8)),
+        tokenFontSize: Number.parseFloat(tokenStyle?.fontSize || "0"),
+        tokenBoxShadow: tokenStyle?.boxShadow || ""
       };
     });
     expect(guideMetrics.centerX).toBe("50");
+    expect(guideMetrics.centerY1).toBe("0");
+    expect(guideMetrics.centerY2).toBe("100");
     expect(guideMetrics.frontY).toBe("75");
-    expect(guideMetrics.audienceTopRatio).toBe(75);
+    expect(guideMetrics.cautionTopRatio).toBe(75);
+    expect(guideMetrics.audienceInsideSurface).toBe(false);
+    expect(guideMetrics.audienceTopAfterSurface).toBeGreaterThanOrEqual(0);
+    expect(guideMetrics.audienceIsCautionZone).toBe(false);
+    expect(guideMetrics.audienceText).toBe("관객");
+    expect(guideMetrics.cautionBackground).not.toContain("radial-gradient");
+    expect(guideMetrics.gridBackgroundImage).toContain("rgba(226, 232, 240, 0.18)");
     expect(guideMetrics.gridBackgroundSize).toContain("8.333");
     expect(guideMetrics.gridBackgroundSize).toContain("12.5");
+    expect(guideMetrics.tokenWidth).toBeCloseTo(guideMetrics.expectedTokenSize, 0);
+    expect(guideMetrics.tokenHeight).toBeCloseTo(guideMetrics.expectedTokenSize, 0);
+    expect(guideMetrics.tokenWidth).toBeGreaterThanOrEqual(18);
+    expect(guideMetrics.tokenWidth).toBeLessThanOrEqual(34);
+    expect(guideMetrics.tokenFontSize).toBeGreaterThanOrEqual(7.5);
     const stageAspect = await visualStage.locator(".v2-stage-surface").evaluate((surface) => {
       const rect = surface.getBoundingClientRect();
       return {
@@ -1733,6 +2024,25 @@ test.describe("connected v2 editor route", () => {
     await expect(referenceLabels).toHaveAttribute("aria-checked", "false");
     await expect(visualStage.locator(".v2-stage-guide-label")).toHaveCount(0);
     await expect(visualStage.locator("[data-v2-stage-guides]")).toBeVisible();
+    await expect(visualStage.locator("[data-v2-audience-guide]")).toBeVisible();
+    await expect(visualStage.locator("[data-v2-audience-guide]")).not.toContainText("관객");
+    const cautionSetting = root.locator("[data-v2-caution-setting]");
+    await expect(cautionSetting).toBeVisible();
+    const cautionInput = cautionSetting.getByRole("spinbutton", { name: "앞쪽 주의 구역" });
+    await expect(cautionInput).toHaveValue("6");
+    const beforeCautionTop = await visualStage.locator("[data-v2-caution-zone]").evaluate((node) => {
+      const stageRect = node.parentElement.getBoundingClientRect();
+      const rect = node.getBoundingClientRect();
+      return Math.round(((rect.top - stageRect.top) / stageRect.height) * 100);
+    });
+    await cautionSetting.getByRole("button", { name: "앞쪽 주의 구역 늘리기" }).click();
+    await expect(cautionInput).toHaveValue("7");
+    const afterCautionTop = await visualStage.locator("[data-v2-caution-zone]").evaluate((node) => {
+      const stageRect = node.parentElement.getBoundingClientRect();
+      const rect = node.getBoundingClientRect();
+      return Math.round(((rect.top - stageRect.top) / stageRect.height) * 100);
+    });
+    expect(afterCautionTop).toBeGreaterThan(beforeCautionTop);
     await settingsMenuItem.click();
     await expect(settingsMenu).toHaveCount(0);
     await expect(settingsMenuItem).toContainText("›");

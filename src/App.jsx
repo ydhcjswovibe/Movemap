@@ -24,7 +24,7 @@ import { createPersonalTemplateFromSection, loadPersonalTemplates, personalTempl
 import { acceptFormationProposal, validateFormationProposal } from "./formationProposal.mjs";
 import { buildStage3dProjection } from "./stage3dProjection.mjs";
 import { MOVEMAP_AUDIO_BUCKET, audioPublicUrl, audioUploadErrorMessage, nextAudioSourceCandidate } from "./audioStorage.mjs";
-import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
+import { DEFAULT_STAGE_DIMENSIONS, STAGE_DIMENSION_LIMITS, canResizeStage, clampStagePoint, clientPointToStage, normalizeStageDimensions, stageViewBox } from "./stageGeometry.mjs";
 import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
 import {
   applyFormationTimelineEdit,
@@ -178,6 +178,21 @@ function clampPointToStage(point, stage) {
   return {
     x: clamp(point?.x ?? dimensions.width / 2, xMin, Math.max(xMin, dimensions.width - xMin)),
     y: clamp(point?.y ?? dimensions.height / 2, yMin, Math.max(yMin, dimensions.height - yMin))
+  };
+}
+
+function clampV2DragPointToStage(point, stage) {
+  const dimensions = normalizeStageDimensions(stage);
+  const clamped = clampStagePoint(point, dimensions);
+  const snapEdge = (value, max) => {
+    const threshold = Math.max(0.05, max * 0.004);
+    if (value <= threshold) return 0;
+    if (value >= max - threshold) return max;
+    return value;
+  };
+  return {
+    x: snapEdge(clamped.x, dimensions.width),
+    y: snapEdge(clamped.y, dimensions.height)
   };
 }
 
@@ -398,9 +413,11 @@ function normalizeSection(section) {
 function normalizePlan(plan) {
   if (!plan?.sections) return plan;
   const stage = normalizeStageDimensions(plan.stage);
+  const frontZoneY = Math.max(0, Math.min(stage.height, Number(plan.frontZone?.y ?? DEFAULT_FRONT_ZONE_Y) || DEFAULT_FRONT_ZONE_Y));
   return {
     ...plan,
     stage,
+    frontZone: { ...(plan.frontZone || {}), y: frontZoneY },
     localProjectId: plan.localProjectId || uid("project"),
     owner: plan.owner || { sessionId: "", createdAt: "" },
     account: { plan: plan.account?.plan || "guest" },
@@ -408,7 +425,7 @@ function normalizePlan(plan) {
       view: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.view || {}) },
       edit: { projectId: "", token: "", enabled: true, ...(plan.shareLinks?.edit || {}) }
     },
-    stageReferences: normalizeStageReferences(plan.stageReferences, plan.frontZone, { stage }),
+    stageReferences: normalizeStageReferences(plan.stageReferences, { ...(plan.frontZone || {}), y: frontZoneY }, { stage }),
     sections: plan.sections.map(normalizeSection).sort((a, b) => pointTime(a) - pointTime(b))
   };
 }
@@ -2975,13 +2992,29 @@ function App() {
     setStageResizeWarning("");
     updatePlan((current) => ({
       ...current,
-      stage: resize.stage
+      stage: resize.stage,
+      frontZone: {
+        ...(current.frontZone || {}),
+        y: Math.max(0, Math.min(resize.stage.height, Number(current.frontZone?.y ?? DEFAULT_FRONT_ZONE_Y) || DEFAULT_FRONT_ZONE_Y))
+      }
     }));
   }
 
   function stepStageDimension(axis, direction) {
     const current = stageDimensions[axis];
     updateStageDimension(axis, current + STAGE_DIMENSION_LIMITS.step * direction);
+  }
+
+  function updateFrontCautionZone(nextY) {
+    if (!plan || readonly) return;
+    const y = Math.max(0, Math.min(stageDimensions.height, Math.round(Number(nextY) || 0)));
+    updatePlan((current) => ({
+      ...current,
+      frontZone: {
+        ...(current.frontZone || {}),
+        y
+      }
+    }));
   }
 
   function previewLocalProposal() {
@@ -3251,10 +3284,16 @@ function App() {
   function onV2StagePointerDown(event, performerId, stageElement) {
     if (readonly || !selectedSection || !stageElement) return;
     event.stopPropagation();
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Browser tests can synthesize pointer events without capture support.
+    }
     const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
     const editKeyframeId = selectedMovementKeyframe?.id || "";
     const editPositions = sectionEditPositions(selectedSection, editKeyframeId);
     const token = editPositions?.[performerId] || { x: pointer.x, y: pointer.y };
+    const tokenElement = event.currentTarget?.closest?.(".v2-token") || event.currentTarget || null;
     beginInteractiveEdit();
     dragStateRef.current = {
       mode: "v2-token-move",
@@ -3262,16 +3301,44 @@ function App() {
       pointerId: event.pointerId,
       sectionId: selectedSection.id,
       keyframeId: editKeyframeId,
+      tokenElement,
+      stageRect: stageElement.getBoundingClientRect?.() || null,
       offsetX: token.x - pointer.x,
       offsetY: token.y - pointer.y,
       startPointer: pointer,
+      startPosition: token,
       moved: false,
       finalPositions: {
         [performerId]: token
       }
     };
     selectPerformer(performerId);
-    setDragPositions({ [performerId]: token });
+  }
+
+  function resetV2TokenPreview(drag) {
+    if (drag?.previewFrame) {
+      cancelAnimationFrame(drag.previewFrame);
+      drag.previewFrame = 0;
+    }
+    drag?.tokenElement?.style?.removeProperty("--v2-drag-x");
+    drag?.tokenElement?.style?.removeProperty("--v2-drag-y");
+  }
+
+  function previewV2TokenDrag(drag, nextPosition, stageElement) {
+    const rect = drag.stageRect || stageElement.getBoundingClientRect?.();
+    const start = drag.startPosition || nextPosition;
+    if (!drag.tokenElement || !rect?.width || !rect?.height) return;
+    drag.pendingPreview = {
+      x: ((nextPosition.x - start.x) / stageDimensions.width) * rect.width,
+      y: ((nextPosition.y - start.y) / stageDimensions.height) * rect.height
+    };
+    if (drag.previewFrame) return;
+    drag.previewFrame = requestAnimationFrame(() => {
+      drag.previewFrame = 0;
+      const preview = drag.pendingPreview || { x: 0, y: 0 };
+      drag.tokenElement.style.setProperty("--v2-drag-x", `${preview.x}px`);
+      drag.tokenElement.style.setProperty("--v2-drag-y", `${preview.y}px`);
+    });
   }
 
   function onV2StagePointerMove(event, stageElement) {
@@ -3282,29 +3349,37 @@ function App() {
     if (distance(pointer, drag.startPointer || pointer) > 0.05) {
       drag.moved = true;
     }
-    const nextPosition = clampPointToStage({
+    const nextPosition = clampV2DragPointToStage({
       x: pointer.x + drag.offsetX,
       y: pointer.y + drag.offsetY
     }, stageDimensions);
     drag.finalPositions = {
       [drag.performerId]: nextPosition
     };
-    setDragPositions(drag.finalPositions);
-    updatePlan((current) => ({
-      ...current,
-      sections: current.sections.map((section) => section.id === drag.sectionId
-        ? sectionWithPositionPatch(section, drag.finalPositions, drag.keyframeId)
-        : section)
-    }), { history: false });
+    previewV2TokenDrag(drag, nextPosition, stageElement);
   }
 
   function onV2StagePointerUp(event) {
     const drag = dragStateRef.current;
     if (drag?.mode !== "v2-token-move" || drag.pointerId !== event.pointerId) return;
-    finishInteractiveEdit(Boolean(drag.moved));
-    setDragPositions(null);
+    const cancelled = event.type === "pointercancel";
+    try {
+      drag.tokenElement?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may already be released after cancellation.
+    }
+    if (!cancelled && drag.moved) {
+      updatePlan((current) => ({
+        ...current,
+        sections: current.sections.map((section) => section.id === drag.sectionId
+          ? sectionWithPositionPatch(section, drag.finalPositions, drag.keyframeId)
+          : section)
+      }), { history: false });
+    }
+    resetV2TokenPreview(drag);
+    finishInteractiveEdit(Boolean(!cancelled && drag.moved));
     dragStateRef.current = null;
-    if (drag.moved) {
+    if (!cancelled && drag.moved) {
       ignoreNextV2StageTapRef.current = true;
       clearSelection();
     }
@@ -4945,6 +5020,7 @@ function App() {
     timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
     togglePlayback,
     toggleStageReferences: () => setShowStageReferences((value) => !value),
+    updateFrontCautionZone,
     topActionMenu,
     topActionSurface,
     transitionPathCount: activeTransitionPaths.length,
@@ -5023,6 +5099,7 @@ function App() {
     togglePlayback,
     zoomTimelineBy,
     printProject: () => window.print(),
+    updateFrontCautionZone,
     updateSectionTiming,
     viewLinkEnabled: plan.shareLinks?.view?.enabled !== false,
     viewLinkState,

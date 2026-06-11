@@ -12,14 +12,20 @@ import {
 
 test("creates default fixed stage reference marks from the front zone", () => {
   const defaultReferences = defaultStageReferences();
-  const references = defaultStageReferences({ y: 64 });
+  const references = defaultStageReferences({ y: 4 });
+  const largeReferences = defaultStageReferences({ y: 64 }, { width: 100, height: 100 });
 
   assert.equal(DEFAULT_FRONT_ZONE_Y, 5.6);
   assert.equal(defaultReferences.find((reference) => reference.id === "center-line").x1, 6);
+  assert.equal(defaultReferences.find((reference) => reference.id === "center-line").y1, 0);
+  assert.equal(defaultReferences.find((reference) => reference.id === "center-line").y2, 8);
   assert.equal(defaultReferences.find((reference) => reference.id === "front-line").y1, 5.6);
   assert.equal(references.length, 4);
-  assert.equal(references.find((reference) => reference.id === "front-line").y1, 64);
-  assert.equal(references.find((reference) => reference.id === "left-hash").y, 64);
+  assert.equal(references.find((reference) => reference.id === "front-line").y1, 4);
+  assert.equal(references.find((reference) => reference.id === "front-line").x2, 12);
+  assert.equal(references.find((reference) => reference.id === "left-hash").y, 4);
+  assert.equal(largeReferences.find((reference) => reference.id === "front-line").y1, 64);
+  assert.equal(largeReferences.find((reference) => reference.id === "center-line").y2, 100);
   assert.ok(references.every((reference) => reference.locked));
 });
 

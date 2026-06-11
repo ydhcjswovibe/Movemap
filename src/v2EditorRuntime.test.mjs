@@ -157,6 +157,7 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
       ["toggle-snap", true, false],
       ["toggle-stage-references", true, false],
       ["toggle-stage-reference-labels", false, false],
+      ["front-caution-zone", undefined, false],
       ["toggle-transition-paths", true, false]
     ]
   );
@@ -166,6 +167,7 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
     snapEnabled: true
   });
   assert.equal(readonlyRuntime.settingsMenu.find((item) => item.key === "toggle-snap").disabled, true);
+  assert.equal(readonlyRuntime.settingsMenu.find((item) => item.key === "front-caution-zone").disabled, true);
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-png").disabled, true);
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "플랜 업그레이드 필요");
   assert.equal(readonlyRuntime.exportMenu.find((item) => item.key === "export-all-png").disabled, true);
@@ -258,6 +260,7 @@ test("V2 Stage task model exposes setting state and selected performer summary",
       ["toggle-snap", "Snap", "On", true],
       ["toggle-stage-references", "Stage references", "On", true],
       ["toggle-stage-reference-labels", "Reference labels", "Off", false],
+      ["front-caution-zone", "앞쪽 주의 구역", "6m", undefined],
       ["toggle-transition-paths", "Transition paths", "On", true]
     ]
   );
@@ -322,7 +325,7 @@ test("V2 Stage info line falls back to formation context and snap-off wording", 
   assert.equal(currentRuntime.stageInfoLine.rightLabel, "Snap on · 12x8 · 1m grid");
 });
 
-test("V2 stage visual model aligns the visible grid and guides to snap coordinates", () => {
+test("V2 stage visual model aligns the visible grid and guides to stage dimensions", () => {
   const runtime = createV2EditorRuntime({
     frontZone: { y: 5.6 },
     readonly: false,
@@ -337,13 +340,21 @@ test("V2 stage visual model aligns the visible grid and guides to snap coordinat
     centerXPercent: 50,
     centerYPercent: 50
   });
+  assert.deepEqual(runtime.stage.cautionZone, {
+    y: 6,
+    yPercent: 75,
+    heightPercent: 25,
+    label: "앞쪽 주의 구역"
+  });
   assert.equal(runtime.stage.audienceGuideYPercent, 75);
   assert.equal(runtime.stage.referencesVisible, true);
   assert.equal(runtime.stage.referenceLabelsVisible, true);
   assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "front-line").yPercent, 75);
   assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "center-line").xPercent, 50);
-  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "left-hash").xPercent, 16.666666666666664);
-  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "right-hash").xPercent, 83.33333333333334);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "center-line").y1Percent, 0);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "center-line").y2Percent, 100);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "left-hash").xPercent, 20.000000000000004);
+  assert.equal(runtime.stage.referenceGuides.find((reference) => reference.id === "right-hash").xPercent, 80.00000000000001);
 
   const hiddenRuntime = createV2EditorRuntime({
     frontZone: { y: 5.6 },
@@ -355,6 +366,45 @@ test("V2 stage visual model aligns the visible grid and guides to snap coordinat
   assert.equal(hiddenRuntime.stage.referenceLabelsVisible, false);
   assert.deepEqual(hiddenRuntime.stage.referenceGuides, []);
   assert.equal(hiddenRuntime.stage.grid.columns, 12);
+});
+
+test("V2 stage visual model clamps caution zone and recalculates guides for changed stage dimensions", () => {
+  const runtime = createV2EditorRuntime({
+    frontZone: { y: 11 },
+    showStageReferenceLabels: true,
+    showStageReferences: true,
+    stageDimensions: { width: 10, height: 6 }
+  });
+
+  assert.deepEqual(runtime.stage.grid, {
+    columns: 10,
+    rows: 6,
+    centerXPercent: 50,
+    centerYPercent: 50
+  });
+  assert.deepEqual(runtime.stage.cautionZone, {
+    y: 6,
+    yPercent: 100,
+    heightPercent: 0,
+    label: "앞쪽 주의 구역"
+  });
+  assert.equal(runtime.stage.audienceGuideYPercent, 100);
+
+  const center = runtime.stage.referenceGuides.find((reference) => reference.id === "center-line");
+  assert.equal(center.x1, 5);
+  assert.equal(center.x2, 5);
+  assert.equal(center.y1, 0);
+  assert.equal(center.y2, 6);
+  assert.equal(center.xPercent, 50);
+  assert.equal(center.y1Percent, 0);
+  assert.equal(center.y2Percent, 100);
+
+  const front = runtime.stage.referenceGuides.find((reference) => reference.id === "front-line");
+  assert.equal(front.x1, 0);
+  assert.equal(front.x2, 10);
+  assert.equal(front.y1, 6);
+  assert.equal(front.y2, 6);
+  assert.equal(front.yPercent, 100);
 });
 
 test("V2 Timeline task model summarizes selected formation and edit availability", () => {

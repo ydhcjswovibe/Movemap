@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { stageTokenMetrics } from "./stageVisualMetrics.mjs";
+import { stageTokenMetrics, v2StageTokenPixelMetrics } from "./stageVisualMetrics.mjs";
 
 test("stage token visual metrics scale without changing geometry modules", () => {
   const defaultMetrics = stageTokenMetrics();
@@ -17,4 +17,35 @@ test("stage token visual metrics scale without changing geometry modules", () =>
   assert.ok(compactMetrics.hitRadius > compactMetrics.tokenRadius * 2);
   assert.equal(largeMetrics.tokenRadius, 4);
   assert.ok(largeMetrics.hitRadius > defaultMetrics.hitRadius);
+});
+
+test("V2 stage token pixel metrics follow rendered grid cell size with clamps", () => {
+  const defaultMetrics = v2StageTokenPixelMetrics({
+    widthPx: 390,
+    heightPx: 260,
+    columns: 12,
+    rows: 8
+  });
+  assert.equal(defaultMetrics.tokenSizePx, 26);
+  assert.equal(defaultMetrics.labelFontSizePx, 8.71);
+  assert.equal(defaultMetrics.hitSizePx, 36);
+  assert.equal(defaultMetrics.selectedRingSpreadPx, 4.16);
+
+  const tinyMetrics = v2StageTokenPixelMetrics({
+    widthPx: 160,
+    heightPx: 100,
+    columns: 12,
+    rows: 8
+  });
+  assert.equal(tinyMetrics.tokenSizePx, 18);
+  assert.equal(tinyMetrics.hitSizePx, 28);
+
+  const largeMetrics = v2StageTokenPixelMetrics({
+    widthPx: 900,
+    heightPx: 600,
+    columns: 12,
+    rows: 8
+  });
+  assert.equal(largeMetrics.tokenSizePx, 34);
+  assert.equal(largeMetrics.hitSizePx, 44);
 });

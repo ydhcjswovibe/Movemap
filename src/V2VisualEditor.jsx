@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import CoolIcon from "./icons/CoolIcon.jsx";
+import { v2StageTokenPixelMetrics } from "./stageVisualMetrics.mjs";
 import "./v2VisualEditor.css";
 
 const demoPerformers = [
@@ -153,6 +154,7 @@ function buildDemoViewModel(model) {
         { key: "toggle-snap", label: "Snap", checked: true },
         { key: "toggle-stage-references", label: "Stage references", checked: false },
         { key: "toggle-stage-reference-labels", label: "Reference labels", checked: false },
+        { key: "front-caution-zone", label: "앞쪽 주의 구역", kind: "meter", value: 69, min: 0, max: 100, step: 1, stateLabel: "69m" },
         { key: "toggle-transition-paths", label: "Transition paths", checked: false }
       ],
       stageTask: {
@@ -247,6 +249,7 @@ function V2VisualEditor({ model, actions = {} }) {
   const suppressNextTokenClickRef = useRef(false);
   const [openTopMenu, setOpenTopMenu] = useState("");
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
+  const [stagePixelSize, setStagePixelSize] = useState({ width: 0, height: 0 });
   const view = buildDemoViewModel(model);
   const { shell, stage, stageInfoLine, selection, timeline, sections, share } = view;
   const runtimeActions = { ...(view.actions || {}), ...actions };
@@ -263,12 +266,22 @@ function V2VisualEditor({ model, actions = {} }) {
   };
   const stageGuideRows = Math.max(1, Number(stageGrid.rows) || 1);
   const stageGuideColumns = Math.max(1, Number(stageGrid.columns) || 1);
-  const audienceGuideY = clampPercent(Number(stage.audienceGuideYPercent) || ((stage.frontZone?.y ?? stageHeight * 0.69) / stageHeight) * 100);
+  const cautionGuideY = clampPercent(Number(stage.cautionZone?.yPercent ?? stage.audienceGuideYPercent) || ((stage.frontZone?.y ?? stageHeight * 0.69) / stageHeight) * 100);
+  const tokenPixelMetrics = useMemo(() => v2StageTokenPixelMetrics({
+    widthPx: stagePixelSize.width,
+    heightPx: stagePixelSize.height,
+    columns: stageGuideColumns,
+    rows: stageGuideRows
+  }), [stagePixelSize.height, stagePixelSize.width, stageGuideColumns, stageGuideRows]);
   const stageSurfaceStyle = {
     "--v2-stage-cols": stageGuideColumns,
     "--v2-stage-rows": stageGuideRows,
-    "--v2-audience-y": `${audienceGuideY}%`,
-    "--v2-stage-aspect": `${stageWidth} / ${stageHeight}`
+    "--v2-caution-y": `${cautionGuideY}%`,
+    "--v2-stage-aspect": `${stageWidth} / ${stageHeight}`,
+    "--v2-token-size": `${tokenPixelMetrics.tokenSizePx}px`,
+    "--v2-token-label-size": `${tokenPixelMetrics.labelFontSizePx}px`,
+    "--v2-token-hit-size": `${tokenPixelMetrics.hitSizePx}px`,
+    "--v2-token-selected-spread": `${tokenPixelMetrics.selectedRingSpreadPx}px`
   };
   const selectedPerformerIds = new Set(selection.selectedPerformerIds || []);
   const selectedSectionId = selection.selectedSectionId || selection.selectedSection?.id || "";
@@ -302,6 +315,12 @@ function V2VisualEditor({ model, actions = {} }) {
     if (node) runtimeActions.timelineViewportMeasured?.(node.getBoundingClientRect().width || 0);
   };
   const referenceLabelStyle = (reference) => {
+    if (reference.id === "center-line") {
+      return {
+        "--guide-label-x": "50%",
+        "--guide-label-y": "6%"
+      };
+    }
     const lineMidX = ((Number(reference.x1Percent) || 0) + (Number(reference.x2Percent) || 0)) / 2;
     const horizontalLine = reference.type !== "point" && Math.abs((Number(reference.y1Percent) || 0) - (Number(reference.y2Percent) || 0)) < 0.1;
     const left = reference.type === "point"
@@ -385,6 +404,13 @@ function V2VisualEditor({ model, actions = {} }) {
     if (key === "toggle-stage-reference-labels") runtimeActions.toggleStageReferenceLabels?.();
     if (key === "toggle-transition-paths") runtimeActions.toggleTransitionPaths?.();
   };
+  const updateCautionSetting = (setting, value) => {
+    const min = Number(setting.min) || 0;
+    const max = Math.max(min, Number(setting.max) || stageHeight);
+    const step = Math.max(0.1, Number(setting.step) || 1);
+    const snapped = Math.round((Math.max(min, Math.min(max, Number(value) || min)) - min) / step) * step + min;
+    runtimeActions.updateFrontCautionZone?.(Number(snapped.toFixed(2)));
+  };
   const runBottomAction = (action) => {
     if (!action || action.disabled) return;
     if (action.mode) {
@@ -411,6 +437,24 @@ function V2VisualEditor({ model, actions = {} }) {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
+  }, []);
+
+  useEffect(() => {
+    const node = stageSurfaceRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return undefined;
+    const updateStagePixelSize = () => {
+      const rect = node.getBoundingClientRect();
+      setStagePixelSize((current) => {
+        const width = Math.round(rect.width * 10) / 10;
+        const height = Math.round(rect.height * 10) / 10;
+        if (current.width === width && current.height === height) return current;
+        return { width, height };
+      });
+    };
+    updateStagePixelSize();
+    const observer = new ResizeObserver(updateStagePixelSize);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -559,7 +603,51 @@ function V2VisualEditor({ model, actions = {} }) {
                       </button>
                       {item.key === "settings" && settingsSubmenuOpen && (
                         <div className="v2-top-menu v2-settings-submenu" role="menu" aria-label="Settings 메뉴">
-                          {(view.settingsMenu || []).map((setting) => (
+                          {(view.settingsMenu || []).map((setting) => setting.kind === "meter" ? (
+                            <div
+                              className="v2-settings-meter"
+                              data-v2-caution-setting={setting.key === "front-caution-zone" ? "" : undefined}
+                              key={setting.key}
+                              role="group"
+                              aria-label={setting.label}
+                              aria-disabled={Boolean(setting.disabled)}
+                            >
+                              <span>{setting.label}</span>
+                              <button
+                                type="button"
+                                aria-label={`${setting.label} 줄이기`}
+                                disabled={Boolean(setting.disabled)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  updateCautionSetting(setting, Number(setting.value) - (Number(setting.step) || 1));
+                                }}
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={setting.min}
+                                max={setting.max}
+                                step={setting.step}
+                                value={setting.value}
+                                disabled={Boolean(setting.disabled)}
+                                aria-label={setting.label}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => updateCautionSetting(setting, event.target.value)}
+                              />
+                              <button
+                                type="button"
+                                aria-label={`${setting.label} 늘리기`}
+                                disabled={Boolean(setting.disabled)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  updateCautionSetting(setting, Number(setting.value) + (Number(setting.step) || 1));
+                                }}
+                              >
+                                +
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               type="button"
                               role="menuitemcheckbox"
@@ -640,7 +728,9 @@ function V2VisualEditor({ model, actions = {} }) {
                     />
                   ))}
                 </svg>
-                {stage.referenceLabelsVisible && (stage.referenceGuides || []).map((reference) => (
+                {stage.referenceLabelsVisible && (stage.referenceGuides || [])
+                  .filter((reference) => reference.id !== "front-line")
+                  .map((reference) => (
                   <span
                     key={`${reference.id}-label`}
                     className={`v2-stage-guide-label v2-stage-guide-label-${reference.tone || "neutral"}`}
@@ -723,12 +813,7 @@ function V2VisualEditor({ model, actions = {} }) {
                 </div>
               </div>
             )}
-            <div
-              className="v2-audience-zone"
-              data-v2-audience-guide
-            >
-              {stage.referenceLabelsVisible && <span>관객</span>}
-            </div>
+            <div className="v2-caution-zone" data-v2-caution-zone aria-hidden="true" />
 
             {(stage.performers || []).map((performer) => {
               const position = stage.dragPositions?.[performer.id] || stage.visiblePositions?.[performer.id] || performer;
@@ -770,6 +855,29 @@ function V2VisualEditor({ model, actions = {} }) {
                 </button>
               );
             })}
+          </div>
+          <div className="v2-audience-strip" aria-hidden="true">
+            <svg
+              className={`v2-audience-guide ${stage.referenceLabelsVisible ? "" : "is-label-hidden"}`}
+              data-v2-audience-guide
+              viewBox="0 0 220 28"
+              preserveAspectRatio="xMidYMid meet"
+              focusable="false"
+            >
+              <g className="v2-audience-people">
+                <circle cx="74" cy="16" r="4" />
+                <circle cx="94" cy="13" r="4" />
+                <circle cx="114" cy="15" r="4" />
+                <circle cx="134" cy="13" r="4" />
+                <circle cx="154" cy="16" r="4" />
+                <rect x="69" y="21" width="10" height="5" rx="2.5" />
+                <rect x="89" y="18" width="10" height="5" rx="2.5" />
+                <rect x="109" y="20" width="10" height="5" rx="2.5" />
+                <rect x="129" y="18" width="10" height="5" rx="2.5" />
+                <rect x="149" y="21" width="10" height="5" rx="2.5" />
+              </g>
+              {stage.referenceLabelsVisible && <text x="110" y="10" textAnchor="middle">관객</text>}
+            </svg>
           </div>
         </section>
 

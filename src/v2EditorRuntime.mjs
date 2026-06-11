@@ -91,6 +91,22 @@ function snapStageMeter(value, max) {
   return Math.max(0, Math.min(maximum, Math.round(finiteNumber(value, 0))));
 }
 
+function clampStageMeter(value, max) {
+  const maximum = Math.max(1, finiteNumber(max, 1));
+  return Math.max(0, Math.min(maximum, finiteNumber(value, maximum * 0.7)));
+}
+
+function cautionZoneFor(input, dimensions) {
+  const y = snapStageMeter((input.frontZone || input.stage?.frontZone)?.y ?? dimensions.height * 0.7, dimensions.height);
+  const yPercent = percentOf(y, dimensions.height);
+  return {
+    y,
+    yPercent,
+    heightPercent: Math.max(0, 100 - yPercent),
+    label: "앞쪽 주의 구역"
+  };
+}
+
 function stageGridFor(dimensions) {
   return {
     columns: Math.max(1, Math.round(dimensions.width)),
@@ -109,8 +125,8 @@ function stageGuideForReference(reference, dimensions) {
     style: reference.style || {}
   };
   if (reference.type === "point") {
-    const x = snapStageMeter(reference.x, dimensions.width);
-    const y = snapStageMeter(reference.y, dimensions.height);
+    const x = clampStageMeter(reference.x, dimensions.width);
+    const y = clampStageMeter(reference.y, dimensions.height);
     return {
       ...guide,
       x,
@@ -119,10 +135,10 @@ function stageGuideForReference(reference, dimensions) {
       yPercent: percentOf(y, dimensions.height)
     };
   }
-  const x1 = snapStageMeter(reference.x1, dimensions.width);
-  const y1 = snapStageMeter(reference.y1, dimensions.height);
-  const x2 = snapStageMeter(reference.x2, dimensions.width);
-  const y2 = snapStageMeter(reference.y2, dimensions.height);
+  const x1 = clampStageMeter(reference.x1, dimensions.width);
+  const y1 = clampStageMeter(reference.y1, dimensions.height);
+  const x2 = clampStageMeter(reference.x2, dimensions.width);
+  const y2 = clampStageMeter(reference.y2, dimensions.height);
   return {
     ...guide,
     x1,
@@ -141,8 +157,13 @@ function stageGuideForReference(reference, dimensions) {
 function stageReferenceGuidesFor(input, dimensions) {
   const referencesVisible = input.showStageReferences !== false;
   if (!referencesVisible) return [];
+  const sourceFrontZone = input.frontZone || input.stage?.frontZone || {};
+  const gridFrontZone = {
+    ...sourceFrontZone,
+    y: snapStageMeter(sourceFrontZone.y ?? dimensions.height * 0.7, dimensions.height)
+  };
   return stageReferenceRenderItems(input.stageReferences || input.stage?.stageReferences, {
-    frontZone: input.frontZone || input.stage?.frontZone,
+    frontZone: gridFrontZone,
     showLabels: input.showStageReferenceLabels !== false,
     stage: dimensions,
     visible: true
@@ -176,6 +197,7 @@ export function createV2EditorRuntime(input = {}) {
   const activeTab = activeTabFor(input);
   const currentSectionId = currentSectionIdFor(input);
   const currentSection = normalizeArray(input.sortedSections || input.timeline?.sortedSections).find((section) => section.id === currentSectionId) || null;
+  const cautionZone = cautionZoneFor(input, stageDimensions);
 
   const shell = {
     projectTitle: input.projectTitle || input.shell?.projectTitle || input.title || "Movemap",
@@ -187,13 +209,14 @@ export function createV2EditorRuntime(input = {}) {
   const stage = {
     dragPositions: input.dragPositions || input.stage?.dragPositions || null,
     frontZone: input.frontZone || input.stage?.frontZone || null,
+    cautionZone,
     grid: stageGridFor(stageDimensions),
     performers: normalizeArray(input.performers || input.stage?.performers),
     referenceGuides: stageReferenceGuidesFor(input, stageDimensions),
     referenceLabelsVisible: input.showStageReferences !== false && input.showStageReferenceLabels !== false,
     referencesVisible: input.showStageReferences !== false,
     stageDimensions,
-    audienceGuideYPercent: percentOf(snapStageMeter((input.frontZone || input.stage?.frontZone)?.y ?? stageDimensions.height * 0.7, stageDimensions.height), stageDimensions.height),
+    audienceGuideYPercent: cautionZone.yPercent,
     visiblePositions: input.visiblePositions || input.stage?.visiblePositions || {}
   };
   const selection = {
@@ -310,12 +333,23 @@ export function createV2EditorRuntime(input = {}) {
     { key: "toggle-snap", label: "Snap", checked: Boolean(input.snapEnabled), disabled: readonly },
     { key: "toggle-stage-references", label: "Stage references", checked: Boolean(input.showStageReferences) },
     { key: "toggle-stage-reference-labels", label: "Reference labels", checked: Boolean(input.showStageReferenceLabels) },
+    {
+      key: "front-caution-zone",
+      label: "앞쪽 주의 구역",
+      kind: "meter",
+      value: cautionZone.y,
+      min: 0,
+      max: stageDimensions.height,
+      step: 1,
+      disabled: readonly,
+      stateLabel: `${cautionZone.y}m`
+    },
     { key: "toggle-transition-paths", label: "Transition paths", checked: Boolean(input.showAllTransitionPaths) }
   ];
   const stageTask = {
     settings: settingsMenu.map((setting) => ({
       ...setting,
-      stateLabel: setting.checked ? "On" : "Off"
+      stateLabel: setting.stateLabel || (setting.checked ? "On" : "Off")
     })),
     selectedPerformerSummary: selectedPerformerSummaryFor(stage.performers, selectedPerformerId, selectedPerformerIds, "무대 선택 없음"),
     canClearSelection: hasPerformerSelection,
@@ -419,6 +453,7 @@ export function createV2EditorRuntime(input = {}) {
     toggleStageReferenceLabels: input.toggleStageReferenceLabels,
     toggleStageReferences: input.toggleStageReferences,
     toggleTransitionPaths: input.toggleTransitionPaths,
+    updateFrontCautionZone: input.updateFrontCautionZone,
     updateSectionTiming: input.updateSectionTiming,
     undo: input.undoPlan
   };

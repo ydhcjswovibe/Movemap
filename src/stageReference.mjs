@@ -83,48 +83,84 @@ function cleanText(value, fallback = "") {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-function normalizeReference(reference, index = 0, stage = LEGACY_REFERENCE_STAGE) {
+function defaultReferenceForStage(reference = {}, frontZone = { y: DEFAULT_FRONT_ZONE_Y }, stage = DEFAULT_STAGE_DIMENSIONS) {
   const dimensions = normalizeStageDimensions(stage);
+  const frontY = clampStageValue(frontZone?.y, dimensions.height * 0.7, dimensions.height);
+  if (reference.id === "center-line") {
+    return {
+      ...reference,
+      x1: dimensions.width / 2,
+      y1: 0,
+      x2: dimensions.width / 2,
+      y2: dimensions.height
+    };
+  }
+  if (reference.id === "front-line") {
+    return {
+      ...reference,
+      x1: 0,
+      y1: frontY,
+      x2: dimensions.width,
+      y2: frontY
+    };
+  }
+  if (reference.id === "left-hash") {
+    return {
+      ...reference,
+      x: dimensions.width * 0.2,
+      y: frontY
+    };
+  }
+  if (reference.id === "right-hash") {
+    return {
+      ...reference,
+      x: dimensions.width * 0.8,
+      y: frontY
+    };
+  }
+  return reference;
+}
+
+function normalizeReference(reference, index = 0, stage = LEGACY_REFERENCE_STAGE, frontZone = { y: DEFAULT_FRONT_ZONE_Y }) {
+  const dimensions = normalizeStageDimensions(stage);
+  const source = reference?.locked !== false ? defaultReferenceForStage(reference, frontZone, dimensions) : reference;
   const type = reference?.type === "point" ? "point" : "line";
-  const id = cleanText(reference?.id, `reference-${index + 1}`);
-  const tone = TONES[reference?.tone] ? reference.tone : "neutral";
+  const id = cleanText(source?.id, `reference-${index + 1}`);
+  const tone = TONES[source?.tone] ? source.tone : "neutral";
   const base = {
     id,
     type,
-    label: cleanText(reference?.label, id),
+    label: cleanText(source?.label, id),
     tone,
-    locked: reference?.locked !== false,
-    visible: reference?.visible !== false
+    locked: source?.locked !== false,
+    visible: source?.visible !== false
   };
 
   if (type === "point") {
     return {
       ...base,
-      x: clampStageValue(reference?.x, dimensions.width / 2, dimensions.width),
-      y: clampStageValue(reference?.y, dimensions.height / 2, dimensions.height)
+      x: clampStageValue(source?.x, dimensions.width / 2, dimensions.width),
+      y: clampStageValue(source?.y, dimensions.height / 2, dimensions.height)
     };
   }
 
   return {
     ...base,
-    x1: clampStageValue(reference?.x1, 0, dimensions.width),
-    y1: clampStageValue(reference?.y1, 0, dimensions.height),
-    x2: clampStageValue(reference?.x2, dimensions.width, dimensions.width),
-    y2: clampStageValue(reference?.y2, dimensions.height, dimensions.height)
+    x1: clampStageValue(source?.x1, 0, dimensions.width),
+    y1: clampStageValue(source?.y1, 0, dimensions.height),
+    x2: clampStageValue(source?.x2, dimensions.width, dimensions.width),
+    y2: clampStageValue(source?.y2, dimensions.height, dimensions.height)
   };
 }
 
-export function defaultStageReferences(frontZone = { y: DEFAULT_FRONT_ZONE_Y }) {
-  return DEFAULT_STAGE_REFERENCES.map((reference) => normalizeReference({
-    ...reference,
-    ...(reference.id === "front-line" ? { y1: frontZone?.y, y2: frontZone?.y } : {}),
-    ...(reference.id === "left-hash" || reference.id === "right-hash" ? { y: frontZone?.y } : {})
-  }));
+export function defaultStageReferences(frontZone = { y: DEFAULT_FRONT_ZONE_Y }, stage = DEFAULT_STAGE_DIMENSIONS) {
+  return DEFAULT_STAGE_REFERENCES.map((reference) => normalizeReference(reference, 0, stage, frontZone));
 }
 
 export function normalizeStageReferences(references, frontZone = { y: DEFAULT_FRONT_ZONE_Y }, options = {}) {
-  const source = Array.isArray(references) && references.length ? references : defaultStageReferences(frontZone);
-  return source.map((reference, index) => normalizeReference(reference, index, options.stage || LEGACY_REFERENCE_STAGE));
+  const stage = options.stage || LEGACY_REFERENCE_STAGE;
+  const source = Array.isArray(references) && references.length ? references : defaultStageReferences(frontZone, stage);
+  return source.map((reference, index) => normalizeReference(reference, index, stage, frontZone));
 }
 
 export function visibleStageReferences(references, options = {}) {
