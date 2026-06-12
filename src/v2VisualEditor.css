@@ -1459,7 +1459,7 @@
 }
 
 .v2-timeline-handle {
-  --v2-timeline-handle-hit-width: 44px;
+  --v2-timeline-handle-hit-width: 20px;
   --v2-timeline-handle-pill-width: 7px;
   --v2-timeline-handle-pill-shift: 0px;
   --v2-timeline-handle-height: clamp(78px, 82%, 90px);

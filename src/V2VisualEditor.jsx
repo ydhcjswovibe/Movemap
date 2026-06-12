@@ -5,7 +5,10 @@ import "./v2VisualEditor.css";
 
 const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
 const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
+const V2_SELECTED_TRIM_HIT_WIDTH_PX = 30;
+const V2_HOVER_TRIM_HIT_WIDTH_PX = 20;
 const V2_TIMELINE_HANDLE_PILL_WIDTH_PX = 7;
+const V2_TRIM_HOVER_DELAY_MS = 80;
 
 const demoPerformers = [
   { id: "A3", label: "A3", role: "groupA", color: "#256fe8", x: 20, y: 20 },
@@ -251,9 +254,12 @@ function V2VisualEditor({ model, actions = {} }) {
   const tokenGestureRef = useRef(null);
   const blockTapGestureRef = useRef(null);
   const settingsHoverTimerRef = useRef(null);
+  const trimHoverTimerRef = useRef(null);
+  const pendingTrimHoverRef = useRef(null);
   const suppressNextTokenClickRef = useRef(false);
   const [openTopMenu, setOpenTopMenu] = useState("");
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
+  const [hoverTrimTarget, setHoverTrimTarget] = useState(null);
   const [stagePixelSize, setStagePixelSize] = useState({ width: 0, height: 0 });
   const view = buildDemoViewModel(model);
   const { shell, stage, stageInfoLine, selection, timeline, sections, share } = view;
@@ -304,7 +310,7 @@ function V2VisualEditor({ model, actions = {} }) {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
   };
-  const timelineHandleStyle = (segment, edge, selected = false) => {
+  const timelineHandleStyle = (segment, edge, mode = "selected") => {
     const segmentLeft = Number(segment?.leftPx) || 0;
     const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
     const edgeX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
@@ -312,8 +318,10 @@ function V2VisualEditor({ model, actions = {} }) {
     const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
     const edgeVisibilityInset = V2_TIMELINE_HANDLE_PILL_WIDTH_PX / 2;
     const edgeVisible = !viewportWidth || (rawViewportX >= edgeVisibilityInset && rawViewportX <= viewportWidth - edgeVisibilityInset);
-    const handleHitWidth = selected && edgeVisible ? 56 : 44;
-    if (!viewportWidth || (!selected && !edgeVisible)) {
+    const selected = mode === "selected";
+    const hover = mode === "hover";
+    const handleHitWidth = selected ? V2_SELECTED_TRIM_HIT_WIDTH_PX : hover ? V2_HOVER_TRIM_HIT_WIDTH_PX : V2_HOVER_TRIM_HIT_WIDTH_PX;
+    if (!viewportWidth || ((!selected && !hover) && !edgeVisible)) {
       return {
         left: `${rawViewportX}px`,
         "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
@@ -420,6 +428,50 @@ function V2VisualEditor({ model, actions = {} }) {
   const consumeTimelineHandleEvent = (event) => {
     event.preventDefault();
     event.stopPropagation();
+  };
+  const clearTrimHover = () => {
+    if (trimHoverTimerRef.current) window.clearTimeout(trimHoverTimerRef.current);
+    trimHoverTimerRef.current = null;
+    pendingTrimHoverRef.current = null;
+    setHoverTrimTarget(null);
+  };
+  const scheduleTrimHover = (sectionId, edge) => {
+    if (!sectionId || !edge) {
+      clearTrimHover();
+      return;
+    }
+    if (hoverTrimTarget?.sectionId === sectionId && hoverTrimTarget?.edge === edge) return;
+    if (pendingTrimHoverRef.current?.sectionId === sectionId && pendingTrimHoverRef.current?.edge === edge) return;
+    if (trimHoverTimerRef.current) window.clearTimeout(trimHoverTimerRef.current);
+    pendingTrimHoverRef.current = { sectionId, edge };
+    trimHoverTimerRef.current = window.setTimeout(() => {
+      trimHoverTimerRef.current = null;
+      setHoverTrimTarget(pendingTrimHoverRef.current);
+      pendingTrimHoverRef.current = null;
+    }, V2_TRIM_HOVER_DELAY_MS);
+  };
+  const handleFormationBlockPointerMove = (event, section, sectionIndex, sectionSelected) => {
+    if (sectionSelected || !capabilities.canEditTimeline || !section?.id || event.pointerType === "touch") {
+      clearTrimHover();
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = Number(event.clientX);
+    if (!Number.isFinite(pointerX) || !rect.width) {
+      clearTrimHover();
+      return;
+    }
+    const leftDistance = pointerX - rect.left;
+    const rightDistance = rect.right - pointerX;
+    const canTrimLeft = sectionIndex > 0;
+    const edgeZonePx = V2_HOVER_TRIM_HIT_WIDTH_PX;
+    if (canTrimLeft && leftDistance >= 0 && leftDistance <= edgeZonePx && leftDistance <= rightDistance) {
+      scheduleTrimHover(section.id, "left");
+    } else if (rightDistance >= 0 && rightDistance <= edgeZonePx) {
+      scheduleTrimHover(section.id, "right");
+    } else {
+      clearTrimHover();
+    }
   };
   const beginBlockTapGesture = (event, section, isMove) => {
     const currentGesture = blockTapGestureRef.current;
@@ -553,10 +605,15 @@ function V2VisualEditor({ model, actions = {} }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       if (settingsHoverTimerRef.current) window.clearTimeout(settingsHoverTimerRef.current);
+      if (trimHoverTimerRef.current) window.clearTimeout(trimHoverTimerRef.current);
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  useEffect(() => {
+    clearTrimHover();
+  }, [selectedSectionId, capabilities.canEditTimeline]);
 
   useEffect(() => {
     const node = stageSurfaceRef.current;
@@ -1115,10 +1172,12 @@ function V2VisualEditor({ model, actions = {} }) {
                         aria-pressed={sectionSelected}
                         onPointerDownCapture={(event) => {
                           if (isTimelineHandleEvent(event)) return;
+                          clearTrimHover();
                           beginBlockTapGesture(event, section, isMove);
                         }}
                         onMouseDownCapture={(event) => {
                           if (isTimelineHandleEvent(event)) return;
+                          clearTrimHover();
                           beginBlockTapGesture({
                             clientX: event.clientX,
                             clientY: event.clientY,
@@ -1128,6 +1187,7 @@ function V2VisualEditor({ model, actions = {} }) {
                         }}
                         onMouseDown={(event) => {
                           if (isTimelineHandleEvent(event)) return;
+                          clearTrimHover();
                           beginBlockTapGesture({
                             clientX: event.clientX,
                             clientY: event.clientY,
@@ -1146,8 +1206,25 @@ function V2VisualEditor({ model, actions = {} }) {
                             runtimeActions.selectFormation?.(section, { force: true });
                           }
                         }}
+                        onPointerMove={(event) => {
+                          if (isMove || isTimelineHandleEvent(event)) return;
+                          handleFormationBlockPointerMove(event, section, sections.findIndex((item) => item.id === section.id), sectionSelected);
+                        }}
+                        onMouseMove={(event) => {
+                          if (isMove || isTimelineHandleEvent(event)) return;
+                          handleFormationBlockPointerMove(event, section, sections.findIndex((item) => item.id === section.id), sectionSelected);
+                        }}
+                        onPointerLeave={(event) => {
+                          const relatedHandle = event?.relatedTarget?.closest?.("[data-v2-timeline-handle]");
+                          if (!sectionSelected && relatedHandle?.getAttribute("data-v2-section-id") !== section.id) clearTrimHover();
+                        }}
+                        onMouseLeave={(event) => {
+                          const relatedHandle = event?.relatedTarget?.closest?.("[data-v2-timeline-handle]");
+                          if (!sectionSelected && relatedHandle?.getAttribute("data-v2-section-id") !== section.id) clearTrimHover();
+                        }}
                         onPointerDown={(event) => {
                           if (isTimelineHandleEvent(event)) return;
+                          clearTrimHover();
                           event.stopPropagation();
                           if (isMove) {
                             runtimeActions.timelinePointerDown?.(event, { kind: "move-block", sectionId: section.id || "" });
@@ -1222,48 +1299,65 @@ function V2VisualEditor({ model, actions = {} }) {
                 const section = sectionById.get(targetSectionId) || sections[index] || {};
                 const isMove = segment.kind === "move";
                 const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
-                if (isMove || !section.id || !capabilities.canEditTimeline || !sectionSelected) return null;
+                const sectionHovered = !sectionSelected && hoverTrimTarget?.sectionId === section.id;
+                if (isMove || !section.id || !capabilities.canEditTimeline || (!sectionSelected && !sectionHovered)) return null;
                 const sectionIndex = sections.findIndex((item) => item.id === section.id);
+                const handleMode = sectionSelected ? "selected" : "hover";
+                const showLeftHandle = sectionSelected || hoverTrimTarget?.edge === "left";
+                const showRightHandle = sectionSelected || hoverTrimTarget?.edge === "right";
+                const edgeVisibleClass = (edge) => timelineHandleEdgeVisible(segment, edge) ? "is-edge-visible" : "";
                 return (
                   <React.Fragment key={`handles-${segment.kind || "hold"}-${section.id}-${index}`}>
-                      {sectionIndex > 0 && (
+                      {sectionIndex > 0 && showLeftHandle && (
                         <span
                         className={[
                           "v2-timeline-handle",
                           "v2-timeline-handle-left",
                           sectionSelected ? "is-selected" : "",
-                          sectionSelected && timelineHandleEdgeVisible(segment, "left") ? "is-edge-visible" : ""
+                          sectionHovered ? "is-hover-trim" : "",
+                          edgeVisibleClass("left")
                         ].filter(Boolean).join(" ")}
                         data-v2-timeline-handle="hold-left"
                         data-v2-section-id={section.id || ""}
+                        data-v2-trim-activation={handleMode}
                         aria-hidden="true"
-                        style={timelineHandleStyle(segment, "left", sectionSelected)}
+                        style={timelineHandleStyle(segment, "left", handleMode)}
                         onPointerDown={(event) => {
                           consumeTimelineHandleEvent(event);
                           runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-left", segment);
+                        }}
+                        onPointerLeave={() => {
+                          if (handleMode === "hover") clearTrimHover();
                         }}
                         onMouseDown={consumeTimelineHandleEvent}
                         onClick={consumeTimelineHandleEvent}
                       />
                     )}
-                    <span
+                    {showRightHandle && (
+                      <span
                       className={[
                         "v2-timeline-handle",
                         "v2-timeline-handle-right",
                         sectionSelected ? "is-selected" : "",
-                        sectionSelected && timelineHandleEdgeVisible(segment, "right") ? "is-edge-visible" : ""
+                        sectionHovered ? "is-hover-trim" : "",
+                        edgeVisibleClass("right")
                       ].filter(Boolean).join(" ")}
                       data-v2-timeline-handle="hold-right"
                       data-v2-section-id={section.id || ""}
+                      data-v2-trim-activation={handleMode}
                       aria-hidden="true"
-                      style={timelineHandleStyle(segment, "right", sectionSelected)}
+                      style={timelineHandleStyle(segment, "right", handleMode)}
                       onPointerDown={(event) => {
                         consumeTimelineHandleEvent(event);
                         runtimeActions.timelineHandlePointerDown?.(event, section.id, "hold-right", segment);
                       }}
+                      onPointerLeave={() => {
+                        if (handleMode === "hover") clearTrimHover();
+                      }}
                       onMouseDown={consumeTimelineHandleEvent}
                       onClick={consumeTimelineHandleEvent}
                     />
+                    )}
                   </React.Fragment>
                 );
               })}
