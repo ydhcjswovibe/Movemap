@@ -5,10 +5,21 @@ import "./v2VisualEditor.css";
 
 const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
 const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
-const V2_SELECTED_TRIM_HIT_WIDTH_PX = 30;
-const V2_HOVER_TRIM_HIT_WIDTH_PX = 20;
+const V2_TRIM_HIT_RATIO = 0.15;
+const V2_TRIM_HIT_MIN_WIDTH_PX = 10;
+const V2_SELECTED_TRIM_HIT_MAX_WIDTH_PX = 24;
+const V2_HOVER_TRIM_HIT_MAX_WIDTH_PX = 20;
+const V2_TRIM_BODY_MIN_WIDTH_PX = 12;
 const V2_TIMELINE_HANDLE_PILL_WIDTH_PX = 7;
 const V2_TRIM_HOVER_DELAY_MS = 80;
+
+function v2TrimHitWidthForBlockWidth(blockWidth, mode = "selected") {
+  const segmentWidth = Math.max(0, Number(blockWidth) || 0);
+  const maxHitWidth = mode === "selected" ? V2_SELECTED_TRIM_HIT_MAX_WIDTH_PX : V2_HOVER_TRIM_HIT_MAX_WIDTH_PX;
+  const preferredWidth = Math.max(V2_TRIM_HIT_MIN_WIDTH_PX, segmentWidth * V2_TRIM_HIT_RATIO);
+  const bodySafeWidth = Math.max(1, (segmentWidth - V2_TRIM_BODY_MIN_WIDTH_PX) / 2);
+  return Math.max(1, Math.min(preferredWidth, maxHitWidth, bodySafeWidth));
+}
 
 const demoPerformers = [
   { id: "A3", label: "A3", role: "groupA", color: "#256fe8", x: 20, y: 20 },
@@ -310,6 +321,9 @@ function V2VisualEditor({ model, actions = {} }) {
     width: `${timelineContentWidth}px`,
     transform: `translateX(${-timelineScrollX}px)`
   };
+  const timelineHandleHitWidth = (segment, mode = "selected") => {
+    return v2TrimHitWidthForBlockWidth(segment?.widthPx, mode);
+  };
   const timelineHandleStyle = (segment, edge, mode = "selected") => {
     const segmentLeft = Number(segment?.leftPx) || 0;
     const segmentWidth = Math.max(0, Number(segment?.widthPx) || 0);
@@ -320,16 +334,17 @@ function V2VisualEditor({ model, actions = {} }) {
     const edgeVisible = !viewportWidth || (rawViewportX >= edgeVisibilityInset && rawViewportX <= viewportWidth - edgeVisibilityInset);
     const selected = mode === "selected";
     const hover = mode === "hover";
-    const handleHitWidth = selected ? V2_SELECTED_TRIM_HIT_WIDTH_PX : hover ? V2_HOVER_TRIM_HIT_WIDTH_PX : V2_HOVER_TRIM_HIT_WIDTH_PX;
+    const handleHitWidth = timelineHandleHitWidth(segment, selected ? "selected" : hover ? "hover" : "hover");
+    const rawHandleViewportX = selected && edge === "left" ? rawViewportX + handleHitWidth / 2 : rawViewportX;
     if (!viewportWidth || ((!selected && !hover) && !edgeVisible)) {
       return {
-        left: `${rawViewportX}px`,
+        left: `${rawHandleViewportX}px`,
         "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
-        "--v2-timeline-handle-pill-shift": "0px"
+        "--v2-timeline-handle-pill-shift": `${rawViewportX - rawHandleViewportX}px`
       };
     }
     const clampInset = selected && edge === "left" ? handleHitWidth / 2 : handleHitWidth;
-    const clampedViewportX = Math.max(clampInset, Math.min(Math.max(clampInset, viewportWidth - clampInset), rawViewportX));
+    const clampedViewportX = Math.max(clampInset, Math.min(Math.max(clampInset, viewportWidth - clampInset), rawHandleViewportX));
     return {
       left: `${clampedViewportX}px`,
       "--v2-timeline-handle-hit-width": `${handleHitWidth}px`,
@@ -464,7 +479,7 @@ function V2VisualEditor({ model, actions = {} }) {
     const leftDistance = pointerX - rect.left;
     const rightDistance = rect.right - pointerX;
     const canTrimLeft = sectionIndex > 0;
-    const edgeZonePx = V2_HOVER_TRIM_HIT_WIDTH_PX;
+    const edgeZonePx = v2TrimHitWidthForBlockWidth(rect.width, "hover");
     if (canTrimLeft && leftDistance >= 0 && leftDistance <= edgeZonePx && leftDistance <= rightDistance) {
       scheduleTrimHover(section.id, "left");
     } else if (rightDistance >= 0 && rightDistance <= edgeZonePx) {

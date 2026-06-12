@@ -57,6 +57,7 @@ import {
 
 const STORAGE_KEY = "movemap-project";
 const LEGACY_STORAGE_KEY = "choreo-stage-planner-project";
+const DEFAULT_TIMELINE_PIXELS_PER_SECOND = 40;
 const WORK_PANEL_TABS = [
   ["cast", "Cast"],
   ["formation", "Formation"],
@@ -883,7 +884,7 @@ function App() {
   const [isShareOperationPending, setIsShareOperationPending] = useState(false);
   const [isExportOperationPending, setIsExportOperationPending] = useState(false);
   const [isStageFocus, setIsStageFocus] = useState(false);
-  const [timelinePixelsPerSecond, setTimelinePixelsPerSecond] = useState(56);
+  const [timelinePixelsPerSecond, setTimelinePixelsPerSecond] = useState(DEFAULT_TIMELINE_PIXELS_PER_SECOND);
   const [timelineScrollX, setTimelineScrollX] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
   const [timelineSnapTime, setTimelineSnapTime] = useState(null);
@@ -5144,7 +5145,7 @@ function App() {
     timelineTicks,
     timelineViewportRef,
     timelineVisualSegments,
-    timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / 56) * 100)}%`,
+    timelineZoomLabel: `${Math.round((timelinePixelsPerSecond / DEFAULT_TIMELINE_PIXELS_PER_SECOND) * 100)}%`,
     togglePlayback,
     toggleStageReferences: () => setShowStageReferences((value) => !value),
     updateFrontCautionZone,
