@@ -5,6 +5,7 @@ import "./v2VisualEditor.css";
 
 const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
 const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
+const V2_TIMELINE_HANDLE_PILL_WIDTH_PX = 7;
 
 const demoPerformers = [
   { id: "A3", label: "A3", role: "groupA", color: "#256fe8", x: 20, y: 20 },
@@ -309,7 +310,8 @@ function V2VisualEditor({ model, actions = {} }) {
     const edgeX = edge === "left" ? segmentLeft : segmentLeft + segmentWidth;
     const rawViewportX = edgeX - timelineScrollX;
     const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
-    const edgeVisible = !viewportWidth || (rawViewportX >= 0 && rawViewportX <= viewportWidth);
+    const edgeVisibilityInset = V2_TIMELINE_HANDLE_PILL_WIDTH_PX / 2;
+    const edgeVisible = !viewportWidth || (rawViewportX >= edgeVisibilityInset && rawViewportX <= viewportWidth - edgeVisibilityInset);
     const handleHitWidth = selected && edgeVisible ? 56 : 44;
     if (!viewportWidth || (!selected && !edgeVisible)) {
       return {
@@ -333,7 +335,8 @@ function V2VisualEditor({ model, actions = {} }) {
     const viewportWidth = Math.max(0, Number(timeline.timelineViewportWidth ?? timeline.viewportWidth) || 0);
     if (!viewportWidth) return true;
     const rawViewportX = edgeX - timelineScrollX;
-    return rawViewportX >= 0 && rawViewportX <= viewportWidth;
+    const edgeVisibilityInset = V2_TIMELINE_HANDLE_PILL_WIDTH_PX / 2;
+    return rawViewportX >= edgeVisibilityInset && rawViewportX <= viewportWidth - edgeVisibilityInset;
   };
   const waveformContentStyle = {
     ...timelineContentStyle,
