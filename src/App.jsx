@@ -2935,16 +2935,20 @@ function App() {
     clearQuietStatus();
   }
 
-  function addSection({ forceAppend = false } = {}) {
+  function addSection({ forceAppend = false, forceCreate = false } = {}) {
     const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
     const target = resolveFormationAddTarget(sortedSections, captureTime);
-    if (target.action === "select" && !forceAppend) {
+    if (target.action === "select" && !forceAppend && !forceCreate) {
       setSelectedSectionId(target.section.id);
       jumpTo(target.section);
       clearQuietStatus();
       return;
     }
-    const time = target.action === "select" ? pointTime(sortedSections.at(-1)) : target.time;
+    const time = target.action === "select" && forceCreate
+      ? captureTime
+      : target.action === "select"
+        ? pointTime(sortedSections.at(-1))
+        : target.time;
     const previous = target.action === "select" ? sortedSections.at(-1) : target.previous;
     const positions = previous?.positions || Object.fromEntries(plan.performers.map((p, index) => [p.id, { x: 18 + index * 8, y: 55 }]));
     const section = {

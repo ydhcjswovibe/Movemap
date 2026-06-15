@@ -466,7 +466,7 @@ function V2VisualEditor({ model, actions = {} }) {
       pendingTrimHoverRef.current = null;
     }, V2_TRIM_HOVER_DELAY_MS);
   };
-  const handleFormationBlockPointerMove = (event, section, sectionIndex, sectionSelected) => {
+  const handleFormationBlockPointerMove = (event, section, sectionSelected) => {
     if (sectionSelected || !capabilities.canEditTimeline || !section?.id || event.pointerType === "touch") {
       clearTrimHover();
       return;
@@ -479,9 +479,8 @@ function V2VisualEditor({ model, actions = {} }) {
     }
     const leftDistance = pointerX - rect.left;
     const rightDistance = rect.right - pointerX;
-    const canTrimLeft = sectionIndex > 0;
     const edgeZonePx = v2TrimHitWidthForBlockWidth(rect.width, "hover");
-    if (canTrimLeft && leftDistance >= 0 && leftDistance <= edgeZonePx && leftDistance <= rightDistance) {
+    if (leftDistance >= 0 && leftDistance <= edgeZonePx && leftDistance <= rightDistance) {
       scheduleTrimHover(section.id, "left");
     } else if (rightDistance >= 0 && rightDistance <= edgeZonePx) {
       scheduleTrimHover(section.id, "right");
@@ -609,7 +608,7 @@ function V2VisualEditor({ model, actions = {} }) {
       return;
     }
     if (action.key === "add-formation") {
-      runtimeActions.addFormation?.({ forceAppend: true });
+      runtimeActions.addFormation?.({ forceCreate: true });
       return;
     }
     if (action.key === "duplicate-formation" || action.key === "duplicate-performer") {
@@ -642,7 +641,7 @@ function V2VisualEditor({ model, actions = {} }) {
       return;
     }
     if (item.action === "add-formation") {
-      runtimeActions.addFormation?.({ forceAppend: true });
+      runtimeActions.addFormation?.({ forceCreate: true });
       return;
     }
     if (item.key === "toggle-snap") {
@@ -1105,7 +1104,7 @@ function V2VisualEditor({ model, actions = {} }) {
           <div className="v2-lane-row">
             <div className="v2-lane-label">
               <CoolIcon name="users" />
-              {capabilities.canAddFormation && <button className="v2-track-add-button" type="button" aria-label="대형 추가" onClick={() => runtimeActions.addFormation?.({ forceAppend: true })}>+</button>}
+              {capabilities.canAddFormation && <button className="v2-track-add-button" type="button" aria-label="대형 추가" onClick={() => runtimeActions.addFormation?.({ forceCreate: true })}>+</button>}
             </div>
             <div className="v2-formation-lane">
               <div
@@ -1189,11 +1188,11 @@ function V2VisualEditor({ model, actions = {} }) {
                         }}
                         onPointerMove={(event) => {
                           if (isMove || isTimelineHandleEvent(event)) return;
-                          handleFormationBlockPointerMove(event, section, sections.findIndex((item) => item.id === section.id), sectionSelected);
+                          handleFormationBlockPointerMove(event, section, sectionSelected);
                         }}
                         onMouseMove={(event) => {
                           if (isMove || isTimelineHandleEvent(event)) return;
-                          handleFormationBlockPointerMove(event, section, sections.findIndex((item) => item.id === section.id), sectionSelected);
+                          handleFormationBlockPointerMove(event, section, sectionSelected);
                         }}
                         onPointerLeave={(event) => {
                           const relatedHandle = event?.relatedTarget?.closest?.("[data-v2-timeline-handle]");
@@ -1282,14 +1281,13 @@ function V2VisualEditor({ model, actions = {} }) {
                 const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
                 const sectionHovered = !sectionSelected && hoverTrimTarget?.sectionId === section.id;
                 if (isMove || !section.id || !capabilities.canEditTimeline || (!sectionSelected && !sectionHovered)) return null;
-                const sectionIndex = sections.findIndex((item) => item.id === section.id);
                 const handleMode = sectionSelected ? "selected" : "hover";
                 const showLeftHandle = sectionSelected || hoverTrimTarget?.edge === "left";
                 const showRightHandle = sectionSelected || hoverTrimTarget?.edge === "right";
                 const edgeVisibleClass = (edge) => timelineHandleEdgeVisible(segment, edge) ? "is-edge-visible" : "";
                 return (
                   <React.Fragment key={`handles-${segment.kind || "hold"}-${section.id}-${index}`}>
-                      {sectionIndex > 0 && showLeftHandle && (
+                      {showLeftHandle && (
                         <span
                         className={[
                           "v2-timeline-handle",

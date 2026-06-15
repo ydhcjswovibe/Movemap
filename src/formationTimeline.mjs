@@ -145,7 +145,7 @@ export function layoutTimelineVisualSegments(sections = [], pixelsPerSecond, opt
   sortedSections.forEach((section, index) => {
     const nextSection = sortedSections[index + 1] || null;
     const arrivalTime = pointTime(section);
-    const holdStartTime = index === 0 ? pointMoveStart(section) : arrivalTime;
+    const holdStartTime = arrivalTime;
     const lastHoldDuration = quantizeTimelineTime(Math.max(0, Number(section.holdDuration) || defaultLastHoldSeconds));
     const holdEndTime = nextSection
       ? Math.max(holdStartTime, pointMoveStart(nextSection))

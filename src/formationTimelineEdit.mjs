@@ -88,16 +88,14 @@ function setHoldRightEdgeWithPropagation(normalized, index, requestedHoldEnd) {
 // Action helpers keep all formation-time invariants behind the dispatcher.
 function addFormationAfterEdit(normalized, { sectionId, section, time, forceSequentialAppend = false }) {
   const previous = normalized.at(-1) || null;
-  const previousEnd = previous ? pointTime(previous) : 0;
-  const holdDuration = DEFAULT_FORMATION_SEGMENT_SECONDS;
-  const moveDuration = DEFAULT_FORMATION_SEGMENT_SECONDS;
-  const requestedEnd = Number.isFinite(Number(time)) ? quantizeTimelineTime(time) : quantizeTimelineTime(previousEnd + holdDuration + moveDuration);
-  const sequentialStart = previous ? quantizeTimelineTime(previousEnd + sectionHoldDuration(previous)) : 0;
-  const sequentialEnd = quantizeTimelineTime(sequentialStart + moveDuration);
+  const previousHoldEnd = previous ? sectionHoldEnd(normalized, normalized.length - 1) : 0;
+  const requestedEnd = Number.isFinite(Number(time))
+    ? quantizeTimelineTime(time)
+    : quantizeTimelineTime(previousHoldEnd + DEFAULT_FORMATION_SEGMENT_SECONDS);
+  const start = previous ? previousHoldEnd : 0;
   const end = forceSequentialAppend
-    ? sequentialEnd
-    : quantizeTimelineTime(Math.max(previousEnd + holdDuration + moveDuration, requestedEnd));
-  const start = quantizeTimelineTime(end - moveDuration);
+    ? quantizeTimelineTime(start + DEFAULT_FORMATION_SEGMENT_SECONDS)
+    : quantizeTimelineTime(Math.max(requestedEnd, start + DEFAULT_FORMATION_SEGMENT_SECONDS));
   const sectionPayload = section || { id: sectionId };
   const nextSection = applySectionTiming({
     ...sectionPayload,
@@ -174,7 +172,7 @@ function trimFormationHoldRightEdit(normalized, sectionId, index, time) {
     };
   }
 
-  const holdEnd = quantizeTimelineTime(Math.max(currentArrival, Number(time) || 0));
+  const holdEnd = quantizeTimelineTime(Math.max(currentArrival + MIN_FORMATION_BLOCK_SECONDS, Number(time) || 0));
   const result = setHoldRightEdgeWithPropagation(normalized, index, holdEnd);
   const actualHoldEnd = result.holdEnd;
   return {
@@ -229,8 +227,6 @@ function bodyDragBounds(current, previousSection, nextSection, timelineMax) {
 }
 
 function moveFormationBodyEdit(normalized, sectionId, index, { deltaTime = 0, timelineMax = 0 } = {}) {
-  if (index === 0) return blockedFormationEdit(normalized, sectionId);
-
   const current = normalized[index];
   const previousSection = normalized[index - 1] || null;
   const nextSection = normalized[index + 1] || null;

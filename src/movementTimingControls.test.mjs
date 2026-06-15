@@ -9,6 +9,7 @@ const iconHintSource = readFileSync(new URL("./IconHintButton.jsx", import.meta.
 const topActionDropdownSource = readFileSync(new URL("./TopActionDropdown.jsx", import.meta.url), "utf8");
 const stitchSource = readFileSync(new URL("./StitchMobileEditor.jsx", import.meta.url), "utf8");
 const stitchTimelineSource = readFileSync(new URL("./StitchTimeline.jsx", import.meta.url), "utf8");
+const v2Source = readFileSync(new URL("./V2VisualEditor.jsx", import.meta.url), "utf8");
 const attributionSource = readFileSync(new URL("../docs/third-party-attribution.md", import.meta.url), "utf8");
 const selectedFormationStart = appSource.indexOf("<div className=\"selected-formation-bar\">");
 const selectedFormationEnd = appSource.indexOf("\n          )}\n        </section>", selectedFormationStart);
@@ -298,17 +299,18 @@ test("timeline pointer drags batch undo history until pointerup", () => {
   assert.match(appSource, /updateMovementKeyframes\(section\.id,[\s\S]*?\{ history: false \}\)/);
 });
 
-test("formation add follows sequential append selection policy", () => {
-  const addSection = appSource.match(/function addSection\(\{ forceAppend = false \} = \{\}\) \{[\s\S]*?\n  \}/)?.[0] || "";
+test("formation add keeps legacy selection while V2 can force playhead insertion", () => {
+  const addSection = appSource.match(/function addSection\(\{ forceAppend = false, forceCreate = false \} = \{\}\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
   assert.match(addSection, /const target = resolveFormationAddTarget\(sortedSections, captureTime\);/);
-  assert.match(addSection, /if \(target\.action === "select" && !forceAppend\)/);
+  assert.match(addSection, /if \(target\.action === "select" && !forceAppend && !forceCreate\)/);
   assert.match(addSection, /setSelectedSectionId\(target\.section\.id\);/);
-  assert.match(addSection, /const time = target\.action === "select" \? pointTime\(sortedSections\.at\(-1\)\) : target\.time;/);
+  assert.match(addSection, /const time = target\.action === "select" && forceCreate\s*\?\s*captureTime\s*:\s*target\.action === "select"\s*\?\s*pointTime\(sortedSections\.at\(-1\)\)\s*:\s*target\.time;/);
   assert.match(addSection, /const previous = target\.action === "select" \? sortedSections\.at\(-1\) : target\.previous;/);
   assert.match(addSection, /action: "add-after"/);
   assert.match(addSection, /name: "대형"/);
   assert.match(addSection, /sections: result\.sections/);
+  assert.match(v2Source, /runtimeActions\.addFormation\?\.\(\{ forceCreate: true \}\)/);
 });
 
 test("top actions expose save share and tools without legacy tabs", () => {

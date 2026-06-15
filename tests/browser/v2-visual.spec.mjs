@@ -737,7 +737,7 @@ test.describe("connected root V2 editor route", () => {
     expect(viewportBox).not.toBeNull();
     expect(introBox).not.toBeNull();
     expect(Math.abs(initialState.playheadViewportX)).toBeLessThanOrEqual(2);
-    expect(Math.abs(introBox.x - viewportBox.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs((introBox.x - viewportBox.x) - V2_TIMELINE_PIXELS_PER_SECOND * 4)).toBeLessThanOrEqual(2);
 
     await root.getByRole("button", { name: "대형 추가" }).click();
     await expect.poll(async () => secondsFromV2Timecode(await root.locator(".v2-timecode").textContent())).toBe(12);
@@ -773,7 +773,68 @@ test.describe("connected root V2 editor route", () => {
     })))).not.toEqual(timingBefore);
   });
 
-  test("V2 force append ignores current playback time and preserves the F2 hold block", async ({ page }) => {
+  test("V2 added formations remain trimmable after playhead insertion", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(({ storageKey, legacyStorageKey }) => {
+      localStorage.removeItem(storageKey);
+      localStorage.removeItem(legacyStorageKey);
+    }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY });
+    await page.goto("/");
+    await page.getByRole("button", { name: "빈 프로젝트 시작" }).click();
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await expect(root).toBeVisible();
+    await root.getByRole("button", { name: "대형 추가" }).click();
+    const addedBlock = root.locator('[data-v2-segment-kind="hold"]').last();
+    await expect(addedBlock).toHaveAttribute("aria-pressed", "true");
+    await expect(addedBlock).toHaveAttribute("data-v2-segment-duration", "4s");
+
+    const addedRightHandle = root.locator('[data-v2-timeline-handle="hold-right"]').last();
+    await expect(addedRightHandle).toBeVisible();
+    const rightHandleBox = await addedRightHandle.boundingBox();
+    expect(rightHandleBox).not.toBeNull();
+
+    await page.mouse.move(rightHandleBox.x + rightHandleBox.width / 2, rightHandleBox.y + rightHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(rightHandleBox.x + rightHandleBox.width / 2 + V2_TIMELINE_PIXELS_PER_SECOND, rightHandleBox.y + rightHandleBox.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(addedBlock).toHaveAttribute("data-v2-segment-duration", "5s");
+
+    const addedLeftHandle = root.locator('[data-v2-timeline-handle="hold-left"]').last();
+    await expect(addedLeftHandle).toBeVisible();
+    const leftHandleBox = await addedLeftHandle.boundingBox();
+    expect(leftHandleBox).not.toBeNull();
+
+    await page.mouse.move(leftHandleBox.x + leftHandleBox.width / 2, leftHandleBox.y + leftHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(leftHandleBox.x + leftHandleBox.width / 2 + V2_TIMELINE_PIXELS_PER_SECOND, leftHandleBox.y + leftHandleBox.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(addedBlock).toHaveAttribute("data-v2-segment-duration", "4s");
+
+    const introBlock = root.locator('[data-v2-segment-kind="hold"]').first();
+    const introSectionId = await introBlock.getAttribute("data-v2-formation-block");
+    expect(introSectionId).toBeTruthy();
+    await wheelV2FormationEdgeTo(page, `[data-v2-formation-block="${introSectionId}"][data-v2-segment-kind="hold"]`, 180, "left");
+    await clickV2FormationBlock(page, introBlock);
+    const introLeftHandle = root.locator(`[data-v2-timeline-handle="hold-left"][data-v2-section-id="${introSectionId}"]`);
+    await expect(introLeftHandle).toBeVisible();
+
+    const introRightHandle = root.locator('[data-v2-timeline-handle="hold-right"]').first();
+    await expect(introRightHandle).toBeVisible();
+    const introRightHandleBox = await introRightHandle.boundingBox();
+    expect(introRightHandleBox).not.toBeNull();
+
+    await page.mouse.move(introRightHandleBox.x + introRightHandleBox.width / 2, introRightHandleBox.y + introRightHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(introRightHandleBox.x + introRightHandleBox.width / 2 - V2_TIMELINE_PIXELS_PER_SECOND, introRightHandleBox.y + introRightHandleBox.height / 2, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(introBlock).toHaveAttribute("data-v2-segment-duration", "3s");
+  });
+
+  test("V2 playhead add preserves the F2 hold block", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const twoFormationProject = {
       ...seededV2Project(),
@@ -822,7 +883,7 @@ test.describe("connected root V2 editor route", () => {
     }).toEqual([
       { name: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
       { name: "diamond", start: 2, end: 4, time: 4, moveDuration: 2 },
-      { name: "added", start: 8, end: 12, time: 12, moveDuration: 4 }
+      { name: "added", start: 8, end: 12.4, time: 12.4, moveDuration: 4.4 }
     ]);
     await expect(f2Block).toHaveAttribute("data-v2-segment-duration", "4s");
     await expect.poll(() => f2Block.evaluate((node) => node.getBoundingClientRect().width)).toBe(f2WidthBefore);
@@ -1216,7 +1277,7 @@ test.describe("connected root V2 editor route", () => {
 
     const beforeTransform = await content.evaluate((node) => getComputedStyle(node).transform);
     await page.mouse.move(box.x + box.width - 20, box.y + 8);
-    await page.mouse.wheel(0, 420);
+    await page.mouse.wheel(0, 180);
     await expect.poll(() => content.evaluate((node) => getComputedStyle(node).transform)).not.toBe(beforeTransform);
 
     await expectV2TimelineScrubs(root, async () => {
@@ -1385,9 +1446,55 @@ test.describe("connected root V2 editor route", () => {
     await wheelV2FormationEdgeTo(page, '[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]', 180, "right");
     await clickV2FormationBlock(page, introBlock);
     await expect(introBlock).toHaveAttribute("aria-pressed", "true");
-    await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="intro"]')).toHaveCount(0);
+    const introLeftHandle = root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="intro"]');
+    await expect(introLeftHandle).toBeVisible();
     await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]')).toBeVisible();
     await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="finale"]')).toHaveCount(0);
+    const introLeftHandleBox = await introLeftHandle.boundingBox();
+    expect(introLeftHandleBox).not.toBeNull();
+    await page.mouse.move(introLeftHandleBox.x + introLeftHandleBox.width / 2, introLeftHandleBox.y + introLeftHandleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(introLeftHandleBox.x + introLeftHandleBox.width / 2 + V2_TIMELINE_PIXELS_PER_SECOND, introLeftHandleBox.y + introLeftHandleBox.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      const intro = project.sections.find((section) => section.id === "intro");
+      return {
+        time: intro.time,
+        start: intro.start,
+        end: intro.end,
+        moveDuration: intro.moveDuration
+      };
+    }).toEqual({
+      time: 5,
+      start: 0,
+      end: 5,
+      moveDuration: 5
+    });
+
+    const introLeftHandleAfterMove = root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="intro"]');
+    await expect(introLeftHandleAfterMove).toBeVisible();
+    const introLeftHandleAfterMoveBox = await introLeftHandleAfterMove.boundingBox();
+    expect(introLeftHandleAfterMoveBox).not.toBeNull();
+    await page.mouse.move(introLeftHandleAfterMoveBox.x + introLeftHandleAfterMoveBox.width / 2, introLeftHandleAfterMoveBox.y + introLeftHandleAfterMoveBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(introLeftHandleAfterMoveBox.x + introLeftHandleAfterMoveBox.width / 2 - V2_TIMELINE_PIXELS_PER_SECOND * 8, introLeftHandleAfterMoveBox.y + introLeftHandleAfterMoveBox.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      const intro = project.sections.find((section) => section.id === "intro");
+      return {
+        time: intro.time,
+        start: intro.start,
+        end: intro.end,
+        moveDuration: intro.moveDuration
+      };
+    }).toEqual({
+      time: 0,
+      start: 0,
+      end: 0,
+      moveDuration: 0
+    });
 
     await wheelV2FormationEdgeTo(page, '[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]', 120);
     await clickV2FormationBlock(page, diamondBlock);
@@ -1888,7 +1995,7 @@ test.describe("connected root V2 editor route", () => {
     const viewportBox = await viewport.boundingBox();
     expect(viewportBox).not.toBeNull();
     await page.mouse.move(viewportBox.x + viewportBox.width - 20, viewportBox.y + 8);
-    await page.mouse.wheel(0, 420);
+    await page.mouse.wheel(0, 80);
     await page.waitForTimeout(100);
 
     const moveBlock = root.locator('[data-v2-segment-kind="move"]');

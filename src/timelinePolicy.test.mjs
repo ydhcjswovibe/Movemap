@@ -113,7 +113,7 @@ test("layoutTimelineVisualSegments labels formations and moves separately with d
       duration: segment.durationSeconds
     })),
     [
-      { kind: "hold", label: "F1", duration: 8 },
+      { kind: "hold", label: "F1", duration: 4 },
       { kind: "move", label: "M1", duration: 4 },
       { kind: "hold", label: "F2", duration: 4 },
       { kind: "move", label: "M2", duration: 4 },
@@ -257,6 +257,62 @@ test("resolveFormationAddTarget uses the capture time after the last formation",
   assert.equal(target.previous.id, "b");
   assert.equal(target.time, 14);
   assert.equal("moveDuration" in target, false);
+});
+
+test("add formation at the playhead preserves the previous visible hold", () => {
+  const sections = [
+    { id: "intro", time: 0, moveDuration: 0, start: 0, end: 0 },
+    { id: "diamond", time: 4, moveDuration: 2, start: 2, end: 4 }
+  ];
+
+  const beforeHolds = layoutTimelineVisualSegments(sections, 56, { defaultLastHoldSeconds: 4 })
+    .filter((segment) => segment.kind === "hold")
+    .map((segment) => ({
+      id: segment.sectionId,
+      start: segment.displayStartTime,
+      end: segment.displayEndTime,
+      duration: segment.durationSeconds
+    }));
+  const result = applyFormationTimelineEdit({
+    sections,
+    action: "add-after",
+    time: 12.4,
+    section: { id: "added", name: "대형" }
+  });
+  const afterHolds = layoutTimelineVisualSegments(result.sections, 56, { defaultLastHoldSeconds: 4 })
+    .filter((segment) => segment.kind === "hold")
+    .map((segment) => ({
+      id: segment.sectionId,
+      start: segment.displayStartTime,
+      end: segment.displayEndTime,
+      duration: segment.durationSeconds
+    }));
+
+  assert.deepEqual(beforeHolds.find((segment) => segment.id === "diamond"), { id: "diamond", start: 4, end: 8, duration: 4 });
+  assert.deepEqual(afterHolds.find((segment) => segment.id === "diamond"), { id: "diamond", start: 4, end: 8, duration: 4 });
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "diamond", start: 2, end: 4, time: 4, moveDuration: 2 },
+    { id: "added", start: 8, end: 12.4, time: 12.4, moveDuration: 4.4 }
+  ]);
+});
+
+test("add formation at the playhead keeps a four-second minimum move", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "intro", time: 0, moveDuration: 0, start: 0, end: 0 },
+      { id: "diamond", time: 4, moveDuration: 2, start: 2, end: 4 }
+    ],
+    action: "add-after",
+    time: 8.2,
+    section: { id: "added", name: "대형" }
+  });
+
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "diamond", start: 2, end: 4, time: 4, moveDuration: 2 },
+    { id: "added", start: 8, end: 12, time: 12, moveDuration: 4 }
+  ]);
 });
 
 test("buildTimelineTicks uses readable intervals and includes the final duration", () => {
@@ -521,7 +577,7 @@ test("applyFormationTimelineEdit preserves formation payloads through add, trim,
   assertSequentialTiming(reordered.sections);
 });
 
-test("applyFormationTimelineEdit uses the default hold and move when the requested arrival is too early", () => {
+test("applyFormationTimelineEdit clamps playhead creation to a four-second minimum move", () => {
   const sections = [
     { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 }
@@ -631,38 +687,42 @@ test("applyFormationTimelineEdit body drag blocks instead of reordering across n
   assert.deepEqual(compactTiming(result.sections), compactTiming(sections));
 });
 
-test("applyFormationTimelineEdit first block body drag remains anchored", () => {
+test("applyFormationTimelineEdit first block body drag moves right and adjusts adjacent moves", () => {
   const sections = [
-    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "intro", time: 0, start: 0, end: 0, moveDuration: 0 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
-    { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
+    { id: "c", time: 18, start: 14, end: 18, moveDuration: 4 }
   ];
 
-  const smallDrag = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 1, timelineMax: 16 });
-  const largeDrag = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
+  const result = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 2, timelineMax: 24 });
 
-  assert.equal(smallDrag.statusKind, "blocked");
-  assert.deepEqual(compactTiming(smallDrag.sections), compactTiming(sections));
-  assert.equal(largeDrag.statusKind, "blocked");
-  assert.equal(largeDrag.toIndex, undefined);
-  assert.deepEqual(compactTiming(largeDrag.sections), compactTiming(sections));
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 2, time: 2, moveDuration: 2 },
+    { id: "b", start: 6, end: 8, time: 8, moveDuration: 2 },
+    { id: "c", start: 14, end: 18, time: 18, moveDuration: 4 }
+  ]);
+  assert.equal(result.start, 2);
+  assert.equal(result.end, 6);
+  assert.equal(result.duration, 4);
 });
 
-test("applyFormationTimelineEdit first block body drag does not preview insertion positions", () => {
+test("applyFormationTimelineEdit first block body drag cannot move before zero or through the next move minimum", () => {
   const sections = [
-    { id: "intro", time: 4, start: 0, end: 4, moveDuration: 4 },
+    { id: "intro", time: 0, start: 0, end: 0, moveDuration: 0 },
     { id: "b", time: 8, start: 4, end: 8, moveDuration: 4 },
     { id: "c", time: 12, start: 8, end: 12, moveDuration: 4 }
   ];
 
-  const middlePreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 7, timelineMax: 16 });
-  const endPreview = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 11, timelineMax: 16 });
+  const leftBlocked = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: -1, timelineMax: 16 });
+  const rightBlocked = applyFormationTimelineEdit({ sections, action: "move-body", sectionId: "intro", deltaTime: 4, timelineMax: 16 });
 
-  assert.equal(middlePreview.statusKind, "blocked");
-  assert.equal(middlePreview.toIndex, undefined);
-  assert.equal(endPreview.statusKind, "blocked");
-  assert.equal(endPreview.toIndex, undefined);
-  assert.deepEqual(compactTiming(endPreview.sections), compactTiming(sections));
+  assert.equal(leftBlocked.statusKind, "blocked");
+  assert.equal(leftBlocked.toIndex, undefined);
+  assert.deepEqual(compactTiming(leftBlocked.sections), compactTiming(sections));
+  assert.equal(rightBlocked.statusKind, "blocked");
+  assert.equal(rightBlocked.toIndex, undefined);
+  assert.deepEqual(compactTiming(rightBlocked.sections), compactTiming(sections));
 });
 
 test("applyFormationTimelineEdit body drag blocks when the hold would cross previous bounds", () => {
@@ -1014,9 +1074,9 @@ test("compat reorder wrappers preserve compact movement durations while the firs
     {
       action: "blocked",
       index: 0,
-      start: 0,
-      end: 4,
-      duration: 4,
+      start: 6.5,
+      end: 7.5,
+      duration: 1,
       toIndex: null
     }
   );
@@ -1237,7 +1297,7 @@ test("timeline visual segments split formation holds from automatic moves", () =
   );
 });
 
-test("timeline visual segments render the first intro hold from its movement start", () => {
+test("timeline visual segments render the first intro hold from its arrival", () => {
   const segments = layoutTimelineVisualSegments([
     { id: "intro", time: 4, moveDuration: 4 },
     { id: "next", time: 8, moveDuration: 4 }
@@ -1251,11 +1311,40 @@ test("timeline visual segments render the first intro hold from its movement sta
       end: segment.displayEndTime
     })),
     [
-      { kind: "hold", sectionId: "intro", start: 0, end: 4 },
+      { kind: "hold", sectionId: "intro", start: 4, end: 4 },
       { kind: "move", sectionId: "next", start: 4, end: 8 },
       { kind: "hold", sectionId: "next", start: 8, end: 12 }
     ]
   );
+});
+
+test("timeline visual segments shorten the intro hold after left trim", () => {
+  const trimResult = applyFormationTimelineEdit({
+    sections: [
+      { id: "intro", time: 0, moveDuration: 0 },
+      { id: "next", time: 8, moveDuration: 4 }
+    ],
+    action: "trim-hold-left",
+    sectionId: "intro",
+    time: 1
+  });
+  const segments = layoutTimelineVisualSegments(trimResult.sections, 10);
+
+  const introHold = segments.find((segment) => segment.kind === "hold" && segment.sectionId === "intro");
+  assert.deepEqual(
+    {
+      start: introHold.displayStartTime,
+      end: introHold.displayEndTime,
+      duration: introHold.durationSeconds,
+      left: introHold.leftPx,
+      width: introHold.widthPx
+    },
+    { start: 1, end: 4, duration: 3, left: 10, width: 30 }
+  );
+  assert.deepEqual(compactTiming(trimResult.sections), [
+    { id: "intro", start: 0, end: 1, time: 1, moveDuration: 1 },
+    { id: "next", start: 4, end: 8, time: 8, moveDuration: 4 }
+  ]);
 });
 
 test("hold right trim shrinks only the next move while the next formation stays fixed", () => {
@@ -1337,6 +1426,29 @@ test("hold right trim keeps the next move at the half-second minimum", () => {
     { id: "b", start: 7.5, end: 8, time: 8, moveDuration: 0.5 },
     { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
   ]);
+});
+
+test("intro hold right trim keeps a half-second hold minimum", () => {
+  const result = applyFormationTimelineEdit({
+    sections: [
+      { id: "intro", time: 0, moveDuration: 0 },
+      { id: "b", time: 8, moveDuration: 4 },
+      { id: "c", time: 16, moveDuration: 4 }
+    ],
+    action: "trim-hold-right",
+    sectionId: "intro",
+    time: 0.1
+  });
+
+  assert.equal(result.statusKind, "updated");
+  assert.deepEqual(compactTiming(result.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "b", start: 0.5, end: 8, time: 8, moveDuration: 7.5 },
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+  assert.equal(result.start, 0);
+  assert.equal(result.end, 0.5);
+  assert.equal(result.duration, 0.5);
 });
 
 test("hold right trim propagates through a half-second-minimum adjacent formation chain", () => {
@@ -1444,6 +1556,59 @@ test("hold left trim moves arrival while preserving neighboring formations", () 
       { id: "c", time: 18, moveDuration: 2, start: 16, end: 18 }
     ]
   );
+});
+
+test("intro hold left trim moves arrival from zero while keeping hold at least half a second", () => {
+  const rightShortened = applyFormationTimelineEdit({
+    sections: [
+      { id: "intro", time: 0, moveDuration: 0 },
+      { id: "b", time: 8, moveDuration: 4 },
+      { id: "c", time: 16, moveDuration: 4 }
+    ],
+    action: "trim-hold-left",
+    sectionId: "intro",
+    time: 2
+  });
+
+  assert.equal(rightShortened.statusKind, "updated");
+  assert.deepEqual(compactTiming(rightShortened.sections), [
+    { id: "intro", start: 0, end: 2, time: 2, moveDuration: 2 },
+    { id: "b", start: 4, end: 8, time: 8, moveDuration: 4 },
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+  assert.equal(rightShortened.start, 2);
+  assert.equal(rightShortened.end, 4);
+  assert.equal(rightShortened.duration, 2);
+
+  const leftExtended = applyFormationTimelineEdit({
+    sections: rightShortened.sections,
+    action: "trim-hold-left",
+    sectionId: "intro",
+    time: -2
+  });
+
+  assert.deepEqual(compactTiming(leftExtended.sections), [
+    { id: "intro", start: 0, end: 0, time: 0, moveDuration: 0 },
+    { id: "b", start: 4, end: 8, time: 8, moveDuration: 4 },
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+  assert.equal(leftExtended.start, 0);
+  assert.equal(leftExtended.end, 4);
+  assert.equal(leftExtended.duration, 4);
+
+  const tooFarRight = applyFormationTimelineEdit({
+    sections: rightShortened.sections,
+    action: "trim-hold-left",
+    sectionId: "intro",
+    time: 3.8
+  });
+
+  assert.deepEqual(compactTiming(tooFarRight.sections), [
+    { id: "intro", start: 0, end: 3.5, time: 3.5, moveDuration: 3.5 },
+    { id: "b", start: 4, end: 8, time: 8, moveDuration: 4 },
+    { id: "c", start: 12, end: 16, time: 16, moveDuration: 4 }
+  ]);
+  assert.equal(tooFarRight.duration, 0.5);
 });
 
 test("hold left trim clamps against the previous formation until propagation is needed", () => {
