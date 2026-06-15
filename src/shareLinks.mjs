@@ -16,8 +16,8 @@ export function linkModeFromPathname(pathname = "") {
 }
 
 export function linkModeFromLocation({ pathname = "", search = "" } = {}) {
-  const path = typeof pathname === "string" ? pathname : "";
-  const [, route = "", rawId = ""] = path.match(/^\/(share|edit)\/([^/?#]+)/) || [];
+  const path = (typeof pathname === "string" ? pathname : "").replace(/\/+$/, "") || "/";
+  const [, route = "", rawId = ""] = path.match(/^\/(share|edit)\/([^/?#]+)$/) || [];
   const projectId = cleanProjectId(rawId);
   if (!projectId) return { projectId: "", linkType: "", editToken: "", readonly: false };
   if (route === "edit") {

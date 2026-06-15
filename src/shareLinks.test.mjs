@@ -25,6 +25,21 @@ test("existing share routes resolve to readonly View Links", () => {
   });
 });
 
+test("legacy suffixed V2 share routes no longer resolve as public links", () => {
+  assert.deepEqual(linkModeFromLocation({ pathname: "/share/project-1/v2", search: "" }), {
+    projectId: "",
+    linkType: "",
+    editToken: "",
+    readonly: false
+  });
+  assert.deepEqual(linkModeFromLocation({ pathname: "/edit/project-1/v2", search: "?token=abc" }), {
+    projectId: "",
+    linkType: "",
+    editToken: "",
+    readonly: false
+  });
+});
+
 test("edit routes require token validation before becoming editable", () => {
   assert.deepEqual(linkModeFromLocation({ pathname: "/edit/project-1", search: "?token=abc" }), {
     projectId: "project-1",

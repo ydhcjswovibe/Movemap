@@ -16,8 +16,7 @@ context.
 The project is early-stage. It is useful for local experimentation and review,
 but the contributor surface and hosted workflows are still being refined. The
 current public deployment referenced by the project is
-`https://stage-map-pi.vercel.app`, and the app includes a public about page at
-`/about`.
+`https://stage-map-pi.vercel.app`.
 
 ![Movemap editor showing performer tokens, a stage grid, formation controls, and a timeline](docs/assets/movemap-editor.png)
 

@@ -20,9 +20,9 @@
 
 - Mobile editing is first-class; do not treat mobile as review-only.
 - 2D formation and timeline data are canonical. 3D is a preview surface, not a second source of truth.
-- `/v2` is the intended next main editor, but it must remain a protected parallel route until the migration into `/` is explicitly planned, tested, and documented.
-- Do not partially replace `/` with `/v2` behavior opportunistically. Cutover work should be a named slice with browser coverage for both `/` and `/v2`.
-- When `/v2` becomes `/`, update this file and `MVP.md` in the same planned slice so future agents do not follow stale route guidance.
+- V2 is the main editor on `/` for normal edit, share, and edit-link routes.
+- Legacy `/v2`, `/share/:id/v2`, and `/edit/:id/v2` routes are unsupported; do not restore them without an explicit compatibility slice.
+- Keep `/stitch-mobile-mock` available only as a test/design mock, not as a user-facing editor route.
 - Do not revive legacy `/editor-v2` unless explicitly requested.
 - Do not invent controls or workflows that are not supported by `SPEC.md`, `MVP.md`, or the active implementation plan.
 

@@ -443,16 +443,17 @@ async function expectV2ScrubWithoutMutation(page, root, action) {
   expect(await v2TimingSnapshot(page)).toEqual(timingBefore);
 }
 
-test.describe("connected v2 editor route", () => {
+test.describe("connected root V2 editor route", () => {
   test("renders real App project state and connected timeline at 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const stage = page.locator("[data-v2-stage]");
     const timeline = page.locator("[data-v2-timeline]");
     const bottomRail = page.locator("[data-v2-bottom-rail]");
+    const rail = root.locator("[data-v2-bottom-rail]");
 
     await expect(root).toBeVisible();
     await expect(page.getByRole("heading", { name: "V2 Connected Fixture" })).toBeVisible();
@@ -610,7 +611,7 @@ test.describe("connected v2 editor route", () => {
   test("renders stored audio waveform peaks with played-region progress on v2", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededWaveformProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const waveform = root.locator("[data-v2-waveform]");
@@ -638,7 +639,7 @@ test.describe("connected v2 editor route", () => {
   test("caps stored audio waveform DOM on long v2 timelines", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongWaveformProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const waveformBars = root.locator("[data-v2-waveform] span:not(.v2-track-playhead)");
@@ -663,7 +664,7 @@ test.describe("connected v2 editor route", () => {
       }
     }));
     await seedProject(page, project);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const visualStage = root.locator("[data-v2-stage]");
@@ -722,7 +723,7 @@ test.describe("connected v2 editor route", () => {
       localStorage.removeItem(storageKey);
       localStorage.removeItem(legacyStorageKey);
     }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY });
-    await page.goto("/v2");
+    await page.goto("/");
     await page.getByRole("button", { name: "빈 프로젝트 시작" }).click();
 
     const root = page.locator("[data-v2-visual-editor]");
@@ -794,7 +795,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, twoFormationProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const f2Block = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -832,7 +833,7 @@ test.describe("connected v2 editor route", () => {
   test("moves a selected V2 performer to empty stage space and clears selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const stageSurface = root.locator(".v2-stage-surface");
@@ -856,7 +857,7 @@ test.describe("connected v2 editor route", () => {
   test("centers the connected phone shell on desktop without stretching it", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const shellMetrics = await page.locator(".v2-phone-shell").evaluate((shell) => {
       const rect = shell.getBoundingClientRect();
@@ -876,7 +877,7 @@ test.describe("connected v2 editor route", () => {
   test("uses px timeline geometry for long content instead of percent compression", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const metrics = await page.locator("[data-v2-visual-editor]").evaluate((root) => {
       const formationLane = root.querySelector(".v2-formation-lane");
@@ -908,7 +909,7 @@ test.describe("connected v2 editor route", () => {
   test("drags a single performer on the V2 HTML stage", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const token = page.locator('[data-v2-performer-token="a1"]');
     const before = await token.boundingBox();
@@ -935,7 +936,7 @@ test.describe("connected v2 editor route", () => {
   test("snaps V2 performer token drags to the meter grid by default", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const stageSurface = root.locator(".v2-stage-surface");
@@ -991,7 +992,7 @@ test.describe("connected v2 editor route", () => {
   test("allows V2 performers on the top and audience-side edge rows", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const stageSurface = root.locator(".v2-stage-surface");
@@ -1052,7 +1053,7 @@ test.describe("connected v2 editor route", () => {
   test("previews V2 performer drag without mutating storage until pointerup", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const token = root.locator('[data-v2-performer-token="a1"]');
@@ -1113,7 +1114,7 @@ test.describe("connected v2 editor route", () => {
   test("cancels V2 performer drag preview without mutating storage", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const token = root.locator('[data-v2-performer-token="a1"]');
@@ -1182,7 +1183,7 @@ test.describe("connected v2 editor route", () => {
     await page.route("**/rest/v1/choreo_projects**", async (route) => {
       await route.fulfill({ json: [] });
     });
-    await page.goto("/share/readonly-drag-project/v2");
+    await page.goto("/share/readonly-drag-project");
 
     const token = page.locator('[data-v2-performer-token="a1"]');
     const beforePosition = await token.evaluate((node) => ({
@@ -1205,7 +1206,7 @@ test.describe("connected v2 editor route", () => {
   test("uses wheel for V2 timeline scroll and click-to-position seek", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1255,7 +1256,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, selectableTrimProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "대형" }).click();
@@ -1301,7 +1302,7 @@ test.describe("connected v2 editor route", () => {
   test("V2 timeline zoom controls change timeline spacing without a stage zoom rail", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const timeline = root.locator("[data-v2-timeline]");
@@ -1352,7 +1353,7 @@ test.describe("connected v2 editor route", () => {
         }
       ]
     });
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1496,7 +1497,7 @@ test.describe("connected v2 editor route", () => {
         }
       ]
     });
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -1546,7 +1547,7 @@ test.describe("connected v2 editor route", () => {
   test("V2 unselected hold blocks expose narrow trim handles only after edge hover", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededV2Project());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1604,7 +1605,7 @@ test.describe("connected v2 editor route", () => {
     await page.route("**/rest/v1/choreo_projects**", async (route) => {
       await route.fulfill({ json: [] });
     });
-    await page.goto("/share/readonly-timeline-project/v2");
+    await page.goto("/share/readonly-timeline-project");
 
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root.locator("[data-v2-waveform]")).toHaveAttribute("data-v2-waveform-status", "ready");
@@ -1631,7 +1632,7 @@ test.describe("connected v2 editor route", () => {
   test("blank V2 timeline pointer drag pans without scrubbing or timing edits", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1654,7 +1655,7 @@ test.describe("connected v2 editor route", () => {
   test("V2 timeline clicks seek while short drags pan from ruler, audio, and waveform", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const surfaces = [
@@ -1665,7 +1666,7 @@ test.describe("connected v2 editor route", () => {
 
     for (const surface of surfaces) {
       await test.step(surface.name, async () => {
-      await page.goto("/v2");
+      await page.goto("/");
       await expect(root).toBeVisible();
       const box = await surface.locator.boundingBox();
       expect(box, `${surface.name} is measurable`).not.toBeNull();
@@ -1694,7 +1695,7 @@ test.describe("connected v2 editor route", () => {
   test("V2 playhead drag scrubs and auto-pans near viewport edges", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1719,7 +1720,7 @@ test.describe("connected v2 editor route", () => {
   test("V2 click seek can move the playhead to visible start and scrolled final time", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededLongTimelineProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1746,7 +1747,7 @@ test.describe("connected v2 editor route", () => {
   test("short drag on a V2 formation block pans without changing time or timing", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1799,7 +1800,7 @@ test.describe("connected v2 editor route", () => {
         }
       ]
     });
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1846,7 +1847,7 @@ test.describe("connected v2 editor route", () => {
         }
       ]
     });
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1880,7 +1881,7 @@ test.describe("connected v2 editor route", () => {
   test("short drag on a V2 move block pans without changing time or timing", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1924,7 +1925,7 @@ test.describe("connected v2 editor route", () => {
   test("touch drag on a V2 move block pans without changing time, timing, or undo", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page, seededCompactMoveProject());
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -1974,7 +1975,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, moveBodyProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2067,7 +2068,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, moveBodyProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2119,7 +2120,7 @@ test.describe("connected v2 editor route", () => {
   test("long press without movement on a V2 formation block does not add a timing edit", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -2156,7 +2157,7 @@ test.describe("connected v2 editor route", () => {
   test("touch drag on a V2 formation block is not cancelled by browser panning", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
@@ -2194,7 +2195,7 @@ test.describe("connected v2 editor route", () => {
   test("move block click stays read-only and preserves current selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const token = root.locator('[data-v2-performer-token="b2"]');
@@ -2232,7 +2233,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, compactTimingProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2301,7 +2302,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, compactTimingProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2415,7 +2416,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, chainProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
@@ -2478,7 +2479,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, compactTimingProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const rightHandle = root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="intro"]');
@@ -2524,7 +2525,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, twoFormationProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2601,7 +2602,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, compactTimingProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -2892,7 +2893,7 @@ test.describe("connected v2 editor route", () => {
         }
       ]
     });
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const viewport = root.locator(".v2-formation-lane .v2-timeline-viewport");
@@ -3015,7 +3016,7 @@ test.describe("connected v2 editor route", () => {
       ]
     };
     await seedProject(page, compactTimingProject);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
@@ -3067,7 +3068,7 @@ test.describe("connected v2 editor route", () => {
   test("pointercancel clears V2 body drag ghost and drop preview without mutation", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -3139,7 +3140,7 @@ test.describe("connected v2 editor route", () => {
   test("organizes V2 top menus, settings submenu, transport undo redo, and default bottom modes", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const rail = root.locator("[data-v2-bottom-rail]");
@@ -3359,7 +3360,7 @@ test.describe("connected v2 editor route", () => {
   test("opens and swaps V2 default bottom sheets without covering the bottom rail", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     const rail = root.locator("[data-v2-bottom-rail]");
@@ -3419,7 +3420,7 @@ test.describe("connected v2 editor route", () => {
   test("drives bottom rail actions from V2 selection context", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
@@ -3452,7 +3453,7 @@ test.describe("connected v2 editor route", () => {
     await expect(rail.getByRole("button", { name: "무대" })).toBeEnabled();
   });
 
-  test("does not render edit controls for readonly v2", async ({ page }) => {
+  test("does not render edit controls for readonly root V2 share links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {
       ...seededV2Project(),
@@ -3469,7 +3470,7 @@ test.describe("connected v2 editor route", () => {
       await route.fulfill({ json: [] });
     });
 
-    await page.goto("/share/readonly-project/v2");
+    await page.goto("/share/readonly-project");
 
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
@@ -3507,7 +3508,7 @@ test.describe("connected v2 editor route", () => {
       }
     };
     await routeCloudProject(page, readonlyProject, "readonly-project");
-    await page.goto("/share/readonly-project/v2");
+    await page.goto("/share/readonly-project");
 
     const root = page.locator("[data-v2-visual-editor]");
     const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
@@ -3549,7 +3550,7 @@ test.describe("connected v2 editor route", () => {
       }
     };
     await routeCloudProject(page, readonlyProject, "readonly-project");
-    await page.goto("/share/readonly-project/v2");
+    await page.goto("/share/readonly-project");
 
     const root = page.locator("[data-v2-visual-editor]");
     const moveBlock = root.locator('[data-v2-segment-kind="move"]');
@@ -3584,7 +3585,7 @@ test.describe("connected v2 editor route", () => {
       }
     };
     await routeCloudProject(page, readonlyProject, "readonly-project");
-    await page.goto("/share/readonly-project/v2");
+    await page.goto("/share/readonly-project");
 
     const root = page.locator("[data-v2-visual-editor]");
     const moveBlock = root.locator('[data-v2-segment-kind="move"]');
@@ -3606,7 +3607,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
   });
 
-  test("opens valid edit links on the V2 route with edit controls enabled", async ({ page }) => {
+  test("opens valid edit links on the root V2 route with edit controls enabled", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const editProject = {
       ...seededV2Project(),
@@ -3618,7 +3619,7 @@ test.describe("connected v2 editor route", () => {
     };
     await routeCloudProject(page, editProject);
 
-    await page.goto("/edit/v2-edit-project/v2?token=valid");
+    await page.goto("/edit/v2-edit-project?token=valid");
 
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
@@ -3628,24 +3629,24 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "공유" })).toBeEnabled();
   });
 
-  test("keeps the project wizard when v2 has no loaded project", async ({ page }) => {
+  test("keeps the project wizard when root has no loaded project", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.addInitScript(({ storageKey, legacyStorageKey }) => {
       localStorage.removeItem(storageKey);
       localStorage.removeItem(legacyStorageKey);
     }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY });
-    await page.goto("/v2");
+    await page.goto("/");
 
     await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /샘플로 시작/ })).toBeVisible();
   });
 
-  test("no-audio play on v2 reports the existing status without throwing", async ({ page }) => {
+  test("no-audio play on root V2 reports the existing status without throwing", async ({ page }) => {
     const browserIssues = [];
     page.on("pageerror", (error) => browserIssues.push(error.message));
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
-    await page.goto("/v2");
+    await page.goto("/");
 
     await page.getByRole("button", { name: "재생" }).click();
 
@@ -3653,11 +3654,34 @@ test.describe("connected v2 editor route", () => {
     expect(browserIssues).toEqual([]);
   });
 
-  test("keeps the existing mobile editor on the root route", async ({ page }) => {
+  test("renders root V2 instead of the old mobile editor on the root route", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/");
-    await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
+    await expect(page.locator("[data-v2-visual-editor]")).toBeVisible();
+    await expect(page.locator("[data-stitch-mobile-editor]")).toHaveCount(0);
+  });
+
+  test("shows an unsupported route notice for legacy V2 URLs", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+
+    await page.goto("/v2");
+    await expect(page.getByRole("heading", { name: "지원 종료된 V2 경로입니다." })).toBeVisible();
+    await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
+
+    await page.goto("/share/readonly-project/v2");
+    await expect(page.getByRole("heading", { name: "지원 종료된 V2 경로입니다." })).toBeVisible();
+    await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
+
+    await page.goto("/edit/v2-edit-project/v2?token=valid");
+    await expect(page.getByRole("heading", { name: "지원 종료된 V2 경로입니다." })).toBeVisible();
+    await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
+  });
+
+  test("removed landing routes show the unsupported route notice", async ({ page }) => {
+    await page.goto("/about");
+    await expect(page.getByRole("heading", { name: "지원하지 않는 경로입니다." })).toBeVisible();
     await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
   });
 

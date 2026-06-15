@@ -829,13 +829,54 @@ function Wizard({ onCreate }) {
   );
 }
 
+function normalizeAppPath(pathname = "") {
+  return (typeof pathname === "string" ? pathname : "").replace(/\/+$/, "") || "/";
+}
+
+function supportedEditorRoute(pathname) {
+  return pathname === "/" || /^\/(share|edit)\/[^/]+$/.test(pathname);
+}
+
+function legacyRouteTarget(pathname, search = "") {
+  if (pathname === "/v2") return "/";
+  const legacyShareRoute = pathname.match(/^\/(share|edit)\/([^/]+)\/v2$/);
+  if (!legacyShareRoute) return "";
+  const [, route, projectId] = legacyShareRoute;
+  return `/${route}/${projectId}${route === "edit" ? search || "" : ""}`;
+}
+
+function UnsupportedRouteNotice({ pathname, target }) {
+  const isLegacyV2Route = Boolean(target);
+  return (
+    <div className="loading unsupported-route">
+      <div className="wizard-card">
+        <p className="eyebrow">Movemap</p>
+        <h1>{isLegacyV2Route ? "지원 종료된 V2 경로입니다." : "지원하지 않는 경로입니다."}</h1>
+        <p className="muted">
+          {isLegacyV2Route
+            ? "V2 편집기는 이제 기본 경로에서 열립니다. 아래 버튼으로 현재 지원되는 경로로 이동하세요."
+            : `${pathname} 경로는 더 이상 별도 화면을 제공하지 않습니다. Movemap 편집기는 기본 경로에서 시작합니다.`}
+        </p>
+        <div className="wizard-actions">
+          <a className="primary route-link-button" href={target || "/"}>{isLegacyV2Route ? "새 경로로 이동" : "Movemap 열기"}</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const linkMode = linkModeFromLocation(window.location);
+  const normalizedPath = normalizeAppPath(window.location.pathname);
+  const unsupportedRouteTarget = legacyRouteTarget(normalizedPath, window.location.search);
+  const isSupportedEditorRoute = supportedEditorRoute(normalizedPath);
+  const isUnsupportedRoute = !isSupportedEditorRoute;
+  const linkMode = isUnsupportedRoute
+    ? { projectId: "", linkType: "", editToken: "", readonly: false }
+    : linkModeFromLocation(window.location);
   const shareId = linkMode.projectId;
   const linkType = linkMode.linkType;
   const isEditLinkRoute = linkType === LINK_TYPES.edit;
-  const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
-  const isV2Route = normalizedPath === "/v2" || normalizedPath.endsWith("/v2");
+  const isV2Route = isSupportedEditorRoute;
   const supabaseClient = useMemo(() => {
     try {
       return createMovemapSupabaseClient(supabaseConfig());
@@ -1098,6 +1139,7 @@ function App() {
   }
 
   useEffect(() => {
+    if (isUnsupportedRoute) return;
     if (shareId) {
       const loadShared = isEditLinkRoute && linkMode.editToken
         ? loadCloudProjectByEditToken(shareId, linkMode.editToken, supabaseConfig())
@@ -1152,7 +1194,7 @@ function App() {
         continue;
       }
     }
-  }, [shareId, isEditLinkRoute, linkMode.editToken, linkType]);
+  }, [isUnsupportedRoute, shareId, isEditLinkRoute, linkMode.editToken, linkType]);
 
   useEffect(() => {
     if (!plan || readonly || shareId) return;
@@ -4166,6 +4208,10 @@ function App() {
         };
       })
     }));
+  }
+
+  if (isUnsupportedRoute) {
+    return <UnsupportedRouteNotice pathname={normalizedPath} target={unsupportedRouteTarget} />;
   }
 
   if (!plan && !readonly) {
