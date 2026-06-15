@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const SUPABASE_TEST_URL = "https://movemap-test.supabase.co";
+const SUPABASE_AUTH_STORAGE_KEY = "sb-movemap-test-auth-token";
+const STORAGE_KEY = "movemap-project";
+const LEGACY_STORAGE_KEY = "choreo-stage-planner-project";
 
 function compactFormationText(text) {
   return text.replace(/\s+/g, " ").trim();
@@ -83,6 +86,114 @@ async function routeCloudProject(page, plan) {
   await page.route("**/rest/v1/choreo_projects**", async (route) => {
     await route.fulfill({ json: [] });
   });
+}
+
+async function seedLocalProject(page, plan) {
+  await page.addInitScript(({ storageKey, legacyStorageKey, nextPlan }) => {
+    localStorage.setItem(storageKey, JSON.stringify(nextPlan));
+    localStorage.removeItem(legacyStorageKey);
+  }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY, nextPlan: plan });
+}
+
+function encodeJwtPart(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function testAccessToken({ userId = "owner-1", email = `${userId}@example.test`, accountPlan = "free", expiresAt = Math.floor(Date.now() / 1000) + 3600 } = {}) {
+  return [
+    encodeJwtPart({ alg: "none", typ: "JWT" }),
+    encodeJwtPart({
+      aud: "authenticated",
+      exp: expiresAt,
+      sub: userId,
+      email,
+      role: "authenticated",
+      app_metadata: { provider: "google", account_plan: accountPlan },
+      user_metadata: {}
+    }),
+    "signature"
+  ].join(".");
+}
+
+async function seedSupabaseSession(page, { userId = "owner-1", accessToken = "access-token-1", accountPlan = "free" } = {}) {
+  const email = `${userId}@example.test`;
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+  const sessionAccessToken = accessToken || testAccessToken({ userId, email, accountPlan, expiresAt });
+  await page.addInitScript(({ authStorageKey, session }) => {
+    const { user, ...sessionWithoutUser } = session;
+    localStorage.setItem(authStorageKey, JSON.stringify(sessionWithoutUser));
+    localStorage.setItem(`${authStorageKey}-user`, JSON.stringify({ user }));
+  }, {
+    authStorageKey: SUPABASE_AUTH_STORAGE_KEY,
+    session: {
+      access_token: sessionAccessToken,
+      refresh_token: "refresh-token-1",
+      token_type: "bearer",
+      expires_in: 3600,
+      expires_at: expiresAt,
+      user: {
+        id: userId,
+        email,
+        app_metadata: { provider: "google", account_plan: accountPlan },
+        user_metadata: {},
+        aud: "authenticated",
+        role: "authenticated"
+      }
+    }
+  });
+}
+
+async function routeCloudSaves(page, capturedRequests, { projectId = "project-1" } = {}) {
+  await page.route("**/rest/v1/movemap_projects**", async (route) => {
+    const request = route.request();
+    const method = request.method();
+    const body = request.postData() ? request.postDataJSON() : null;
+    capturedRequests.push({
+      method,
+      url: request.url(),
+      authorization: request.headers().authorization || "",
+      body
+    });
+    if (method === "GET") {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    await route.fulfill({
+      json: [{
+        id: projectId,
+        plan: {
+          ...(body?.plan || {}),
+          cloudProjectId: projectId
+        }
+      }]
+    });
+  });
+}
+
+async function routeSupabaseUser(page, { userId = "owner-1", accountPlan = "free" } = {}) {
+  await page.route("**/auth/v1/user", async (route) => {
+    await route.fulfill({
+      json: {
+        id: userId,
+        email: `${userId}@example.test`,
+        app_metadata: { provider: "google", account_plan: accountPlan },
+        user_metadata: {},
+        aud: "authenticated",
+        role: "authenticated"
+      }
+    });
+  });
+}
+
+function authCallbackPath({ accessToken, refreshToken = "refresh-token-1", expiresIn = 3600 } = {}) {
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: String(expiresIn),
+    token_type: "bearer",
+    type: "signup"
+  });
+  return `/#${params.toString()}`;
 }
 
 async function formationTexts(page) {
@@ -390,6 +501,68 @@ test("valid Edit Link route exposes edit controls", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__lastCopiedText)).toContain("/share/project-1");
   await page.getByRole("button", { name: "상태 알림 닫기" }).click();
   await expectNoBottomStatus(page);
+});
+
+test("Stage 1 auth fixture saves and shares as the signed-in owner", async ({ page }) => {
+  const capturedRequests = [];
+  const ownerPlan = {
+    ...seededProject({ viewEnabled: false, editEnabled: false }),
+    owner: { userId: "owner-1", createdAt: "2026-05-29T00:00:00.000Z" },
+    shareLinks: {
+      view: { projectId: "", token: "", enabled: false },
+      edit: { projectId: "", token: "", enabled: false }
+    }
+  };
+  await seedLocalProject(page, ownerPlan);
+  const ownerAccessToken = testAccessToken({ userId: "owner-1" });
+  await seedSupabaseSession(page, { userId: "owner-1", accessToken: ownerAccessToken });
+  await routeSupabaseUser(page, { userId: "owner-1" });
+  await routeCloudSaves(page, capturedRequests);
+
+  await page.goto(authCallbackPath({ accessToken: ownerAccessToken }));
+  await page.getByRole("button", { name: "공유" }).click();
+  const createShareButton = page.locator(".v2-share-menu").getByRole("button", { name: "편집 링크 만들기" });
+  await expect(createShareButton).toBeEnabled();
+  await createShareButton.click();
+  await expect(page.locator(".status")).toContainText("View Link와 Edit Link가 생성되었습니다.");
+  await expect.poll(() => capturedRequests.length).toBeGreaterThanOrEqual(2);
+  expect(capturedRequests.every((request) => request.authorization === `Bearer ${ownerAccessToken}`)).toBe(true);
+  expect(capturedRequests.at(-1).body.owner_id).toBe("owner-1");
+  expect(capturedRequests.at(-1).body.account_plan).toBe("free");
+  expect(capturedRequests.at(-1).body.view_enabled).toBe(true);
+  expect(capturedRequests.at(-1).body.plan.owner.userId).toBe("owner-1");
+
+  await expect.poll(() => capturedRequests.some((request) => request.body?.edit_enabled === true)).toBe(true);
+  const shareRequest = capturedRequests.find((request) => request.body?.edit_enabled === true);
+  expect(shareRequest.body.view_enabled).toBe(true);
+  expect(shareRequest.body.edit_token).toBeTruthy();
+  expect(shareRequest.body.plan.shareLinks.edit.enabled).toBe(true);
+});
+
+test("Stage 1 auth fixture keeps guest and non-owner link management blocked", async ({ page }) => {
+  const guestRequests = [];
+  await seedLocalProject(page, seededProject({ viewEnabled: false, editEnabled: false }));
+  await routeCloudSaves(page, guestRequests);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "공유" }).click();
+  await expect(page.locator(".v2-share-menu").getByRole("button", { name: "편집 링크 만들기" })).toBeDisabled();
+  expect(guestRequests).toHaveLength(0);
+
+  const nonOwnerRequests = [];
+  await page.close();
+  const nonOwnerPage = await page.context().newPage();
+  const sharedPlan = {
+    ...seededProject({ viewEnabled: true, editEnabled: true }),
+    owner: { userId: "owner-1", createdAt: "2026-05-29T00:00:00.000Z" }
+  };
+  await seedLocalProject(nonOwnerPage, sharedPlan);
+  await seedSupabaseSession(nonOwnerPage, { userId: "other-user", accessToken: testAccessToken({ userId: "other-user" }) });
+  await routeCloudSaves(nonOwnerPage, nonOwnerRequests);
+  await nonOwnerPage.goto("/");
+  await nonOwnerPage.getByRole("button", { name: "공유" }).click();
+  await expect(nonOwnerPage.locator(".v2-share-menu").getByRole("button", { name: "끄기" })).toHaveCount(0);
+  expect(nonOwnerRequests).toHaveLength(0);
 });
 
 test("invalid or disabled links fall back without edit controls", async ({ page }) => {

@@ -122,6 +122,11 @@ revoke all on function update_project_by_edit_token(uuid, text, jsonb) from publ
 grant execute on function get_project_by_edit_token(uuid, text) to anon;
 grant execute on function update_project_by_edit_token(uuid, text, jsonb) to anon;
 
+insert into storage.buckets (id, name, public)
+values ('movemap-audio', 'movemap-audio', true)
+on conflict (id) do update
+set public = true;
+
 drop policy if exists "allow anonymous audio upload" on storage.objects;
 drop policy if exists "authenticated audio upload" on storage.objects;
 drop policy if exists "anonymous audio read" on storage.objects;

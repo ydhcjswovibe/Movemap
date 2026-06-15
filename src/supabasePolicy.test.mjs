@@ -32,6 +32,10 @@ test("Stage 1 Free project limit stays aligned across JS and SQL verification do
 });
 
 test("Stage 1 Supabase docs require authenticated upload and public audio read", () => {
+  assert.match(sql, /insert into storage\.buckets \(id, name, public\)/);
+  assert.match(sql, /values \('movemap-audio', 'movemap-audio', true\)/);
   assert.match(sql, /create policy "authenticated audio upload"[\s\S]*to authenticated/);
   assert.match(sql, /create policy "anonymous audio read"[\s\S]*to anon/);
+  assert.match(verification, /select id, name, public[\s\S]*from storage\.buckets/);
+  assert.match(verification, /public bucket named `movemap-audio`/);
 });

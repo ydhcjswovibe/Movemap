@@ -122,6 +122,7 @@ Current implementation:
 - Disabled View Link shows only disabled-link status and does not render project content.
 - Supabase setup docs and `docs/supabase/stage1-auth-ownership.sql` define owner RLS, public View Link read, Edit Link RPCs, authenticated audio upload, and server-side Free project limit trigger.
 - `docs/supabase/stage1-verification.md` defines SQL, Google OAuth, link, and Free limit smoke checks for the real Supabase project.
+- Authenticated browser fixture coverage seeds a Supabase OAuth callback/session and verifies signed-in owner share saves, guest link creation blocking, and non-owner link management blocking.
 - Legacy `owner-session` helper tests remain for compatibility but it is no longer authoritative for Stage 1 cloud ownership.
 - `account.plan` supports `guest`, `free`, `pro`, and `team` as helper state.
 
@@ -132,11 +133,14 @@ Verified on 2026-05-29:
 - `npm run test:browser`
 - `git diff --check`
 
+Verified on 2026-06-15:
+
+- `npm run test:browser -- tests/browser/timeline-smoke.spec.mjs -g "Stage 1 auth fixture"`
+
 Remaining implementation slices:
 
 1. Apply and verify the documented SQL/RLS/RPC policy in the real Supabase project.
 2. Add live Google OAuth manual smoke against production/staging Supabase provider settings.
-3. Add authenticated browser fixture coverage once the test harness can seed a Supabase Auth session.
 
 Acceptance criteria:
 

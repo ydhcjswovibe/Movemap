@@ -42,17 +42,38 @@ select free_cloud_project_limit();
 
 Expected: `3`, matching `FREE_CLOUD_PROJECT_LIMIT` in `src/planCapabilities.mjs`.
 
+## Storage Checks
+
+Run this in Supabase SQL editor:
+
+```sql
+select id, name, public
+from storage.buckets
+where id = 'movemap-audio';
+```
+
+Expected: one public bucket named `movemap-audio`.
+
+Confirm these storage policies exist on `storage.objects`:
+
+- `authenticated audio upload`
+- `anonymous audio read`
+
+Then sign in locally, upload an audio file, and open the saved `publicUrl` in a logged-out/incognito browser. Expected: the file is readable without a Supabase session.
+
 ## Google OAuth Smoke
 
 1. In Supabase Authentication > Providers, enable Google.
-2. Add local and production redirect URLs:
-   - `http://localhost:5173`
+2. Add local and production redirect URLs in Supabase Authentication > URL Configuration:
+   - `http://localhost:5174`
+   - `http://127.0.0.1:5174`
    - production `VITE_PUBLIC_SHARE_ORIGIN`
-3. Run `npm run dev`.
-4. Open the app and click `Google 로그인`.
-5. Complete OAuth and confirm the app returns to Movemap.
-6. Create a project, click `저장하기`, and confirm the share panel shows account ownership connected.
-7. Sign out and confirm local demo editing still works but cloud save/share prompts login.
+3. In Google Cloud Console, add the same local and production origins to the Web OAuth Client's authorized JavaScript origins.
+4. Run `npm run dev`. The local app must stay on the strict `5174` port; if that port is busy, stop the existing server instead of using a different port.
+5. Open the app at the same origin configured above and click `Google 로그인`.
+6. Complete OAuth and confirm the app returns to Movemap.
+7. Create a project, click `저장하기`, and confirm the share panel shows account ownership connected.
+8. Sign out and confirm local demo editing still works but cloud save/share prompts login.
 
 ## Link Smoke
 
