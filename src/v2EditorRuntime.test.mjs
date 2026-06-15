@@ -49,7 +49,8 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.equal(runtime.capabilities.canRedo, false);
   assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "performer-role", "clear-selection"]);
+  assert.equal(runtime.bottomRailMode, "performer");
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "cast", "clear-selection"]);
   assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["p1", true]]);
   assert.equal(runtime.cast.canClearSelection, true);
   assert.equal(runtime.cast.canOpenRoleActions, true);
@@ -78,8 +79,9 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   assert.equal(readonlyRuntime.capabilities.canDelete, false);
   assert.equal(readonlyRuntime.capabilities.canUndo, false);
   assert.equal(readonlyRuntime.capabilities.canRedo, false);
-  assert.deepEqual(readonlyRuntime.bottomRail.map((action) => action.key), ["stage", "timeline", "cast"]);
-  assert.equal(readonlyRuntime.bottomRail.find((action) => action.key === "timeline").disabled, undefined);
+  assert.equal(readonlyRuntime.bottomRailMode, "default");
+  assert.deepEqual(readonlyRuntime.bottomRail.map((action) => action.key), ["formations", "cast", "stage"]);
+  assert.equal(readonlyRuntime.bottomRail.find((action) => action.key === "formations").disabled, undefined);
   assert.equal(readonlyRuntime.cast.canOpenRoleActions, false);
 
   const emptyRuntime = createV2EditorRuntime({
@@ -91,8 +93,47 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   });
   assert.equal(emptyRuntime.capabilities.canDuplicate, false);
   assert.equal(emptyRuntime.capabilities.canDelete, false);
-  assert.deepEqual(emptyRuntime.bottomRail.map((action) => action.key), ["stage", "timeline", "cast"]);
-  assert.equal(emptyRuntime.bottomRail[2].active, true);
+  assert.deepEqual(emptyRuntime.bottomRail.map((action) => action.key), ["formations", "cast", "stage"]);
+  assert.equal(emptyRuntime.bottomRail[1].active, true);
+});
+
+test("V2 default bottom sheet controls rail active state and closes outside default rail mode", () => {
+  const openRuntime = createV2EditorRuntime({
+    activeBottomSheet: "formations",
+    activeTab: "Stage",
+    currentSectionId: "s2",
+    performers: [{ id: "p1", label: "P1" }],
+    showAllTransitionPaths: false,
+    showStageReferenceLabels: true,
+    showStageReferences: true,
+    snapEnabled: true,
+    sortedSections: [{ id: "s1", name: "Intro" }, { id: "s2", name: "Finale" }],
+    stageDimensions: { width: 12, height: 8 }
+  });
+
+  assert.equal(openRuntime.bottomRailMode, "default");
+  assert.equal(openRuntime.bottomRail.find((action) => action.key === "formations").active, true);
+  assert.equal(openRuntime.bottomRail.find((action) => action.key === "stage").active, false);
+  assert.equal(openRuntime.bottomSheet.key, "formations");
+  assert.deepEqual(openRuntime.bottomSheet.items.map((item) => item.key), ["formation-s1", "formation-s2", "add-formation"]);
+  assert.equal(openRuntime.bottomSheet.items.find((item) => item.key === "formation-s2").active, true);
+
+  const closedRuntime = createV2EditorRuntime({
+    activeTab: "Cast",
+    sortedSections: [{ id: "s1" }]
+  });
+  assert.equal(closedRuntime.bottomSheet, null);
+  assert.equal(closedRuntime.bottomRail.find((action) => action.key === "cast").active, true);
+
+  const selectedRuntime = createV2EditorRuntime({
+    activeBottomSheet: "stage",
+    activeTab: "Stage",
+    selectedPerformerId: "p1",
+    selectedPerformerIds: ["p1"],
+    performers: [{ id: "p1", label: "P1" }]
+  });
+  assert.equal(selectedRuntime.bottomRailMode, "performer");
+  assert.equal(selectedRuntime.bottomSheet, null);
 });
 
 test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {
@@ -143,7 +184,8 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
     sortedSections: [{ id: "s1" }, { id: "s2" }]
   });
 
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-formation", "delete-formation", "timeline", "clear-selection"]);
+  assert.equal(runtime.bottomRailMode, "formation");
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["formation-list", "add-formation", "duplicate-formation", "delete-formation", "clear-selection"]);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").disabled, false);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").scopeLabel, "Current view");
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "사용 가능");

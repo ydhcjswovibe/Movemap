@@ -932,6 +932,62 @@ test.describe("connected v2 editor route", () => {
     await expect(page.locator("[data-v2-visual-editor] .v2-token[aria-pressed='true']")).toHaveCount(0);
   });
 
+  test("snaps V2 performer token drags to the meter grid by default", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const stageSurface = root.locator(".v2-stage-surface");
+    const token = root.locator('[data-v2-performer-token="a1"]');
+    const tokenBox = await token.boundingBox();
+    const stageBox = await stageSurface.boundingBox();
+    expect(tokenBox).not.toBeNull();
+    expect(stageBox).not.toBeNull();
+
+    const pointerId = 719;
+    const startX = tokenBox.x + tokenBox.width / 2;
+    const startY = tokenBox.y + tokenBox.height / 2;
+    const targetX = stageBox.x + (3.42 / 12) * stageBox.width;
+    const targetY = stageBox.y + (2.58 / 8) * stageBox.height;
+
+    await token.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: startX,
+      clientY: startY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await token.dispatchEvent("pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: targetX,
+      clientY: targetY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await token.dispatchEvent("pointerup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: targetX,
+      clientY: targetY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+
+    await expect.poll(async () => {
+      const project = await storedProject(page);
+      return project.sections.find((section) => section.id === "intro").positions.a1;
+    }).toEqual({ x: 3, y: 3 });
+  });
+
   test("allows V2 performers on the top and audience-side edge rows", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
@@ -1202,8 +1258,10 @@ test.describe("connected v2 editor route", () => {
     await page.goto("/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
-    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Timeline" }).click();
-    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toBeVisible();
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "대형" }).click();
+    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toHaveCount(0);
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "대형" }).click();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
     const moveBlock = root.locator('[data-v2-segment-kind="move"]').first();
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
     await expect(moveBlock).toBeVisible();
@@ -1234,7 +1292,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
     await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]')).toBeVisible();
     await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]')).toBeVisible();
-    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toBeVisible();
+    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toHaveCount(0);
 
     expect(await v2TimingSnapshot(page)).toEqual(timingBefore);
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeDisabled();
@@ -3109,10 +3167,12 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "타임라인 설정" })).toHaveCount(0);
     await expect(root.getByRole("tab")).toHaveCount(0);
 
-    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Timeline" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Stage" })).toHaveClass(/is-active/);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "대형" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "오디오" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "사람" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "무대" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "무대" })).toHaveClass(/is-active/);
     const stageSurface = root.locator('[data-v2-tab-surface="Stage"]');
     await expect(stageSurface).toHaveCount(0);
     await expect(root.locator("[data-v2-stage]").getByRole("button", { name: "Stage references" })).toHaveCount(0);
@@ -3186,29 +3246,29 @@ test.describe("connected v2 editor route", () => {
     });
     expect(stageAspect.ratio).toBeCloseTo(1.5, 1);
     expect(Math.abs(stageAspect.cellWidth - stageAspect.cellHeight)).toBeLessThanOrEqual(0.5);
-    await rail.getByRole("button", { name: "Timeline" }).click();
-    await expect(rail.getByRole("button", { name: "Timeline" })).toHaveClass(/is-active/);
-    const timelineSurface = root.locator('[data-v2-tab-surface="Timeline"]');
-    await expect(timelineSurface).toBeVisible();
-    await expect(timelineSurface.getByRole("button", { name: "대형 추가" })).toBeVisible();
-    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
-    await expect(timelineSurface).toContainText("Selected:");
-    await expect(timelineSurface).toContainText("Trim enabled");
-    await expect(timelineSurface).toContainText(/\d+\.\ds - \d+\.\ds/);
+    await rail.getByRole("button", { name: "대형" }).click();
+    await expect(rail.getByRole("button", { name: "대형" })).toHaveClass(/is-active/);
+    await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toHaveCount(0);
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveAttribute("data-v2-bottom-sheet", "formations");
+    await expect(root.locator('[data-v2-bottom-sheet-item="add-formation"]')).toBeVisible();
+    await root.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]')).toBeVisible();
+    await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]')).toBeVisible();
     await rail.getByRole("button", { name: "해제" }).click();
-    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
-    await rail.getByRole("button", { name: "Cast" }).click();
-    await expect(rail.getByRole("button", { name: "Cast" })).toHaveClass(/is-active/);
-    const castSurface = root.locator('[data-v2-tab-surface="Cast"]');
-    await expect(castSurface).toBeVisible();
-    await castSurface.getByRole("button", { name: /B2/ }).click();
+    await expect(rail.getByRole("button", { name: "사람" })).toBeEnabled();
+    await rail.getByRole("button", { name: "사람" }).click();
+    await expect(rail.getByRole("button", { name: "사람" })).toHaveClass(/is-active/);
+    await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveAttribute("data-v2-bottom-sheet", "cast");
+    await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(castSurface).toContainText("B2");
-    await expect(castSurface).toContainText("선택됨");
-    await expect(castSurface.getByRole("button", { name: "복제" })).toBeEnabled();
-    await expect(castSurface.getByRole("button", { name: "삭제" })).toBeEnabled();
-    await expect(castSurface.getByRole("button", { name: "역할" })).toBeEnabled();
-    await castSurface.getByRole("button", { name: "해제" }).click();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await rail.getByRole("button", { name: "해제" }).click();
     await expect(root.locator(".v2-token[aria-pressed='true']")).toHaveCount(0);
 
     await root.getByRole("button", { name: "더보기" }).click();
@@ -3296,22 +3356,87 @@ test.describe("connected v2 editor route", () => {
     await expect(exportMenu).not.toContainText("편집 링크");
   });
 
+  test("opens and swaps V2 default bottom sheets without covering the bottom rail", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/v2");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const rail = root.locator("[data-v2-bottom-rail]");
+    const sheet = root.locator("[data-v2-bottom-sheet]");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+
+    await rail.getByRole("button", { name: "대형" }).click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "formations");
+    await expect(sheet.getByRole("button", { name: /Intro/ })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: /Finale|Diamond|Hook|Chorus|Intro/ }).first()).toBeVisible();
+    const formationGeometry = await root.evaluate(() => {
+      const railNode = document.querySelector("[data-v2-bottom-rail]");
+      const sheetNode = document.querySelector("[data-v2-bottom-sheet]");
+      const railBox = railNode.getBoundingClientRect();
+      const sheetBox = sheetNode.getBoundingClientRect();
+      return {
+        railTop: railBox.top,
+        sheetBottom: sheetBox.bottom,
+        sheetHeight: sheetBox.height
+      };
+    });
+    expect(formationGeometry.sheetHeight).toBeGreaterThan(40);
+    expect(formationGeometry.sheetBottom).toBeLessThanOrEqual(formationGeometry.railTop + 1);
+
+    await root.locator("[data-v2-stage-info-line]").click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "formations");
+
+    await rail.getByRole("button", { name: "대형" }).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "대형" })).toHaveClass(/is-active/);
+
+    await rail.getByRole("button", { name: "대형" }).click();
+    await rail.getByRole("button", { name: "사람" }).click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast");
+    await expect(sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]')).toBeVisible();
+
+    await rail.getByRole("button", { name: "무대" }).click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "stage");
+    await expect(sheet).toContainText("12x8 · 1m grid");
+    await expect(sheet.getByRole("button", { name: /스냅/ })).toBeVisible();
+
+    await rail.getByRole("button", { name: "대형" }).click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "formations");
+    await sheet.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
+    await expect(sheet).toHaveCount(0);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await rail.getByRole("button", { name: "해제" }).click();
+
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await rail.getByRole("button", { name: "사람" }).click();
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast");
+    await sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
+    await expect(sheet).toHaveCount(0);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+  });
+
   test("drives bottom rail actions from V2 selection context", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/v2");
 
     const root = page.locator("[data-v2-visual-editor]");
-    const rail = page.locator("[data-v2-bottom-rail]");
-    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Timeline" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Cast" })).toBeEnabled();
+    await expect(root).toBeVisible();
+    const rail = root.locator("[data-v2-bottom-rail]");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "무대" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "대형" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "사람" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
 
-    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await rail.getByRole("button", { name: "대형" }).click();
+    await root.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(rail.getByRole("button", { name: "목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "추가" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "Timing" })).toBeEnabled();
     await rail.getByRole("button", { name: "복제" }).click();
     await expect.poll(async () => {
       const project = await storedProject(page);
@@ -3320,9 +3445,11 @@ test.describe("connected v2 editor route", () => {
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeEnabled();
 
     await root.locator('[data-v2-performer-token="a1"]').click();
-    await expect(rail.getByRole("button", { name: "역할" })).toBeEnabled();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(rail.getByRole("button", { name: "사람" })).toBeEnabled();
     await rail.getByRole("button", { name: "해제" }).click();
-    await expect(rail.getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "무대" })).toBeEnabled();
   });
 
   test("does not render edit controls for readonly v2", async ({ page }) => {
@@ -3349,24 +3476,24 @@ test.describe("connected v2 editor route", () => {
     await expect(root.locator("[data-v2-stage-info-line]")).toBeVisible();
     await expect(root.locator("[data-v2-stage-info-line]")).toContainText("Snap on · 12x8 · 1m grid");
     await expect(root.locator(".v2-track-add-button")).toHaveCount(0);
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Stage" })).toBeEnabled();
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Timeline" })).toBeEnabled();
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Cast" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "무대" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "대형" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람" })).toBeEnabled();
     await root.getByRole("button", { name: "더보기" }).click();
     await root.getByRole("menuitem", { name: /Settings/ }).click();
     await expect(root.getByRole("menuitemcheckbox", { name: /Snap/ })).toBeDisabled();
     await page.keyboard.press("Escape");
-    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Cast" }).click();
-    const castSurface = root.locator('[data-v2-tab-surface="Cast"]');
-    await expect(castSurface).toBeVisible();
-    await castSurface.getByRole("button", { name: /B2/ }).click();
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람" }).click();
+    await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
+    await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
     const readonlyTopbarBox = await root.locator(".v2-topbar").boundingBox();
     expect(readonlyTopbarBox.y).toBeGreaterThanOrEqual(0);
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(castSurface.getByRole("button", { name: "해제" })).toBeEnabled();
-    await expect(castSurface.getByRole("button", { name: "역할" })).toBeDisabled();
-    await expect(castSurface.getByRole("button", { name: "복제" })).toBeDisabled();
-    await expect(castSurface.getByRole("button", { name: "삭제" })).toBeDisabled();
+    const readonlyRail = root.locator("[data-v2-bottom-rail]");
+    await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(readonlyRail.getByRole("button", { name: "해제" })).toBeEnabled();
+    await expect(readonlyRail.getByRole("button", { name: "복제" })).toBeDisabled();
+    await expect(readonlyRail.getByRole("button", { name: "삭제" })).toBeDisabled();
   });
 
   test("readonly V2 formation blocks still pan without mutating timing", async ({ page }) => {
@@ -3497,7 +3624,7 @@ test.describe("connected v2 editor route", () => {
     await expect(root).toBeVisible();
     await expect(page.getByRole("heading", { name: "Editable V2 Link Fixture" })).toBeVisible();
     await expect(root.locator(".v2-track-add-button")).not.toHaveCount(0);
-    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "Stage" })).toBeEnabled();
+    await expect(root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "무대" })).toBeEnabled();
     await expect(root.getByRole("button", { name: "공유" })).toBeEnabled();
   });
 

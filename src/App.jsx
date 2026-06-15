@@ -892,6 +892,7 @@ function App() {
   const [v2TimelineBlockDragPreview, setV2TimelineBlockDragPreview] = useState(null);
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [v2ActiveTab, setV2ActiveTab] = useState("Stage");
+  const [activeV2BottomSheet, setActiveV2BottomSheet] = useState(null);
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
@@ -1543,6 +1544,14 @@ function App() {
     }
     if (actionKey === "align-performers") {
       openMobilePanel(MOBILE_PANEL_KINDS.align, MOBILE_PANEL_SIZES.half);
+      return;
+    }
+    if (actionKey === "align-x") {
+      alignCurrentSelection("x");
+      return;
+    }
+    if (actionKey === "align-y") {
+      alignCurrentSelection("y");
       return;
     }
     if (actionKey === "delete-performers") {
@@ -2573,6 +2582,7 @@ function App() {
     setTapMoveArmed(false);
     setMobileContextSelection("");
     setStitchFormationContext(false);
+    setActiveV2BottomSheet(null);
   }
 
   function selectPerformer(performerId) {
@@ -2582,6 +2592,7 @@ function App() {
     setTapMoveArmed(Boolean(performerId));
     setMobileContextSelection(performerId ? "performer" : "");
     setStitchFormationContext(false);
+    setActiveV2BottomSheet(null);
   }
 
   function selectPair(nextPairKey, performerId = "") {
@@ -3446,10 +3457,12 @@ function App() {
     if (distance(pointer, drag.startPointer || pointer) > 0.05) {
       drag.moved = true;
     }
-    const nextPosition = clampV2DragPointToStage({
+    const rawPosition = clampV2DragPointToStage({
       x: pointer.x + drag.offsetX,
       y: pointer.y + drag.offsetY
     }, stageDimensions);
+    const snapped = snapPoint(rawPosition, snapEnabled && !event.altKey);
+    const nextPosition = clampV2DragPointToStage(snapped, stageDimensions);
     drag.finalPositions = {
       [drag.performerId]: nextPosition
     };
@@ -3492,11 +3505,12 @@ function App() {
     if (readonly || !selectedSection || !selectedPerformerId || !stageElement) return;
     if (dragStateRef.current) return;
     const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
+    const targetPoint = clampV2DragPointToStage(snapPoint(pointer, snapEnabled && !event.altKey), stageDimensions);
     const editKeyframeId = selectedMovementKeyframe?.id || "";
     updatePlan((current) => ({
       ...current,
       sections: current.sections.map((section) => section.id === selectedSection.id
-        ? sectionWithPositionPatch(section, { [selectedPerformerId]: pointer }, editKeyframeId)
+        ? sectionWithPositionPatch(section, { [selectedPerformerId]: targetPoint }, editKeyframeId)
         : section)
     }));
     clearSelection();
@@ -5046,6 +5060,12 @@ function App() {
     setSelectedPairKey("");
     setMobileContextSelection("formation");
     setStitchFormationContext(true);
+    setActiveV2BottomSheet(null);
+  }
+
+  function toggleV2BottomSheet(sheetKey, tabKey) {
+    if (tabKey) setV2ActiveTab(tabKey);
+    setActiveV2BottomSheet((current) => current === sheetKey ? null : sheetKey);
   }
 
   const { actions: stitchEditorActions, model: stitchEditorModel } = createStitchEditorRuntime({
@@ -5161,6 +5181,7 @@ function App() {
   });
   const v2EditorModel = createV2EditorRuntime({
     ...stitchEditorModel,
+    activeBottomSheet: activeV2BottomSheet,
     activeTab: v2ActiveTab,
     addSection,
     canCreateViewLink,
@@ -5228,6 +5249,7 @@ function App() {
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
     toggleStageReferences: () => setShowStageReferences((value) => !value),
     toggleTransitionPaths: () => setShowAllTransitionPaths((value) => !value),
+    toggleBottomSheet: toggleV2BottomSheet,
     togglePlayback,
     zoomTimelineBy,
     printProject: () => window.print(),

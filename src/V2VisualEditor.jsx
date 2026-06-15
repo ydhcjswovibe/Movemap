@@ -97,8 +97,6 @@ function tickStyle(tick, index) {
   };
 }
 
-const taskTabs = ["Stage", "Timeline", "Cast"];
-
 function buildDemoViewModel(model) {
   if (!model?.shell || !model?.stage || !model?.selection || !model?.timeline) {
     return {
@@ -214,6 +212,7 @@ function buildDemoViewModel(model) {
         canManageLinks: false
       },
       activeTab: "Stage",
+      bottomSheet: null,
       sections: [
         { id: "intro", name: "Intro V" },
         { id: "diamond", name: "Diamond Form" }
@@ -230,6 +229,8 @@ function buildDemoViewModel(model) {
     actions: model.actions || {},
     activeTab: model.activeTab || "Stage",
     bottomRail: model.bottomRail || [],
+    bottomRailMode: model.bottomRailMode || "default",
+    bottomSheet: model.bottomSheet || null,
     cast: model.cast || {},
     exportMenu: model.exportMenu || [],
     moreMenu: model.moreMenu || [],
@@ -276,7 +277,7 @@ function V2VisualEditor({ model, actions = {} }) {
   const { shell, stage, stageInfoLine, selection, timeline, sections, share } = view;
   const runtimeActions = { ...(view.actions || {}), ...actions };
   const capabilities = view.capabilities || {};
-  const activeTab = taskTabs.includes(view.activeTab) ? view.activeTab : "Stage";
+  const bottomRailMode = view.bottomRailMode || "default";
   const stageDimensions = stage.stageDimensions || { width: 100, height: 100 };
   const stageWidth = Math.max(1, Number(stageDimensions.width) || 100);
   const stageHeight = Math.max(1, Number(stageDimensions.height) || 100);
@@ -599,14 +600,68 @@ function V2VisualEditor({ model, actions = {} }) {
   };
   const runBottomAction = (action) => {
     if (!action || action.disabled) return;
+    if (action.sheet) {
+      runtimeActions.toggleBottomSheet?.(action.sheet, action.mode);
+      return;
+    }
     if (action.mode) {
       runtimeActions.setActiveTab?.(action.mode);
       return;
     }
-    if (action.key === "duplicate-formation" || action.key === "duplicate-performer") runtimeActions.duplicate?.();
-    else if (action.key === "delete-formation" || action.key === "delete-performer" || action.key === "delete-performers") runtimeActions.delete?.();
-    else if (action.key === "clear-selection") runtimeActions.mobileAction?.("clear-selection");
-    else runtimeActions.mobileAction?.(action.key);
+    if (action.key === "add-formation") {
+      runtimeActions.addFormation?.({ forceAppend: true });
+      return;
+    }
+    if (action.key === "duplicate-formation" || action.key === "duplicate-performer") {
+      runtimeActions.duplicate?.();
+      return;
+    }
+    if (action.key === "delete-formation" || action.key === "delete-performer" || action.key === "delete-performers") {
+      runtimeActions.delete?.();
+      return;
+    }
+    if (action.key === "align-x" || action.key === "align-y") {
+      runtimeActions.mobileAction?.(action.key);
+      return;
+    }
+    if (action.key === "clear-selection") {
+      runtimeActions.mobileAction?.("clear-selection");
+      return;
+    }
+    runtimeActions.mobileAction?.(action.key);
+  };
+  const runBottomSheetItem = (item) => {
+    if (!item || item.disabled) return;
+    if (item.action === "select-formation") {
+      const section = sectionById.get(item.sectionId);
+      if (section) runtimeActions.selectFormation?.(section, { force: true });
+      return;
+    }
+    if (item.action === "select-performer") {
+      runtimeActions.selectPerformer?.(item.performerId);
+      return;
+    }
+    if (item.action === "add-formation") {
+      runtimeActions.addFormation?.({ forceAppend: true });
+      return;
+    }
+    if (item.key === "toggle-snap") {
+      runtimeActions.toggleSnap?.();
+      return;
+    }
+    if (item.key === "toggle-stage-references") {
+      runtimeActions.toggleStageReferences?.();
+      return;
+    }
+    if (item.key === "toggle-stage-reference-labels") {
+      runtimeActions.toggleStageReferenceLabels?.();
+      return;
+    }
+    if (item.key === "toggle-transition-paths") {
+      runtimeActions.toggleTransitionPaths?.();
+      return;
+    }
+    runtimeActions.mobileAction?.(item.action || item.key);
   };
 
   useEffect(() => {
@@ -934,78 +989,6 @@ function V2VisualEditor({ model, actions = {} }) {
                 ))}
               </div>
             )}
-            {activeTab === "Cast" && (
-              <div className="v2-cast-task-surface" data-v2-tab-surface="Cast" aria-label="Cast roster">
-                <div className="v2-task-summary">
-                  <span>{view.cast?.selectedSummary?.label || "No performer"}</span>
-                  <strong>{view.cast?.selectedSummary?.stateLabel || "선택 없음"}</strong>
-                  <em>{view.cast?.selectedSummary?.metaLabel || "No role"}</em>
-                </div>
-                <div className="v2-cast-roster">
-                  {(view.cast?.performers?.length ? view.cast.performers : stage.performers || []).map((performer) => {
-                    const active = Boolean(performer.active || selection.selectedPerformerId === performer.id || selectedPerformerIds.has(performer.id));
-                    return (
-                      <button
-                        key={performer.id}
-                        type="button"
-                        className={active ? "is-active" : ""}
-                        aria-pressed={active}
-                        data-v2-cast-performer={performer.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          runtimeActions.selectPerformer?.(performer.id);
-                        }}
-                      >
-                        <span>{performerLabel(performer)}</span>
-                        <em>{performer.role === "groupB" ? "B" : "A"}</em>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="v2-cast-actions">
-                  <button
-                    type="button"
-                    disabled={!view.cast?.canDuplicate}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      runtimeActions.duplicate?.();
-                    }}
-                  >
-                    복제
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!view.cast?.canDelete}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      runtimeActions.delete?.();
-                    }}
-                  >
-                    삭제
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!view.cast?.canClearSelection}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      runtimeActions.mobileAction?.("clear-selection");
-                    }}
-                  >
-                    해제
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!view.cast?.canOpenRoleActions}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      runtimeActions.mobileAction?.("performer-role");
-                    }}
-                  >
-                    역할
-                  </button>
-                </div>
-              </div>
-            )}
             <div className="v2-caution-zone" data-v2-caution-zone aria-hidden="true" />
 
             {(stage.performers || []).map((performer) => {
@@ -1082,23 +1065,6 @@ function V2VisualEditor({ model, actions = {} }) {
         </section>
 
         <section className="v2-timeline" data-v2-timeline aria-label="Formation timeline" onWheel={runtimeActions.timelineWheel}>
-          {activeTab === "Timeline" && (
-            <div className="v2-timeline-task-surface" data-v2-tab-surface="Timeline" aria-label="Timeline task controls">
-              <div className="v2-task-summary">
-                <span>{view.timelineTask?.focusLabel || "No selected block"}</span>
-                <strong>{view.timelineTask?.selectedFormationSummary?.name || selection.selectedSection?.name || sections.find((section) => section.id === selectedSectionId)?.name || "Timeline"}</strong>
-                <em>{view.timelineTask?.selectedFormationSummary?.timeRangeLabel || "Select a block"}</em>
-              </div>
-              <div className="v2-timeline-selection-meta">
-                <span>{view.timelineTask?.selectedFormationSummary?.durationLabel || "0.0s"}</span>
-                <span>{view.timelineTask?.selectedFormationSummary?.trimStateLabel || "Select to trim"}</span>
-              </div>
-              <div className="v2-task-actions">
-                <button type="button" disabled={!view.timelineTask?.canAddFormation} onClick={() => runtimeActions.addFormation?.({ forceAppend: true })}>대형 추가</button>
-                <button type="button" disabled={!view.timelineTask?.canAddAudio} onClick={runtimeActions.addAudio}>음악 추가</button>
-              </div>
-            </div>
-          )}
           <div className="v2-ruler">
             <div className="v2-timeline-tools" aria-label="Timeline zoom controls">
               <IconButton icon="zoom-minus" label="타임라인 축소" className="v2-timeline-zoom-button" onClick={() => runtimeActions.zoomTimelineBy?.(0.88)}>-</IconButton>
@@ -1441,17 +1407,80 @@ function V2VisualEditor({ model, actions = {} }) {
           </div>
         )}
 
-        <nav className="v2-bottom-rail" data-v2-bottom-rail aria-label="Selected item actions">
+        {view.bottomSheet && (
+          <section
+            className={`v2-bottom-sheet v2-bottom-sheet-${view.bottomSheet.key}`}
+            data-v2-bottom-sheet={view.bottomSheet.key}
+            aria-label={`${view.bottomSheet.title} 작업 시트`}
+          >
+            <div className="v2-bottom-sheet-header">
+              <strong>{view.bottomSheet.title}</strong>
+              <button
+                type="button"
+                aria-label="닫기"
+                onClick={() => runtimeActions.toggleBottomSheet?.(view.bottomSheet.key)}
+              >
+                닫기
+              </button>
+            </div>
+            <div className="v2-bottom-sheet-list">
+              {(view.bottomSheet.items || []).map((item) => {
+                const isButton = item.kind !== "info";
+                const content = (
+                  <>
+                    {item.icon && <CoolIcon name={item.icon} />}
+                    <span className="v2-bottom-sheet-main">
+                      <span>{item.label}</span>
+                      {item.metaLabel && <em>{item.metaLabel}</em>}
+                    </span>
+                    {item.kind === "toggle" && (
+                      <span className={`v2-bottom-sheet-switch ${item.checked ? "is-on" : ""}`} aria-hidden="true" />
+                    )}
+                    {item.stateLabel && <span className="v2-bottom-sheet-state">{item.stateLabel}</span>}
+                  </>
+                );
+                return isButton ? (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={item.active ? "is-active" : ""}
+                    aria-pressed={item.kind === "toggle" ? Boolean(item.checked) : Boolean(item.active)}
+                    disabled={Boolean(item.disabled)}
+                    data-v2-bottom-sheet-item={item.key}
+                    onClick={() => runBottomSheetItem(item)}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div key={item.key} className="v2-bottom-sheet-info" data-v2-bottom-sheet-item={item.key}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <nav
+          className={`v2-bottom-rail v2-bottom-rail-${bottomRailMode}`}
+          data-v2-bottom-rail
+          data-v2-bottom-rail-mode={bottomRailMode}
+          aria-label={bottomRailMode === "default" ? "편집 카테고리" : "선택 항목 도구"}
+        >
           {(view.bottomRail || []).map((action) => (
             <IconButton
               key={action.key || action.label}
               icon={action.icon}
               label={action.label}
+              className={action.danger ? "is-danger" : ""}
               primary={action.primary}
               active={Boolean(action.active)}
               disabled={Boolean(action.disabled)}
               onClick={() => runBottomAction(action)}
-            />
+            >
+              <CoolIcon name={action.icon} />
+              <span className="v2-bottom-label">{action.label}</span>
+            </IconButton>
           ))}
         </nav>
       </section>
