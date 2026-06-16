@@ -891,6 +891,36 @@ test.describe("connected root V2 editor route", () => {
     await expect(addedBlock).toHaveAttribute("data-v2-segment-duration", "4s");
   });
 
+  test("V2 add formation inside a transition stores the visible interpolated positions", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await expect(root).toBeVisible();
+    const projectBefore = await storedProject(page);
+    const previous = projectBefore.sections.find((section) => section.id === "intro");
+    const next = projectBefore.sections.find((section) => section.id === "diamond");
+    expect(previous).toBeTruthy();
+    expect(next).toBeTruthy();
+    const transitionTime = ((next.start ?? 0) + (next.time ?? next.end ?? 0)) / 2;
+    await page.evaluate((value) => {
+      const audio = document.querySelector("audio");
+      if (!audio) return;
+      Object.defineProperty(audio, "currentTime", { configurable: true, value });
+      audio.dispatchEvent(new Event("timeupdate"));
+    }, transitionTime);
+    await expect.poll(async () => secondsFromV2Timecode(await root.locator(".v2-timecode").textContent())).toBe(transitionTime);
+
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" }).click();
+
+    const project = await storedProject(page);
+    const added = project.sections.find((section) => section.name === "대형");
+    expect(added).toBeTruthy();
+    expect(added.positions.a1).not.toEqual(previous.positions.a1);
+    expect(added.positions.a1).not.toEqual(next.positions.a1);
+  });
+
   test("moves a selected V2 performer to empty stage space and clears selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);

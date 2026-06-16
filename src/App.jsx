@@ -2935,6 +2935,36 @@ function App() {
     clearQuietStatus();
   }
 
+  function formationCreationPositions({ performers = [], visiblePositions = {}, fallbackPositions = {}, stageDimensions }) {
+    const visibleEntries = Object.fromEntries(
+      performers
+        .map((performer) => {
+          const position = visiblePositions?.[performer.id];
+          if (!position || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y))) return null;
+          return [performer.id, clampPointToStage({ x: Number(position.x), y: Number(position.y) }, stageDimensions)];
+        })
+        .filter(Boolean)
+    );
+    if (Object.keys(visibleEntries).length) return visibleEntries;
+    if (fallbackPositions && Object.keys(fallbackPositions).length) {
+      return JSON.parse(JSON.stringify(fallbackPositions));
+    }
+    return Object.fromEntries(performers.map((performer, index) => [
+      performer.id,
+      clampPointToStage({ x: 18 + index * 8, y: 55 }, stageDimensions)
+    ]));
+  }
+
+  function formationVisiblePositionsAtTime(time) {
+    if (!plan) return {};
+    return displayPositions(
+      { ...plan, sections: sortedSections },
+      findSectionIndex(sortedSections, time),
+      time,
+      true
+    );
+  }
+
   function addSection({ forceAppend = false, forceCreate = false } = {}) {
     const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
     const target = resolveFormationAddTarget(sortedSections, captureTime);
@@ -2950,13 +2980,19 @@ function App() {
         ? pointTime(sortedSections.at(-1))
         : target.time;
     const previous = target.action === "select" ? sortedSections.at(-1) : target.previous;
-    const positions = previous?.positions || Object.fromEntries(plan.performers.map((p, index) => [p.id, { x: 18 + index * 8, y: 55 }]));
+    const creationVisiblePositions = isV2Route ? formationVisiblePositionsAtTime(captureTime) : visiblePositions;
+    const positions = formationCreationPositions({
+      performers: plan.performers,
+      visiblePositions: creationVisiblePositions,
+      fallbackPositions: previous?.positions || {},
+      stageDimensions
+    });
     const section = {
       id: uid("sec"),
       name: "대형",
       notes: "음악을 들으며 현재 시각에 저장한 대형입니다.",
       moveMode: "smooth",
-      positions: JSON.parse(JSON.stringify(positions)),
+      positions,
       frontFocus: [],
       partnerSetId: partnerSetIdForAddedSection(previous)
     };

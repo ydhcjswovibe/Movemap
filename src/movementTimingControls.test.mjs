@@ -299,7 +299,7 @@ test("timeline pointer drags batch undo history until pointerup", () => {
   assert.match(appSource, /updateMovementKeyframes\(section\.id,[\s\S]*?\{ history: false \}\)/);
 });
 
-test("formation add keeps legacy selection while V2 can force playhead insertion", () => {
+test("V2 formation add captures visible positions before falling back to stored sections", () => {
   const addSection = appSource.match(/function addSection\(\{ forceAppend = false, forceCreate = false \} = \{\}\) \{[\s\S]*?\n  \}/)?.[0] || "";
 
   assert.match(addSection, /const target = resolveFormationAddTarget\(sortedSections, captureTime\);/);
@@ -307,6 +307,10 @@ test("formation add keeps legacy selection while V2 can force playhead insertion
   assert.match(addSection, /setSelectedSectionId\(target\.section\.id\);/);
   assert.match(addSection, /const time = target\.action === "select" && forceCreate\s*\?\s*captureTime\s*:\s*target\.action === "select"\s*\?\s*pointTime\(sortedSections\.at\(-1\)\)\s*:\s*target\.time;/);
   assert.match(addSection, /const previous = target\.action === "select" \? sortedSections\.at\(-1\) : target\.previous;/);
+  assert.match(appSource, /function formationCreationPositions\(/);
+  assert.match(addSection, /formationCreationPositions\(\{/);
+  assert.match(addSection, /visiblePositions/);
+  assert.match(addSection, /previous\?\.positions/);
   assert.match(addSection, /action: "add-after"/);
   assert.match(addSection, /name: "대형"/);
   assert.match(addSection, /sections: result\.sections/);
