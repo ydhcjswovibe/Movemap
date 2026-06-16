@@ -1645,6 +1645,108 @@
   text-align: center;
 }
 
+.v2-formation-details-sheet,
+.v2-template-sheet {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 9px 10px 12px;
+}
+
+.v2-formation-details-sheet {
+  display: grid;
+  gap: 8px;
+}
+
+.v2-formation-details-sheet label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: #dce5f2;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.v2-formation-details-sheet input,
+.v2-formation-details-sheet textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(231, 237, 246, 0.14);
+  border-radius: 5px;
+  background: #101721;
+  color: #f4f7fb;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  outline: none;
+}
+
+.v2-formation-details-sheet input {
+  height: 36px;
+  padding: 0 9px;
+}
+
+.v2-formation-details-sheet textarea {
+  min-height: 66px;
+  resize: vertical;
+  padding: 8px 9px;
+}
+
+.v2-formation-details-sheet input:focus,
+.v2-formation-details-sheet textarea:focus {
+  border-color: rgba(74, 139, 255, 0.58);
+  box-shadow: 0 0 0 2px rgba(40, 120, 255, 0.16);
+}
+
+.v2-formation-details-sheet p {
+  margin: 0;
+  color: #93a0b3;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.v2-template-sheet {
+  display: grid;
+  gap: 10px;
+}
+
+.v2-template-list,
+.v2-template-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
+}
+
+.v2-template-list button,
+.v2-template-actions button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid rgba(231, 237, 246, 0.14);
+  border-radius: 5px;
+  background: #151d28;
+  color: #e8eef8;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.v2-template-list button.is-active,
+.v2-template-list button:focus-visible,
+.v2-template-actions button:focus-visible {
+  border-color: rgba(74, 139, 255, 0.58);
+  background: rgba(40, 120, 255, 0.18);
+  outline: none;
+}
+
+.v2-template-actions button {
+  background: rgba(231, 237, 246, 0.08);
+}
+
+.v2-template-actions button:disabled {
+  opacity: 0.45;
+}
+
 .v2-formation-row-time {
   color: #93a0b3;
   font-size: 9px;

@@ -673,6 +673,10 @@ function V2VisualEditor({ model, actions = {} }) {
       runtimeActions.toggleFormationMultiSelect?.(item.sectionId);
       return;
     }
+    if (item.kind === "formation-template") {
+      runtimeActions.selectTemplate?.(item.templateId);
+      return;
+    }
     if (item.action === "select-performer") {
       runtimeActions.selectPerformer?.(item.performerId);
       return;
@@ -1464,7 +1468,69 @@ function V2VisualEditor({ model, actions = {} }) {
                 ))}
               </div>
             </div>
-            <div className="v2-bottom-sheet-list">
+            {view.bottomSheet.key === "formation-details" && (
+              <div className="v2-formation-details-sheet">
+                <label>
+                  <span>{view.bottomSheet.fields.name.label}</span>
+                  <input
+                    value={view.bottomSheet.fields.name.value}
+                    readOnly={Boolean(view.bottomSheet.fields.name.disabled)}
+                    aria-label={view.bottomSheet.fields.name.label}
+                    onChange={(event) => runtimeActions.updateSelectedFormationMetadataField?.("name", event.target.value)}
+                    onBlur={(event) => runtimeActions.finishSelectedFormationMetadataEdit?.("name", event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>{view.bottomSheet.fields.notes.label}</span>
+                  <textarea
+                    value={view.bottomSheet.fields.notes.value}
+                    readOnly={Boolean(view.bottomSheet.fields.notes.disabled)}
+                    aria-label={view.bottomSheet.fields.notes.label}
+                    onChange={(event) => runtimeActions.updateSelectedFormationMetadataField?.("notes", event.target.value)}
+                    onBlur={(event) => runtimeActions.finishSelectedFormationMetadataEdit?.("notes", event.target.value)}
+                  />
+                </label>
+                <p>{view.bottomSheet.timeRangeLabel}</p>
+                <p>타이밍은 타임라인에서, 위치는 무대에서 편집합니다.</p>
+              </div>
+            )}
+            {view.bottomSheet.key === "formation-template" && (
+              <div className="v2-template-sheet">
+                <div className="v2-template-list">
+                  {(view.bottomSheet.items || []).map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={item.active ? "is-active" : ""}
+                      onClick={() => runBottomSheetItem(item)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="v2-template-actions">
+                  {(view.bottomSheet.actions || []).map((action) => {
+                    const handler = action.key === "save-current-template"
+                      ? runtimeActions.saveCurrentFormationTemplate
+                      : action.key === "apply-template"
+                        ? runtimeActions.applySelectedTemplateToCurrentFormation
+                        : runtimeActions.addFormationFromSelectedTemplate;
+                    return (
+                      <button
+                        key={action.key}
+                        type="button"
+                        disabled={Boolean(action.disabled)}
+                        onClick={() => handler?.()}
+                      >
+                        {action.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {view.bottomSheet.key !== "formation-details" && view.bottomSheet.key !== "formation-template" && (
+              <div className="v2-bottom-sheet-list">
               {view.bottomSheet.emptyState && (
                 <div className="v2-bottom-sheet-empty" data-v2-empty-formations>
                   <strong>{view.bottomSheet.emptyState.label}</strong>
@@ -1529,7 +1595,8 @@ function V2VisualEditor({ model, actions = {} }) {
                   </div>
                 );
               })}
-            </div>
+              </div>
+            )}
           </section>
         )}
 

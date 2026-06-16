@@ -3618,6 +3618,42 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator("[data-v2-segment-kind='hold']")).toHaveCount(1);
   });
 
+  test("V2 formation details edits name and memo immediately", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "이름/메모" }).click();
+
+    const sheet = root.locator('[data-v2-bottom-sheet="formation-details"]');
+    await sheet.getByLabel("이름").fill("Chorus Updated");
+    await sheet.getByLabel("메모").fill("Check spacing");
+    await expect.poll(() => storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond")?.name)).toBe("Chorus Updated");
+    await expect.poll(() => storedProject(page).then((project) => project.sections.find((section) => section.id === "diamond")?.notes)).toBe("Check spacing");
+  });
+
+  test("V2 template sheet applies and adds template formations", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "템플릿" }).click();
+    const sheet = root.locator('[data-v2-bottom-sheet="formation-template"]');
+    await sheet.getByRole("button", { name: "V" }).click();
+    await sheet.getByRole("button", { name: "현재 대형에 적용" }).click();
+    await expect.poll(() => storedProject(page).then((project) => {
+      const section = project.sections.find((item) => item.id === "diamond");
+      return new Set(Object.values(section?.positions || {}).map((position) => Number(position.x).toFixed(2))).size;
+    })).toBeGreaterThan(1);
+    const beforeCount = await storedProject(page).then((project) => project.sections.length);
+    await sheet.getByRole("button", { name: "새 대형으로 추가" }).click();
+    await expect.poll(() => storedProject(page).then((project) => project.sections.length)).toBe(beforeCount + 1);
+  });
+
   test("does not render edit controls for readonly root V2 share links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {

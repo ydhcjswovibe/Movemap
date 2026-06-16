@@ -3149,6 +3149,16 @@ function App() {
     clearQuietStatus();
   }
 
+  function updateSelectedFormationMetadataField(field, value) {
+    if (readonly || !selectedSection || !["name", "notes"].includes(field)) return;
+    updateSection(selectedSection.id, { [field]: value }, { history: false });
+  }
+
+  function finishSelectedFormationMetadataEdit(field, value) {
+    if (readonly || !selectedSection || !["name", "notes"].includes(field)) return;
+    updateSection(selectedSection.id, { [field]: value });
+  }
+
   function saveCurrentPersonalTemplate() {
     if (!selectedSection || !plan) return;
     const template = createPersonalTemplateFromSection(selectedSection, plan);
@@ -3249,6 +3259,17 @@ function App() {
     clearQuietStatus();
   }
 
+  function applySelectedTemplateToCurrentFormation() {
+    if (readonly || !selectedSection || !selectedTemplatePreview) return;
+    const nextSection = applyTemplatePositionsToSection(selectedSection, { kind: "template", ...selectedTemplatePreview });
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.map((section) => section.id === selectedSection.id ? nextSection : section)
+    }));
+    setFormationPreview(null);
+    clearQuietStatus();
+  }
+
   function createSectionFromFormationPreview() {
     if (!formationPreview || !plan) return;
     const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
@@ -3271,6 +3292,42 @@ function App() {
     const section = formationPreview.kind === "proposal"
       ? acceptFormationProposal(baseSection, formationPreview.proposal, plan.performers, { requireAllPerformers: true }).section
       : applyTemplatePositionsToSection(baseSection, formationPreview);
+    const result = applyFormationTimelineEdit({
+      sections: sortedSections,
+      action: "add-after",
+      time: target.time,
+      section
+    });
+    updatePlan((current) => ({
+      ...current,
+      sections: result.sections
+    }));
+    setSelectedSectionId(section.id);
+    setFormationPreview(null);
+    clearQuietStatus();
+  }
+
+  function addFormationFromSelectedTemplate() {
+    if (readonly || !selectedTemplatePreview || !plan) return;
+    const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
+    const target = resolveFormationAddTarget(sortedSections, captureTime);
+    if (target.action === "select") {
+      setSelectedSectionId(target.section.id);
+      jumpTo(target.section);
+      clearQuietStatus();
+      return;
+    }
+    const preview = { kind: "template", ...selectedTemplatePreview };
+    const baseSection = {
+      id: uid("sec"),
+      name: `${preview.label} 대형`,
+      notes: "템플릿에서 명시적으로 적용한 대형입니다.",
+      moveMode: "smooth",
+      positions: {},
+      frontFocus: [],
+      partnerSetId: partnerSetIdForAddedSection(target.previous)
+    };
+    const section = applyTemplatePositionsToSection(baseSection, preview);
     const result = applyFormationTimelineEdit({
       sections: sortedSections,
       action: "add-after",
@@ -5329,6 +5386,10 @@ function App() {
     exportJson,
     exportPng,
     formationListMode: v2FormationListMode,
+    formationTemplates: [
+      ...FORMATION_TEMPLATES,
+      ...personalTemplates.map((template) => ({ id: `personal:${template.id}`, label: template.label }))
+    ],
     handleMobileAction,
     isShareOperationPending,
     mobileContextSelection,
@@ -5349,9 +5410,11 @@ function App() {
     redoPlan,
     selectionMode: mobileContextSelection,
     selectPerformer,
+    selectTemplate: setSelectedTemplateId,
     selectedFormationIds: v2SelectedFormationIds,
     selectedSection,
     selectedSectionId: mobileContextSelection === "formation" ? selectedSectionId : "",
+    selectedTemplateId,
     setShareLinkEnabled,
     setV2ActiveTab,
     shareProject,
@@ -5382,6 +5445,11 @@ function App() {
     toggleFormationMultiSelect: toggleV2FormationMultiSelect,
     selectAllFormations: selectAllV2Formations,
     deleteSelectedFormations: deleteV2SelectedFormations,
+    updateSelectedFormationMetadataField,
+    finishSelectedFormationMetadataEdit,
+    saveCurrentFormationTemplate: saveCurrentPersonalTemplate,
+    applySelectedTemplateToCurrentFormation,
+    addFormationFromSelectedTemplate,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
     toggleStageReferences: () => setShowStageReferences((value) => !value),

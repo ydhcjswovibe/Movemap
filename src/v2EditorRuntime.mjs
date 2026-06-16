@@ -485,13 +485,14 @@ export function createV2EditorRuntime(input = {}) {
   }
   const bottomRailMode = actionBarState;
   const bottomRail = actionBar;
-  const shouldRenderBottomSheet = Boolean(activeBottomSheet && (actionBarState === "default" || activeBottomSheet === "formation-list"));
+  const formationSheetKeys = new Set(["formation-list", "formation-details", "formation-template"]);
+  const shouldRenderBottomSheet = Boolean(activeBottomSheet && (actionBarState === "default" || formationSheetKeys.has(activeBottomSheet)));
   const selectedFormationForSheet = hasFormationSelection ? selectedSection : null;
   const selectedFormationIndex = sortedSections.findIndex((section) => section.id === selectedSectionId);
   const safeSelectedFormationIndex = Math.max(0, selectedFormationIndex);
   const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
-    title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
+    title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "formation-details" ? "이름/메모" : activeBottomSheet === "formation-template" ? "템플릿" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
     ...(activeBottomSheet === "formation-list" ? {
       headerLabel: formationListMode === "multi"
         ? `${selectedFormationIds.length}개 선택됨`
@@ -516,6 +517,26 @@ export function createV2EditorRuntime(input = {}) {
         label: "대형 없음",
         action: { key: "add-formation", label: "대형 추가", disabled: readonly }
       }
+    } : activeBottomSheet === "formation-details" ? {
+      headerLabel: selectedFormationForSheet ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedFormationForSheet)}` : "대형 없음",
+      fields: {
+        name: { label: "이름", value: selectedFormationForSheet?.name || "", disabled: readonly || !selectedFormationForSheet },
+        notes: { label: "메모", value: selectedFormationForSheet?.notes || "", disabled: readonly || !selectedFormationForSheet }
+      },
+      timeRangeLabel: selectedFormationForSheet ? formationRangeLabel(selectedFormationForSheet) : "",
+      headerActions: [
+        { key: "close-sheet", icon: "close", label: "닫기" }
+      ]
+    } : activeBottomSheet === "formation-template" ? {
+      headerLabel: selectedFormationForSheet ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedFormationForSheet)}` : "대형 없음",
+      actions: [
+        { key: "save-current-template", label: "현재 대형 저장", disabled: readonly || !selectedFormationForSheet },
+        { key: "apply-template", label: "현재 대형에 적용", disabled: readonly || !selectedFormationForSheet },
+        { key: "add-template-formation", label: "새 대형으로 추가", disabled: readonly || !selectedFormationForSheet }
+      ],
+      headerActions: [
+        { key: "close-sheet", icon: "close", label: "닫기" }
+      ]
     } : {}),
     items: activeBottomSheet === "formation-list"
       ? sortedSections.map((section, index) => ({
@@ -530,6 +551,14 @@ export function createV2EditorRuntime(input = {}) {
           checked: selectedFormationIds.includes(section.id),
           action: formationListMode === "multi" ? "toggle-formation-selection" : "select-formation"
         }))
+      : activeBottomSheet === "formation-template"
+        ? normalizeArray(input.formationTemplates).map((template) => ({
+            key: `formation-template-${template.id}`,
+            kind: "formation-template",
+            templateId: template.id,
+            label: template.label || template.name || template.id,
+            active: template.id === input.selectedTemplateId
+          }))
       : activeBottomSheet === "cast-list"
         ? cast.performers.map((performer) => ({
             key: `cast-${performer.id}`,
@@ -600,6 +629,12 @@ export function createV2EditorRuntime(input = {}) {
     toggleFormationMultiSelect: input.toggleFormationMultiSelect,
     selectAllFormations: input.selectAllFormations,
     deleteSelectedFormations: (ids = selectedFormationIds) => input.deleteSelectedFormations?.(ids),
+    updateSelectedFormationMetadataField: input.updateSelectedFormationMetadataField,
+    finishSelectedFormationMetadataEdit: input.finishSelectedFormationMetadataEdit,
+    saveCurrentFormationTemplate: input.saveCurrentFormationTemplate,
+    applySelectedTemplateToCurrentFormation: input.applySelectedTemplateToCurrentFormation,
+    addFormationFromSelectedTemplate: input.addFormationFromSelectedTemplate,
+    selectTemplate: input.selectTemplate,
     updateFrontCautionZone: input.updateFrontCautionZone,
     updateSectionTiming: input.updateSectionTiming,
     undo: input.undoPlan

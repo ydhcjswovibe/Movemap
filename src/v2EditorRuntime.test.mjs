@@ -232,6 +232,40 @@ test("V2 formation list supports multi-select and empty formation state", () => 
   assert.equal(empty.bottomSheet.emptyState.action.label, "대형 추가");
 });
 
+test("V2 runtime exposes formation details and template sheets", () => {
+  const runtime = createV2EditorRuntime({
+    activeBottomSheet: "formation-details",
+    mobileContextSelection: "formation",
+    selectedSectionId: "f2",
+    selectedSection: { id: "f2", name: "Chorus", notes: "Hold center", time: 16, start: 12, end: 16, moveDuration: 4 },
+    sortedSections: [{ id: "f2", name: "Chorus", notes: "Hold center", time: 16, start: 12, end: 16, moveDuration: 4 }],
+    readonly: false
+  });
+
+  assert.equal(runtime.bottomSheet.key, "formation-details");
+  assert.equal(runtime.bottomSheet.fields.name.value, "Chorus");
+  assert.equal(runtime.bottomSheet.fields.notes.value, "Hold center");
+  assert.equal(runtime.bottomSheet.timeRangeLabel, "12.0s ~ 16.0s");
+
+  const templateRuntime = createV2EditorRuntime({
+    activeBottomSheet: "formation-template",
+    mobileContextSelection: "formation",
+    selectedSectionId: "f2",
+    selectedSection: { id: "f2", name: "Chorus" },
+    sortedSections: [{ id: "f2", name: "Chorus" }],
+    formationTemplates: [{ id: "v", label: "V" }],
+    readonly: false
+  });
+
+  assert.equal(templateRuntime.bottomSheet.key, "formation-template");
+  assert.equal(templateRuntime.bottomSheet.items[0].label, "V");
+  assert.deepEqual(templateRuntime.bottomSheet.actions.map((action) => action.key), [
+    "save-current-template",
+    "apply-template",
+    "add-template-formation"
+  ]);
+});
+
 test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {
   const onFormationPointerDown = () => {};
   const onV2TimelineHandlePointerDown = () => {};
