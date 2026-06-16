@@ -1520,6 +1520,20 @@
   font-weight: 850;
 }
 
+.v2-bottom-sheet-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.v2-bottom-sheet-header-actions::-webkit-scrollbar {
+  display: none;
+}
+
 .v2-bottom-sheet-list {
   min-height: 0;
   overflow-y: auto;
@@ -1562,6 +1576,46 @@
 
 .v2-bottom-sheet-list button:disabled {
   opacity: 0.45;
+}
+
+.v2-bottom-sheet-list .v2-formation-list-row {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 38px;
+}
+
+.v2-formation-row-sequence,
+.v2-formation-row-name,
+.v2-formation-row-time {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-formation-row-sequence {
+  color: #8fb8ff;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.v2-formation-row-name {
+  color: #f4f7fb;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.v2-formation-row-time {
+  color: #93a0b3;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.v2-formation-list-row.is-current .v2-formation-row-sequence::after {
+  content: " now";
+  color: #24d37c;
+  font-size: 8px;
+  font-weight: 900;
 }
 
 .v2-bottom-sheet-list svg {

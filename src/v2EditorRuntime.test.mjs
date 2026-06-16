@@ -156,8 +156,8 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
   assert.equal(openRuntime.bottomRail.find((action) => action.key === "formation-list").active, true);
   assert.equal(openRuntime.bottomRail.find((action) => action.key === "stage-settings").active, false);
   assert.equal(openRuntime.bottomSheet.key, "formation-list");
-  assert.deepEqual(openRuntime.bottomSheet.items.map((item) => item.key), ["formation-s1", "formation-s2", "add-formation"]);
-  assert.equal(openRuntime.bottomSheet.items.find((item) => item.key === "formation-s2").active, true);
+  assert.deepEqual(openRuntime.bottomSheet.items.map((item) => item.key), ["formation-s1", "formation-s2"]);
+  assert.equal(openRuntime.bottomSheet.items.find((item) => item.key === "formation-s2").current, true);
 
   const closedRuntime = createV2EditorRuntime({
     activeTab: "Cast",
@@ -175,6 +175,36 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
   });
   assert.equal(selectedRuntime.bottomRailMode, "performer");
   assert.equal(selectedRuntime.bottomSheet, null);
+});
+
+test("V2 formation list sheet exposes fixed row labels and selected header actions", () => {
+  const runtime = createV2EditorRuntime({
+    activeBottomSheet: "formation-list",
+    currentSectionId: "f1",
+    mobileContextSelection: "formation",
+    selectedSectionId: "f2",
+    selectedSection: { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 },
+    sortedSections: [
+      { id: "f1", name: "Intro", time: 8, start: 4, end: 8, moveDuration: 4 },
+      { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 }
+    ],
+    readonly: false
+  });
+
+  assert.equal(runtime.bottomSheet.key, "formation-list");
+  assert.equal(runtime.bottomSheet.title, "대형 목록");
+  assert.equal(runtime.bottomSheet.headerLabel, "F2 Chorus");
+  assert.deepEqual(runtime.bottomSheet.headerActions.map((action) => action.key), [
+    "delete-formation",
+    "duplicate-formation",
+    "formation-template",
+    "formation-details",
+    "close-sheet"
+  ]);
+  assert.deepEqual(runtime.bottomSheet.items.map((item) => [item.sequenceLabel, item.label, item.timeRangeLabel]), [
+    ["F1", "Intro", "4.0s ~ 8.0s"],
+    ["F2", "Chorus", "12.0s ~ 16.0s"]
+  ]);
 });
 
 test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {

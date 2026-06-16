@@ -630,11 +630,19 @@ function V2VisualEditor({ model, actions = {} }) {
     }
     runtimeActions.mobileAction?.(action.key);
   };
+  const runBottomSheetHeaderAction = (action) => {
+    if (!action || action.disabled) return;
+    if (action.key === "close-sheet") {
+      runtimeActions.toggleBottomSheet?.(view.bottomSheet.key);
+      return;
+    }
+    runBottomAction(action);
+  };
   const runBottomSheetItem = (item) => {
     if (!item || item.disabled) return;
     if (item.action === "select-formation") {
       const section = sectionById.get(item.sectionId);
-      if (section) runtimeActions.selectFormation?.(section, { force: true });
+      if (section) runtimeActions.selectFormation?.(section, { force: true, keepSheetOpen: true });
       return;
     }
     if (item.action === "select-performer") {
@@ -1413,17 +1421,38 @@ function V2VisualEditor({ model, actions = {} }) {
             aria-label={`${view.bottomSheet.title} 작업 시트`}
           >
             <div className="v2-bottom-sheet-header">
-              <strong>{view.bottomSheet.title}</strong>
-              <button
-                type="button"
-                aria-label="닫기"
-                onClick={() => runtimeActions.toggleBottomSheet?.(view.bottomSheet.key)}
-              >
-                닫기
-              </button>
+              <strong>{view.bottomSheet.headerLabel || view.bottomSheet.title}</strong>
+              <div className="v2-bottom-sheet-header-actions">
+                {(view.bottomSheet.headerActions || [{ key: "close-sheet", label: "닫기" }]).map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    disabled={Boolean(action.disabled)}
+                    onClick={() => runBottomSheetHeaderAction(action)}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="v2-bottom-sheet-list">
               {(view.bottomSheet.items || []).map((item) => {
+                if (item.kind === "formation-row") {
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`v2-formation-list-row ${item.active ? "is-active" : ""} ${item.current ? "is-current" : ""}`}
+                      data-v2-formation-list-row={item.sectionId}
+                      data-v2-bottom-sheet-item={item.key}
+                      onClick={() => runBottomSheetItem(item)}
+                    >
+                      <span className="v2-formation-row-sequence">{item.sequenceLabel}</span>
+                      <span className="v2-formation-row-name">{item.label}</span>
+                      <span className="v2-formation-row-time">{item.timeRangeLabel}</span>
+                    </button>
+                  );
+                }
                 const isButton = item.kind !== "info";
                 const content = (
                   <>

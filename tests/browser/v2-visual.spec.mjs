@@ -3394,7 +3394,7 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveClass(/is-active/);
     await expect(root.locator('[data-v2-tab-surface="Timeline"]')).toHaveCount(0);
     await expect(root.locator("[data-v2-bottom-sheet]")).toHaveAttribute("data-v2-bottom-sheet", "formation-list");
-    await expect(root.locator('[data-v2-bottom-sheet-item="add-formation"]')).toBeVisible();
+    await expect(root.locator('[data-v2-formation-list-row="diamond"]')).toContainText("F2");
     await rail.getByRole("button", { name: "사람 목록" }).click();
     await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveClass(/is-active/);
     await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
@@ -3541,8 +3541,9 @@ test.describe("connected root V2 editor route", () => {
     await rail.getByRole("button", { name: "대형 목록" }).click();
     await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "formation-list");
     await sheet.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
-    await expect(sheet).toHaveCount(0);
+    await expect(sheet).toBeVisible();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(root.locator('[data-v2-formation-block="diamond"][aria-pressed="true"]').first()).toBeVisible();
     await root.locator('[data-v2-performer-token="a1"]').click();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
     await rail.getByRole("button", { name: "해제" }).click();
@@ -3571,6 +3572,7 @@ test.describe("connected root V2 editor route", () => {
 
     await rail.getByRole("button", { name: "대형 목록" }).click();
     await root.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
+    await expect(root.locator('[data-v2-bottom-sheet="formation-list"]')).toBeVisible();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
     await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "대형 추가" })).toBeEnabled();

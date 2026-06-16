@@ -185,6 +185,15 @@ function sectionDisplayName(section) {
   return String(section?.name || section?.label || section?.id || "").trim() || "Formation";
 }
 
+function formationSequenceLabel(index) {
+  return `F${index + 1}`;
+}
+
+function formationRangeLabel(section) {
+  const timing = formationTimingFor(section);
+  return `${formatSeconds(timing.start)} ~ ${formatSeconds(timing.end)}`;
+}
+
 function stageSheetToggleItem(key, label, checked, disabled = false) {
   return {
     key,
@@ -474,27 +483,37 @@ export function createV2EditorRuntime(input = {}) {
   }
   const bottomRailMode = actionBarState;
   const bottomRail = actionBar;
-  const bottomSheet = actionBarState === "default" && activeBottomSheet ? {
+  const shouldRenderBottomSheet = Boolean(activeBottomSheet && (actionBarState === "default" || activeBottomSheet === "formation-list"));
+  const selectedFormationIndex = sortedSections.findIndex((section) => section.id === selectedSectionId);
+  const safeSelectedFormationIndex = Math.max(0, selectedFormationIndex);
+  const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
     title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
+    ...(activeBottomSheet === "formation-list" ? {
+      headerLabel: selectedSection ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedSection)}` : "대형 목록",
+      headerActions: selectedSection ? [
+        { key: "delete-formation", icon: "close", label: "삭제", danger: true, disabled: readonly },
+        { key: "duplicate-formation", icon: "add", label: "복제", disabled: readonly },
+        { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", disabled: readonly },
+        { key: "formation-details", icon: "edit", label: "이름", sheet: "formation-details", disabled: readonly },
+        { key: "close-sheet", icon: "close", label: "닫기" }
+      ] : [
+        { key: "multi-select", icon: "select", label: "다중선택", disabled: readonly },
+        { key: "close-sheet", icon: "close", label: "닫기" }
+      ]
+    } : {}),
     items: activeBottomSheet === "formation-list"
-      ? [
-          ...sortedSections.map((section) => {
-            const timing = formationTimingFor(section);
-            const isCurrent = section.id === currentSectionId;
-            return {
-              key: `formation-${section.id}`,
-              kind: "formation",
-              label: sectionDisplayName(section),
-              metaLabel: `${formatSeconds(timing.start)} - ${formatSeconds(timing.end)}`,
-              stateLabel: isCurrent ? "현재" : "",
-              sectionId: section.id,
-              active: isCurrent,
-              action: "select-formation"
-            };
-          }),
-          { key: "add-formation", kind: "command", icon: "add", label: "대형 추가", disabled: !capabilities.canAddFormation, action: "add-formation" }
-        ]
+      ? sortedSections.map((section, index) => ({
+          key: `formation-${section.id}`,
+          kind: "formation-row",
+          sectionId: section.id,
+          sequenceLabel: formationSequenceLabel(index),
+          label: sectionDisplayName(section),
+          timeRangeLabel: formationRangeLabel(section),
+          active: section.id === selectedSectionId,
+          current: section.id === currentSectionId,
+          action: "select-formation"
+        }))
       : activeBottomSheet === "cast-list"
         ? cast.performers.map((performer) => ({
             key: `cast-${performer.id}`,

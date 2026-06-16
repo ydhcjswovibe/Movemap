@@ -5146,7 +5146,7 @@ function App() {
     setSelectedPairKey("");
     setMobileContextSelection("formation");
     setStitchFormationContext(true);
-    setActiveV2BottomSheet(null);
+    if (!options.keepSheetOpen) setActiveV2BottomSheet(null);
   }
 
   function toggleV2BottomSheet(sheetKey, tabKey) {
