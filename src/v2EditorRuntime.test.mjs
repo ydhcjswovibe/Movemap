@@ -50,7 +50,7 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
   assert.equal(runtime.bottomRailMode, "performer");
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "cast", "clear-selection"]);
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "cast-list", "clear-selection"]);
   assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["p1", true]]);
   assert.equal(runtime.cast.canClearSelection, true);
   assert.equal(runtime.cast.canOpenRoleActions, true);
@@ -80,8 +80,8 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   assert.equal(readonlyRuntime.capabilities.canUndo, false);
   assert.equal(readonlyRuntime.capabilities.canRedo, false);
   assert.equal(readonlyRuntime.bottomRailMode, "default");
-  assert.deepEqual(readonlyRuntime.bottomRail.map((action) => action.key), ["formations", "cast", "stage"]);
-  assert.equal(readonlyRuntime.bottomRail.find((action) => action.key === "formations").disabled, undefined);
+  assert.deepEqual(readonlyRuntime.bottomRail.map((action) => action.key), ["add-formation", "formation-list", "cast-add", "cast-list", "stage-settings", "music"]);
+  assert.equal(readonlyRuntime.bottomRail.find((action) => action.key === "add-formation").disabled, true);
   assert.equal(readonlyRuntime.cast.canOpenRoleActions, false);
 
   const emptyRuntime = createV2EditorRuntime({
@@ -93,8 +93,49 @@ test("V2 capabilities reflect readonly and empty selection states", () => {
   });
   assert.equal(emptyRuntime.capabilities.canDuplicate, false);
   assert.equal(emptyRuntime.capabilities.canDelete, false);
-  assert.deepEqual(emptyRuntime.bottomRail.map((action) => action.key), ["formations", "cast", "stage"]);
-  assert.equal(emptyRuntime.bottomRail[1].active, true);
+  assert.deepEqual(emptyRuntime.bottomRail.map((action) => action.key), ["add-formation", "formation-list", "cast-add", "cast-list", "stage-settings", "music"]);
+  assert.equal(emptyRuntime.bottomRail.find((action) => action.key === "cast-list").active, false);
+});
+
+test("V2 runtime exposes action bar states while preserving bottom rail aliases", () => {
+  const defaultRuntime = createV2EditorRuntime({
+    activeTab: "Stage",
+    sortedSections: [{ id: "intro", name: "Intro", time: 4, end: 4, moveDuration: 4 }],
+    performers: [{ id: "p1", label: "A1", name: "A1" }],
+    readonly: false
+  });
+
+  assert.equal(defaultRuntime.actionBarState, "default");
+  assert.deepEqual(defaultRuntime.actionBar.map((action) => action.label), [
+    "대형 추가",
+    "대형 목록",
+    "사람 추가",
+    "사람 목록",
+    "무대 설정",
+    "음악"
+  ]);
+  assert.deepEqual(defaultRuntime.bottomRail.map((action) => action.key), defaultRuntime.actionBar.map((action) => action.key));
+  assert.equal(defaultRuntime.bottomRailMode, "default");
+
+  const selectedRuntime = createV2EditorRuntime({
+    mobileContextSelection: "formation",
+    selectedSectionId: "intro",
+    selectedSection: { id: "intro", name: "Intro", time: 4, end: 4, moveDuration: 4 },
+    sortedSections: [{ id: "intro", name: "Intro", time: 4, end: 4, moveDuration: 4 }],
+    readonly: false
+  });
+
+  assert.equal(selectedRuntime.actionBarState, "formation");
+  assert.deepEqual(selectedRuntime.actionBar.map((action) => action.label), [
+    "삭제",
+    "복제",
+    "템플릿",
+    "대형 추가",
+    "대형 목록",
+    "이름/메모"
+  ]);
+  assert.equal(selectedRuntime.actionBar.some((action) => action.label === "해제"), false);
+  assert.equal(selectedRuntime.bottomRailMode, "formation");
 });
 
 test("V2 default bottom sheet controls rail active state and closes outside default rail mode", () => {
@@ -112,9 +153,9 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
   });
 
   assert.equal(openRuntime.bottomRailMode, "default");
-  assert.equal(openRuntime.bottomRail.find((action) => action.key === "formations").active, true);
-  assert.equal(openRuntime.bottomRail.find((action) => action.key === "stage").active, false);
-  assert.equal(openRuntime.bottomSheet.key, "formations");
+  assert.equal(openRuntime.bottomRail.find((action) => action.key === "formation-list").active, true);
+  assert.equal(openRuntime.bottomRail.find((action) => action.key === "stage-settings").active, false);
+  assert.equal(openRuntime.bottomSheet.key, "formation-list");
   assert.deepEqual(openRuntime.bottomSheet.items.map((item) => item.key), ["formation-s1", "formation-s2", "add-formation"]);
   assert.equal(openRuntime.bottomSheet.items.find((item) => item.key === "formation-s2").active, true);
 
@@ -123,7 +164,7 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
     sortedSections: [{ id: "s1" }]
   });
   assert.equal(closedRuntime.bottomSheet, null);
-  assert.equal(closedRuntime.bottomRail.find((action) => action.key === "cast").active, true);
+  assert.equal(closedRuntime.bottomRail.find((action) => action.key === "cast-list").active, false);
 
   const selectedRuntime = createV2EditorRuntime({
     activeBottomSheet: "stage",
@@ -185,7 +226,7 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
   });
 
   assert.equal(runtime.bottomRailMode, "formation");
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["formation-list", "add-formation", "duplicate-formation", "delete-formation", "clear-selection"]);
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["delete-formation", "duplicate-formation", "formation-template", "add-formation", "formation-list", "formation-details"]);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").disabled, false);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").scopeLabel, "Current view");
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "사용 가능");

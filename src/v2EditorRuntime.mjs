@@ -196,6 +196,46 @@ function stageSheetToggleItem(key, label, checked, disabled = false) {
   };
 }
 
+const V2_ACTION_SHEET_KEYS = new Set([
+  "formation-list",
+  "formation-details",
+  "formation-template",
+  "cast-list",
+  "cast-add",
+  "stage-settings",
+  "music"
+]);
+
+function normalizedActionSheetKey(value) {
+  if (V2_ACTION_SHEET_KEYS.has(value)) return value;
+  if (value === "formations") return "formation-list";
+  if (value === "cast") return "cast-list";
+  if (value === "stage") return "stage-settings";
+  return null;
+}
+
+function defaultActionBar({ capabilities, activeBottomSheet }) {
+  return [
+    { key: "add-formation", icon: "add", label: "대형 추가", action: "add-formation", disabled: !capabilities.canAddFormation },
+    { key: "formation-list", icon: "layer", label: "대형 목록", sheet: "formation-list", active: activeBottomSheet === "formation-list" },
+    { key: "cast-add", icon: "add", label: "사람 추가", sheet: "cast-add", active: activeBottomSheet === "cast-add", disabled: false },
+    { key: "cast-list", icon: "users", label: "사람 목록", sheet: "cast-list", active: activeBottomSheet === "cast-list" },
+    { key: "stage-settings", icon: "grid", label: "무대 설정", sheet: "stage-settings", active: activeBottomSheet === "stage-settings" },
+    { key: "music", icon: "music", label: "음악", sheet: "music", active: activeBottomSheet === "music" }
+  ];
+}
+
+function formationActionBar({ capabilities, activeBottomSheet }) {
+  return [
+    { key: "delete-formation", icon: "close", label: "삭제", action: "delete-formation", danger: true, disabled: !capabilities.canDelete },
+    { key: "duplicate-formation", icon: "add", label: "복제", action: "duplicate-formation", disabled: !capabilities.canDuplicate },
+    { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", active: activeBottomSheet === "formation-template" },
+    { key: "add-formation", icon: "add", label: "대형 추가", action: "add-formation", disabled: !capabilities.canAddFormation },
+    { key: "formation-list", icon: "layer", label: "대형 목록", sheet: "formation-list", active: activeBottomSheet === "formation-list" },
+    { key: "formation-details", icon: "edit", label: "이름/메모", sheet: "formation-details", active: activeBottomSheet === "formation-details" }
+  ];
+}
+
 export function createV2EditorRuntime(input = {}) {
   const selectedSectionId = selectedSectionIdFor(input);
   const selectedSection = selectedSectionFor(input, selectedSectionId);
@@ -210,9 +250,7 @@ export function createV2EditorRuntime(input = {}) {
   const canDuplicate = !readonly && (hasPerformerSelection || hasFormationSelection);
   const canDelete = !readonly && (hasPerformerSelection || Boolean(hasFormationSelection && sortedSections.length > 1));
   const activeTab = activeTabFor(input);
-  const activeBottomSheet = ["formations", "cast", "stage"].includes(input.activeBottomSheet || input.activeV2BottomSheet)
-    ? (input.activeBottomSheet || input.activeV2BottomSheet)
-    : null;
+  const activeBottomSheet = normalizedActionSheetKey(input.activeBottomSheet || input.activeV2BottomSheet);
   const currentSectionId = currentSectionIdFor(input);
   const currentSection = normalizeArray(input.sortedSections || input.timeline?.sortedSections).find((section) => section.id === currentSectionId) || null;
   const cautionZone = cautionZoneFor(input, stageDimensions);
@@ -413,15 +451,11 @@ export function createV2EditorRuntime(input = {}) {
     viewLinkEnabled: input.viewLinkEnabled !== false,
     viewLinkState: input.viewLinkState || (input.shareUrl ? "켜짐" : "없음")
   };
-  let bottomRailMode = "default";
-  let bottomRail = [
-    { key: "formations", icon: "layer", label: "대형", mode: "Timeline", sheet: "formations", active: activeBottomSheet ? activeBottomSheet === "formations" : activeTab === "Timeline" },
-    { key: "cast", icon: "users", label: "사람", mode: "Cast", sheet: "cast", active: activeBottomSheet ? activeBottomSheet === "cast" : activeTab === "Cast" },
-    { key: "stage", icon: "grid", label: "무대", mode: "Stage", sheet: "stage", active: activeBottomSheet ? activeBottomSheet === "stage" : activeTab === "Stage" }
-  ];
+  let actionBarState = "default";
+  let actionBar = defaultActionBar({ capabilities, activeBottomSheet });
   if (hasPerformerSelection) {
-    bottomRailMode = "performer";
-    bottomRail = selectedPerformerIds.length > 1
+    actionBarState = "performer";
+    actionBar = selectedPerformerIds.length > 1
       ? [
           { key: "align-x", icon: "grid", label: "세로", disabled: readonly },
           { key: "align-y", icon: "grid", label: "가로", disabled: readonly },
@@ -431,23 +465,19 @@ export function createV2EditorRuntime(input = {}) {
       : [
           { key: "duplicate-performer", icon: "add", label: "복제", disabled: readonly },
           { key: "delete-performer", icon: "close", label: "삭제", danger: true, disabled: readonly },
-          { key: "cast", icon: "users", label: "사람", mode: "Cast", active: activeTab === "Cast", disabled: false },
+          { key: "cast-list", icon: "users", label: "사람 목록", sheet: "cast-list", active: activeBottomSheet === "cast-list", disabled: false },
           { key: "clear-selection", icon: "select", label: "해제" }
         ];
   } else if (hasFormationSelection) {
-    bottomRailMode = "formation";
-    bottomRail = [
-      { key: "formation-list", icon: "layer", label: "목록", mode: "Timeline", active: activeTab === "Timeline", disabled: false },
-      { key: "add-formation", icon: "add", label: "추가", disabled: !capabilities.canAddFormation },
-      { key: "duplicate-formation", icon: "add", label: "복제", disabled: !capabilities.canDuplicate },
-      { key: "delete-formation", icon: "close", label: "삭제", danger: true, disabled: !capabilities.canDelete },
-      { key: "clear-selection", icon: "select", label: "해제" }
-    ];
+    actionBarState = "formation";
+    actionBar = formationActionBar({ capabilities, activeBottomSheet });
   }
-  const bottomSheet = bottomRailMode === "default" && activeBottomSheet ? {
+  const bottomRailMode = actionBarState;
+  const bottomRail = actionBar;
+  const bottomSheet = actionBarState === "default" && activeBottomSheet ? {
     key: activeBottomSheet,
-    title: activeBottomSheet === "formations" ? "대형" : activeBottomSheet === "cast" ? "사람" : "무대",
-    items: activeBottomSheet === "formations"
+    title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
+    items: activeBottomSheet === "formation-list"
       ? [
           ...sortedSections.map((section) => {
             const timing = formationTimingFor(section);
@@ -465,7 +495,7 @@ export function createV2EditorRuntime(input = {}) {
           }),
           { key: "add-formation", kind: "command", icon: "add", label: "대형 추가", disabled: !capabilities.canAddFormation, action: "add-formation" }
         ]
-      : activeBottomSheet === "cast"
+      : activeBottomSheet === "cast-list"
         ? cast.performers.map((performer) => ({
             key: `cast-${performer.id}`,
             kind: "performer",
@@ -476,7 +506,11 @@ export function createV2EditorRuntime(input = {}) {
             active: Boolean(performer.active),
             action: "select-performer"
           }))
-        : [
+        : activeBottomSheet === "cast-add"
+          ? []
+          : activeBottomSheet === "music"
+            ? []
+            : [
             {
               key: "stage-size",
               kind: "info",
@@ -535,6 +569,8 @@ export function createV2EditorRuntime(input = {}) {
     activeTab,
     actions,
     activeBottomSheet,
+    actionBar,
+    actionBarState,
     bottomRail,
     bottomRailMode,
     bottomSheet,

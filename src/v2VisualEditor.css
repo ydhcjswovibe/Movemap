@@ -1457,6 +1457,19 @@
   border-top: 1px solid rgba(255, 255, 255, 0.11);
 }
 
+.v2-action-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.v2-action-bar::-webkit-scrollbar {
+  display: none;
+}
+
 .v2-bottom-sheet {
   position: absolute;
   left: 0;
@@ -1646,6 +1659,11 @@
   color: #cbd5e1;
 }
 
+.v2-action-bar .v2-icon-button {
+  flex: 0 0 64px;
+  min-width: 64px;
+}
+
 .v2-bottom-rail .v2-icon-button + .v2-icon-button {
   border-left: 1px solid rgba(185, 198, 219, 0.16);
 }
@@ -1663,6 +1681,11 @@
   font-weight: 850;
   line-height: 1;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-action-bar .v2-bottom-label {
+  max-width: 58px;
   white-space: nowrap;
 }
 

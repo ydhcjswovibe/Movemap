@@ -228,8 +228,9 @@ function buildDemoViewModel(model) {
     capabilities: model.capabilities || {},
     actions: model.actions || {},
     activeTab: model.activeTab || "Stage",
-    bottomRail: model.bottomRail || [],
-    bottomRailMode: model.bottomRailMode || "default",
+    actionBar: model.actionBar || model.bottomRail || [],
+    bottomRail: model.bottomRail || model.actionBar || [],
+    bottomRailMode: model.actionBarState || model.bottomRailMode || "default",
     bottomSheet: model.bottomSheet || null,
     cast: model.cast || {},
     exportMenu: model.exportMenu || [],
@@ -1460,12 +1461,14 @@ function V2VisualEditor({ model, actions = {} }) {
         )}
 
         <nav
-          className={`v2-bottom-rail v2-bottom-rail-${bottomRailMode}`}
+          className={`v2-bottom-rail v2-action-bar v2-bottom-rail-${bottomRailMode}`}
           data-v2-bottom-rail
+          data-v2-action-bar
+          data-v2-action-bar-state={bottomRailMode}
           data-v2-bottom-rail-mode={bottomRailMode}
-          aria-label={bottomRailMode === "default" ? "편집 카테고리" : "선택 항목 도구"}
+          aria-label={bottomRailMode === "formation" ? "선택 대형 도구" : "편집 작업"}
         >
-          {(view.bottomRail || []).map((action) => (
+          {(view.actionBar || view.bottomRail || []).map((action) => (
             <IconButton
               key={action.key || action.label}
               icon={action.icon}
