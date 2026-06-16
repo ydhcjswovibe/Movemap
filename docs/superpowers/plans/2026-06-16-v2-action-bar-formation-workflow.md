@@ -16,23 +16,6 @@
 - Stage and route contract: `MVP.md`
 - Design source: `docs/superpowers/specs/2026-06-16-v2-action-bar-formation-workflow-design.md`
 
-## Merged Baseline
-
-This plan supersedes and absorbs the earlier uncommitted `docs/superpowers/plans/2026-06-12-v2-bottom-menu-sheet.md` plan.
-
-The carried-forward decisions from that baseline are:
-
-- V2 bottom sheets are non-modal work surfaces, not blocking dialogs.
-- Sheets sit above the fixed bottom control and must not cover the action bar.
-- Existing compatibility selectors stay available: `data-v2-bottom-rail`, `data-v2-bottom-sheet`, and `data-v2-bottom-sheet-item`.
-- The runtime view model is still assembled in `src/v2EditorRuntime.mjs`.
-- `src/App.jsx` still owns open/close/toggle sheet state.
-- `src/V2VisualEditor.jsx` still renders the sheet and delegates actions through runtime actions.
-- `src/v2VisualEditor.css` still owns 390px mobile geometry.
-- `.superpowers/` artifacts stay out of commits.
-
-The 6/12 baseline used the old category keys `formations`, `cast`, and `stage`. This plan keeps backward compatibility for those values through `normalizedActionSheetKey()`, but all new work should use the action-bar sheet keys: `formation-list`, `cast-list`, `stage-settings`, `cast-add`, `music`, `formation-details`, and `formation-template`.
-
 ## Execution Rules
 
 - Execute slices in order.
