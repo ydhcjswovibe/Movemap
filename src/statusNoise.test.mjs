@@ -61,7 +61,6 @@ test("important bottom status messages stay available", () => {
     "편집 링크를 복사했습니다",
     "편집 링크 복사 실패",
     "무대 크기 변경을 막았습니다",
-    "마지막 대형은 삭제할 수 없습니다",
     "올바른 Movemap 프로젝트 파일이 아닙니다"
   ];
 

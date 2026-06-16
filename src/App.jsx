@@ -934,6 +934,8 @@ function App() {
   const [timelineBlockedEdge, setTimelineBlockedEdge] = useState(null);
   const [v2ActiveTab, setV2ActiveTab] = useState("Stage");
   const [activeV2BottomSheet, setActiveV2BottomSheet] = useState(null);
+  const [v2FormationListMode, setV2FormationListMode] = useState("normal");
+  const [v2SelectedFormationIds, setV2SelectedFormationIds] = useState([]);
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
@@ -3315,16 +3317,58 @@ function App() {
 
   function deleteSection() {
     if (!selectedSection) return;
-    const target = deleteSelectionTarget(sortedSections, selectedSection.id);
-    if (target.disabled) {
-      setStatus("마지막 대형은 삭제할 수 없습니다.");
-      return;
-    }
-    const nextSections = sortedSections.filter((section) => section.id !== selectedSection.id);
-    updatePlan((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== selectedSection.id) }));
-    setSelectedSectionId(target.nextSectionId || nextSections[0]?.id || "");
+    deleteSectionsByIds([selectedSection.id]);
+  }
+
+  function deleteSectionsByIds(sectionIds) {
+    if (readonly || !sectionIds.length) return;
+    const ids = new Set(sectionIds);
+    const deletedIndexes = sortedSections
+      .map((section, index) => ids.has(section.id) ? index : -1)
+      .filter((index) => index >= 0);
+    if (!deletedIndexes.length) return;
+    const firstDeletedIndex = Math.min(...deletedIndexes);
+    const nextSections = sortedSections.filter((section) => !ids.has(section.id));
+    const previous = nextSections[Math.max(0, firstDeletedIndex - 1)];
+    const next = previous || nextSections[firstDeletedIndex] || nextSections[0] || null;
+
+    updatePlan((current) => ({
+      ...current,
+      sections: current.sections.filter((section) => !ids.has(section.id))
+    }));
+    setSelectedSectionId(next?.id || "");
+    setSelectedPerformerId("");
     setSelectedPairKey("");
     setSelectedPerformerIds([]);
+    setSelectedMovementKeyframeId("");
+    if (!next) setMobileContextSelection("");
+  }
+
+  function enterV2FormationMultiSelect() {
+    setV2FormationListMode("multi");
+    setV2SelectedFormationIds(selectedSectionId ? [selectedSectionId] : []);
+  }
+
+  function cancelV2FormationMultiSelect() {
+    setV2FormationListMode("normal");
+    setV2SelectedFormationIds([]);
+  }
+
+  function toggleV2FormationMultiSelect(sectionId) {
+    setV2SelectedFormationIds((ids) => ids.includes(sectionId)
+      ? ids.filter((id) => id !== sectionId)
+      : [...ids, sectionId]);
+  }
+
+  function selectAllV2Formations() {
+    setV2SelectedFormationIds(sortedSections.map((section) => section.id));
+  }
+
+  function deleteV2SelectedFormations(sectionIds = v2SelectedFormationIds) {
+    if (!sectionIds.length) return;
+    if (sectionIds.length > 1 && !window.confirm(`선택한 대형 ${sectionIds.length}개를 삭제할까요?`)) return;
+    deleteSectionsByIds(sectionIds);
+    cancelV2FormationMultiSelect();
   }
 
   function duplicateV2Selection() {
@@ -5284,6 +5328,7 @@ function App() {
     exportAllPng,
     exportJson,
     exportPng,
+    formationListMode: v2FormationListMode,
     handleMobileAction,
     isShareOperationPending,
     mobileContextSelection,
@@ -5304,6 +5349,7 @@ function App() {
     redoPlan,
     selectionMode: mobileContextSelection,
     selectPerformer,
+    selectedFormationIds: v2SelectedFormationIds,
     selectedSection,
     selectedSectionId: mobileContextSelection === "formation" ? selectedSectionId : "",
     setShareLinkEnabled,
@@ -5331,6 +5377,11 @@ function App() {
     timelineViewportRef,
     waveformPlayedPercent,
     waveformStatus: renderedWaveformStatus,
+    enterFormationMultiSelect: enterV2FormationMultiSelect,
+    cancelFormationMultiSelect: cancelV2FormationMultiSelect,
+    toggleFormationMultiSelect: toggleV2FormationMultiSelect,
+    selectAllFormations: selectAllV2Formations,
+    deleteSelectedFormations: deleteV2SelectedFormations,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),
     toggleStageReferences: () => setShowStageReferences((value) => !value),
@@ -5912,7 +5963,7 @@ function App() {
                           block.isTick ? "tick" : "",
                           section.id === selectedSection?.id ? "selected" : "",
                           section.id === sortedSections[timeSectionIndex]?.id ? "current" : "",
-                          timelineBlockedEdge?.sectionId === section.id ? `blocked-${timelineBlockedEdge.edge}` : ""
+                          timelineBlockedEdge && timelineBlockedEdge.sectionId === section.id ? `blocked-${timelineBlockedEdge.edge}` : ""
                         ].filter(Boolean).join(" ")}
                         style={{
                           "--formation-left": `${block.leftPx}px`,

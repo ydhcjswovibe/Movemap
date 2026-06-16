@@ -315,7 +315,9 @@ function V2VisualEditor({ model, actions = {} }) {
   const timelineScrollX = Math.max(0, Number(timeline.timelineScrollX ?? timeline.scrollX) || 0);
   const rawPlayheadLeft = Number(timeline.playheadPixel);
   const playheadLeft = Number.isFinite(rawPlayheadLeft) ? rawPlayheadLeft : 0;
-  const visualSegments = (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments)?.length ? (timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments) : demoTimelineSegments;
+  const timelineSegments = timeline.holdMoveSegments?.length ? timeline.holdMoveSegments : timeline.timelineVisualSegments || [];
+  const usesDemoModel = !model?.timeline && !model?.sections && !model?.sortedSections;
+  const visualSegments = timelineSegments.length ? timelineSegments : usesDemoModel ? demoTimelineSegments : [];
   const waveformSamples = timeline.waveformBars?.length ? timeline.waveformBars : demoWaveformSamples;
   const waveformPlayedPercent = clampPercent(Number(timeline.waveformPlayedPercent) || 0);
   const waveformStatus = timeline.waveformStatus || "idle";
@@ -636,6 +638,28 @@ function V2VisualEditor({ model, actions = {} }) {
       runtimeActions.toggleBottomSheet?.(view.bottomSheet.key);
       return;
     }
+    if (action.key === "multi-select") {
+      runtimeActions.enterFormationMultiSelect?.();
+      return;
+    }
+    if (action.key === "select-all-formations") {
+      runtimeActions.selectAllFormations?.();
+      return;
+    }
+    if (action.key === "delete-selected-formations") {
+      const checkedIds = Array.isArray(action.sectionIds)
+        ? action.sectionIds
+        : (view.bottomSheet.items || [])
+            .filter((item) => item.checked)
+            .map((item) => item.sectionId)
+            .filter(Boolean);
+      runtimeActions.deleteSelectedFormations?.(checkedIds);
+      return;
+    }
+    if (action.key === "cancel-multi-select") {
+      runtimeActions.cancelFormationMultiSelect?.();
+      return;
+    }
     runBottomAction(action);
   };
   const runBottomSheetItem = (item) => {
@@ -643,6 +667,10 @@ function V2VisualEditor({ model, actions = {} }) {
     if (item.action === "select-formation") {
       const section = sectionById.get(item.sectionId);
       if (section) runtimeActions.selectFormation?.(section, { force: true, keepSheetOpen: true });
+      return;
+    }
+    if (item.action === "toggle-formation-selection") {
+      runtimeActions.toggleFormationMultiSelect?.(item.sectionId);
       return;
     }
     if (item.action === "select-performer") {
@@ -1139,7 +1167,8 @@ function V2VisualEditor({ model, actions = {} }) {
                     const durationLabel = segmentDurationLabel(segment);
                     const sectionSelected = !isMove && section.id && section.id === selectedSectionId;
                     const sectionCurrent = section.id && section.id === currentSectionId;
-                    const blockedEdge = !isMove && timeline.timelineBlockedEdge?.sectionId === section.id ? timeline.timelineBlockedEdge.edge : "";
+                    const blockedEdgeState = timeline.timelineBlockedEdge;
+                    const blockedEdge = !isMove && blockedEdgeState && blockedEdgeState.sectionId === section.id ? blockedEdgeState.edge : "";
                     return (
                       <button
                         key={`${segment.kind || "hold"}-${segment.fromSectionId || section.id || index}-${segment.toSectionId || section.id || index}-${index}`}
@@ -1436,6 +1465,18 @@ function V2VisualEditor({ model, actions = {} }) {
               </div>
             </div>
             <div className="v2-bottom-sheet-list">
+              {view.bottomSheet.emptyState && (
+                <div className="v2-bottom-sheet-empty" data-v2-empty-formations>
+                  <strong>{view.bottomSheet.emptyState.label}</strong>
+                  <button
+                    type="button"
+                    disabled={Boolean(view.bottomSheet.emptyState.action.disabled)}
+                    onClick={() => runtimeActions.addFormation?.({ forceCreate: true })}
+                  >
+                    {view.bottomSheet.emptyState.action.label}
+                  </button>
+                </div>
+              )}
               {(view.bottomSheet.items || []).map((item) => {
                 if (item.kind === "formation-row") {
                   return (
@@ -1448,6 +1489,9 @@ function V2VisualEditor({ model, actions = {} }) {
                       onClick={() => runBottomSheetItem(item)}
                     >
                       <span className="v2-formation-row-sequence">{item.sequenceLabel}</span>
+                      {typeof item.checked === "boolean" && (
+                        <span className={`v2-formation-row-check ${item.checked ? "is-checked" : ""}`} aria-hidden="true" />
+                      )}
                       <span className="v2-formation-row-name">{item.label}</span>
                       <span className="v2-formation-row-time">{item.timeRangeLabel}</span>
                     </button>

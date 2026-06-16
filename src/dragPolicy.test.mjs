@@ -298,11 +298,14 @@ test("formation changes clear performer and pair selection", () => {
   const playbackSectionSync = appSource.match(/useEffect\(\(\) => \{[\s\S]*?activeSection\?\.id[\s\S]*?\}, \[isPlaying, activeSection\?\.id\]\);/)?.[0] || "";
   const duplicateSection = appSource.match(/function duplicateSection\(\) \{[\s\S]*?function deleteSection/)?.[0] || "";
   const deleteSection = appSource.match(/function deleteSection\(\) \{[\s\S]*?\n  \}/)?.[0] || "";
+  const deleteSectionsByIds = appSource.match(/function deleteSectionsByIds\(sectionIds\) \{[\s\S]*?function enterV2FormationMultiSelect/)?.[0] || "";
 
   assert.match(jumpTo, /clearSelection\(\);/);
   assert.match(playbackSectionSync, /clearSelection\(\);/);
   assert.match(duplicateSection, /copiedPartnerSet/);
   assert.match(duplicateSection, /id: copiedPartnerSetId/);
   assert.match(duplicateSection, /setSelectedPairKey\(""\);/);
-  assert.match(deleteSection, /setSelectedPairKey\(""\);/);
+  assert.match(deleteSection, /deleteSectionsByIds\(\[selectedSection\.id\]\);/);
+  assert.match(deleteSectionsByIds, /setSelectedPairKey\(""\);/);
+  assert.match(deleteSectionsByIds, /setSelectedPerformerId\(""\);/);
 });

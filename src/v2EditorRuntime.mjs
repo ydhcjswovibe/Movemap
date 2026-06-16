@@ -250,6 +250,8 @@ export function createV2EditorRuntime(input = {}) {
   const selectedSection = selectedSectionFor(input, selectedSectionId);
   const selectedPerformerId = input.selectedPerformerId || input.selection?.selectedPerformerId || "";
   const selectedPerformerIds = normalizeArray(input.selectedPerformerIds || input.selection?.selectedPerformerIds);
+  const formationListMode = input.formationListMode === "multi" ? "multi" : "normal";
+  const selectedFormationIds = normalizeArray(input.selectedFormationIds);
   const sortedSections = normalizeArray(input.sortedSections || input.timeline?.sortedSections);
   const readonly = Boolean(input.readonly || input.shell?.readonly);
   const stageDimensions = normalizeStageDimensions(input.stageDimensions || input.stage?.stageDimensions);
@@ -257,7 +259,7 @@ export function createV2EditorRuntime(input = {}) {
   const selectionMode = input.selectionMode || input.mobileContextSelection || input.selection?.mode || "";
   const hasFormationSelection = selectionMode === "formation" && Boolean(selectedSection);
   const canDuplicate = !readonly && (hasPerformerSelection || hasFormationSelection);
-  const canDelete = !readonly && (hasPerformerSelection || Boolean(hasFormationSelection && sortedSections.length > 1));
+  const canDelete = !readonly && (hasPerformerSelection || Boolean(hasFormationSelection));
   const activeTab = activeTabFor(input);
   const activeBottomSheet = normalizedActionSheetKey(input.activeBottomSheet || input.activeV2BottomSheet);
   const currentSectionId = currentSectionIdFor(input);
@@ -484,23 +486,36 @@ export function createV2EditorRuntime(input = {}) {
   const bottomRailMode = actionBarState;
   const bottomRail = actionBar;
   const shouldRenderBottomSheet = Boolean(activeBottomSheet && (actionBarState === "default" || activeBottomSheet === "formation-list"));
+  const selectedFormationForSheet = hasFormationSelection ? selectedSection : null;
   const selectedFormationIndex = sortedSections.findIndex((section) => section.id === selectedSectionId);
   const safeSelectedFormationIndex = Math.max(0, selectedFormationIndex);
   const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
     title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
     ...(activeBottomSheet === "formation-list" ? {
-      headerLabel: selectedSection ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedSection)}` : "대형 목록",
-      headerActions: selectedSection ? [
-        { key: "delete-formation", icon: "close", label: "삭제", danger: true, disabled: readonly },
-        { key: "duplicate-formation", icon: "add", label: "복제", disabled: readonly },
-        { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", disabled: readonly },
-        { key: "formation-details", icon: "edit", label: "이름", sheet: "formation-details", disabled: readonly },
-        { key: "close-sheet", icon: "close", label: "닫기" }
-      ] : [
-        { key: "multi-select", icon: "select", label: "다중선택", disabled: readonly },
-        { key: "close-sheet", icon: "close", label: "닫기" }
-      ]
+      headerLabel: formationListMode === "multi"
+        ? `${selectedFormationIds.length}개 선택됨`
+        : selectedFormationForSheet ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedFormationForSheet)}` : "대형 목록",
+      headerActions: formationListMode === "multi"
+        ? [
+            { key: "select-all-formations", icon: "select", label: "전체선택", disabled: readonly || !sortedSections.length },
+            { key: "delete-selected-formations", icon: "close", label: "삭제", danger: true, sectionIds: selectedFormationIds, disabled: readonly || !selectedFormationIds.length },
+            { key: "cancel-multi-select", icon: "close", label: "취소" }
+          ]
+        : selectedFormationForSheet ? [
+            { key: "delete-formation", icon: "close", label: "삭제", danger: true, disabled: readonly },
+            { key: "duplicate-formation", icon: "add", label: "복제", disabled: readonly },
+            { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", disabled: readonly },
+            { key: "formation-details", icon: "edit", label: "이름", sheet: "formation-details", disabled: readonly },
+            { key: "close-sheet", icon: "close", label: "닫기" }
+          ] : [
+            { key: "multi-select", icon: "select", label: "다중선택", disabled: readonly || !sortedSections.length },
+            { key: "close-sheet", icon: "close", label: "닫기" }
+          ],
+      emptyState: sortedSections.length ? null : {
+        label: "대형 없음",
+        action: { key: "add-formation", label: "대형 추가", disabled: readonly }
+      }
     } : {}),
     items: activeBottomSheet === "formation-list"
       ? sortedSections.map((section, index) => ({
@@ -512,7 +527,8 @@ export function createV2EditorRuntime(input = {}) {
           timeRangeLabel: formationRangeLabel(section),
           active: section.id === selectedSectionId,
           current: section.id === currentSectionId,
-          action: "select-formation"
+          checked: selectedFormationIds.includes(section.id),
+          action: formationListMode === "multi" ? "toggle-formation-selection" : "select-formation"
         }))
       : activeBottomSheet === "cast-list"
         ? cast.performers.map((performer) => ({
@@ -579,6 +595,11 @@ export function createV2EditorRuntime(input = {}) {
     toggleStageReferences: input.toggleStageReferences,
     toggleTransitionPaths: input.toggleTransitionPaths,
     toggleBottomSheet: input.toggleBottomSheet,
+    enterFormationMultiSelect: input.enterFormationMultiSelect,
+    cancelFormationMultiSelect: input.cancelFormationMultiSelect,
+    toggleFormationMultiSelect: input.toggleFormationMultiSelect,
+    selectAllFormations: input.selectAllFormations,
+    deleteSelectedFormations: (ids = selectedFormationIds) => input.deleteSelectedFormations?.(ids),
     updateFrontCautionZone: input.updateFrontCautionZone,
     updateSectionTiming: input.updateSectionTiming,
     undo: input.undoPlan

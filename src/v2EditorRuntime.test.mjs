@@ -207,6 +207,31 @@ test("V2 formation list sheet exposes fixed row labels and selected header actio
   ]);
 });
 
+test("V2 formation list supports multi-select and empty formation state", () => {
+  const multi = createV2EditorRuntime({
+    activeBottomSheet: "formation-list",
+    formationListMode: "multi",
+    selectedFormationIds: ["f1"],
+    sortedSections: [
+      { id: "f1", name: "Intro", time: 8, start: 4, end: 8 },
+      { id: "f2", name: "Chorus", time: 16, start: 12, end: 16 }
+    ]
+  });
+
+  assert.equal(multi.bottomSheet.headerLabel, "1개 선택됨");
+  assert.deepEqual(multi.bottomSheet.headerActions.map((action) => action.key), ["select-all-formations", "delete-selected-formations", "cancel-multi-select"]);
+  assert.equal(multi.bottomSheet.items[0].checked, true);
+
+  const empty = createV2EditorRuntime({
+    activeBottomSheet: "formation-list",
+    sortedSections: [],
+    readonly: false
+  });
+
+  assert.equal(empty.bottomSheet.emptyState.label, "대형 없음");
+  assert.equal(empty.bottomSheet.emptyState.action.label, "대형 추가");
+});
+
 test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {
   const onFormationPointerDown = () => {};
   const onV2TimelineHandlePointerDown = () => {};

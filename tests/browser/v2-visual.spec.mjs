@@ -3593,6 +3593,31 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
   });
 
+  test("V2 formation multi-select can delete all formations and recover from empty state", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 목록" }).click();
+    const sheet = root.locator('[data-v2-bottom-sheet="formation-list"]');
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "다중선택" }).click();
+    await sheet.getByRole("button", { name: "전체선택" }).click();
+    await expect(sheet).toContainText("2개 선택됨");
+    await expect(sheet.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await page.evaluate(() => {
+      window.confirm = () => true;
+    });
+    await sheet.getByRole("button", { name: "삭제" }).click();
+
+    await expect.poll(() => storedProject(page).then((project) => project.sections.length)).toBe(0);
+    await expect(root.locator("[data-v2-empty-formations]")).toBeVisible();
+    await expect(root.locator("[data-v2-segment-kind='hold']")).toHaveCount(0);
+    await root.locator("[data-v2-empty-formations]").getByRole("button", { name: "대형 추가" }).click();
+    await expect(root.locator("[data-v2-segment-kind='hold']")).toHaveCount(1);
+  });
+
   test("does not render edit controls for readonly root V2 share links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {
