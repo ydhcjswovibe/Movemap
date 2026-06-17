@@ -1616,7 +1616,7 @@ function App() {
       setSelectedPairKey("");
       return;
     }
-    if (!sections.some((section) => section.id === selectedSectionId)) {
+    if (selectedSectionId && !sections.some((section) => section.id === selectedSectionId)) {
       setSelectedSectionId(sections[0].id);
     }
     if (selectedPerformerId && !nextPlan.performers?.some((performer) => performer.id === selectedPerformerId)) {
@@ -2113,6 +2113,13 @@ function App() {
     const viewport = timelineViewportRef.current;
     const rect = viewport?.getBoundingClientRect();
     const sourceKind = typeof source === "string" ? source : source?.kind || "surface";
+    const target = event.target;
+    const isInteractiveTarget = Boolean(target?.closest?.(
+      "[data-v2-formation-block], [data-v2-timeline-handle], [data-v2-playhead], .v2-track-add-button, button, a, input, textarea, select"
+    ));
+    if (!isInteractiveTarget && sourceKind !== "playhead" && sourceKind !== "trim-handle") {
+      clearV2SurfaceSelection();
+    }
     timelineGestureRef.current = {
       pointers: new Map([[event.pointerId, { clientX: event.clientX, clientY: event.clientY }]]),
       mode: sourceKind === "playhead" ? "v2-playhead-scrub" : "v2-pending",
@@ -2627,6 +2634,12 @@ function App() {
     setMobileContextSelection("");
     setStitchFormationContext(false);
     setActiveV2BottomSheet(null);
+  }
+
+  function clearV2SurfaceSelection() {
+    setSelectedSectionId("");
+    setSelectedMovementKeyframeId("");
+    clearSelection();
   }
 
   function selectPerformer(performerId) {
@@ -3685,8 +3698,12 @@ function App() {
       return;
     }
     if (event.target?.closest?.(".v2-token, .v2-zoom-rail")) return;
-    if (readonly || !selectedSection || !selectedPerformerId || !stageElement) return;
     if (dragStateRef.current) return;
+    if (!stageElement) return;
+    if (readonly || !selectedSection || !selectedPerformerId) {
+      clearV2SurfaceSelection();
+      return;
+    }
     const pointer = clientPointToV2Stage(stageElement, event, stageDimensions);
     const targetPoint = clampV2DragPointToStage(snapPoint(pointer, snapEnabled && !event.altKey), stageDimensions);
     const editKeyframeId = selectedMovementKeyframe?.id || "";

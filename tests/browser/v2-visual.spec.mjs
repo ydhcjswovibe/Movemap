@@ -3593,6 +3593,34 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
   });
 
+  test("V2 action bar resets when tapping neutral stage and timeline surfaces", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const actionBar = root.locator("[data-v2-action-bar]");
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
+
+    await root.locator("[data-v2-segment-kind='hold']").first().click();
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "formation");
+
+    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
+    expect(stageBox).not.toBeNull();
+    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
+
+    await root.locator("[data-v2-performer-token]").first().click();
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "performer");
+    await expect(root.locator("[data-v2-performer-token][aria-pressed='true']")).toHaveCount(1);
+
+    const timelineBox = await root.locator("[data-v2-timeline]").boundingBox();
+    expect(timelineBox).not.toBeNull();
+    await page.mouse.click(timelineBox.x + timelineBox.width - 18, timelineBox.y + timelineBox.height - 18);
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
+    await expect(root.locator("[data-v2-performer-token][aria-pressed='true']")).toHaveCount(0);
+  });
+
   test("V2 formation multi-select can delete all formations and recover from empty state", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);

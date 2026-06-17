@@ -308,7 +308,7 @@ function V2VisualEditor({ model, actions = {} }) {
     "--v2-token-selected-spread": `${tokenPixelMetrics.selectedRingSpreadPx}px`
   };
   const selectedPerformerIds = new Set(selection.selectedPerformerIds || []);
-  const selectedSectionId = selection.selectedSectionId || selection.selectedSection?.id || "";
+  const selectedSectionId = selection.selectedSectionId || "";
   const currentSectionId = timeline.currentSectionId || "";
   const sectionById = useMemo(() => new Map(sections.map((section) => [section.id, section])), [sections]);
   const timelineContentWidth = Math.max(320, Number(timeline.timelineContentWidth ?? timeline.contentWidth) || 320);
