@@ -508,6 +508,7 @@ export function createV2EditorRuntime(input = {}) {
             { key: "duplicate-formation", icon: "add", label: "복제", disabled: readonly },
             { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", disabled: readonly },
             { key: "formation-details", icon: "edit", label: "이름", sheet: "formation-details", disabled: readonly },
+            { key: "multi-select", icon: "select", label: "다중선택", disabled: readonly || !sortedSections.length },
             { key: "close-sheet", icon: "close", label: "닫기" }
           ] : [
             { key: "multi-select", icon: "select", label: "다중선택", disabled: readonly || !sortedSections.length },

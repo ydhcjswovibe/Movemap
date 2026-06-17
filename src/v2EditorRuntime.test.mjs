@@ -199,12 +199,28 @@ test("V2 formation list sheet exposes fixed row labels and selected header actio
     "duplicate-formation",
     "formation-template",
     "formation-details",
+    "multi-select",
     "close-sheet"
   ]);
+  assert.equal(runtime.bottomSheet.headerActions.find((action) => action.key === "multi-select").disabled, false);
   assert.deepEqual(runtime.bottomSheet.items.map((item) => [item.sequenceLabel, item.label, item.timeRangeLabel]), [
     ["F1", "Intro", "4.0s ~ 8.0s"],
     ["F2", "Chorus", "12.0s ~ 16.0s"]
   ]);
+
+  const readonlyRuntime = createV2EditorRuntime({
+    activeBottomSheet: "formation-list",
+    mobileContextSelection: "formation",
+    selectedSectionId: "f2",
+    selectedSection: { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 },
+    sortedSections: [
+      { id: "f1", name: "Intro", time: 8, start: 4, end: 8, moveDuration: 4 },
+      { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 }
+    ],
+    readonly: true
+  });
+
+  assert.equal(readonlyRuntime.bottomSheet.headerActions.find((action) => action.key === "multi-select").disabled, true);
 });
 
 test("V2 formation list supports multi-select and empty formation state", () => {
