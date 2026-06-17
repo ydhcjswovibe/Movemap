@@ -16,17 +16,28 @@ const performers = [
   { id: "wing" }
 ];
 
+function roster(count) {
+  return Array.from({ length: count }, (_, index) => ({ id: `p${index + 1}` }));
+}
+
 function assertBoundedPositions(positions, stage = DEFAULT_STAGE_DIMENSIONS) {
   for (const position of Object.values(positions)) {
     assert.ok(position.x >= 0 && position.x <= stage.width, `x ${position.x} is bounded`);
     assert.ok(position.y >= 0 && position.y <= stage.height, `y ${position.y} is bounded`);
+    assert.equal(position.x, Math.round(position.x), `x ${position.x} is on a 1m grid`);
+    assert.equal(position.y, Math.round(position.y), `y ${position.y} is on a 1m grid`);
   }
+}
+
+function assertNoDuplicateGridPositions(positions) {
+  const keys = Object.values(positions).map((position) => `${position.x}:${position.y}`);
+  assert.equal(new Set(keys).size, keys.length);
 }
 
 test("exports the supported deterministic template ids", () => {
   assert.deepEqual(
     FORMATION_TEMPLATES.map((template) => template.id),
-    ["line", "two-line", "v", "circle", "diagonal", "block"]
+    ["line", "two-line", "v", "inverted-v", "circle", "diagonal", "block", "pairs"]
   );
 });
 
@@ -37,34 +48,55 @@ test("template previews are deterministic and include stable provenance", () => 
   assert.deepEqual(first, second);
   assert.equal(first.templateId, "v");
   assert.equal(first.label, "V");
+  assert.deepEqual(first.stage, DEFAULT_STAGE_DIMENSIONS);
+  assert.equal(first.performerCount, performers.length);
+  assert.equal(first.gridUnit, 1);
+  assert.equal(first.fitsAll, true);
   assert.deepEqual(Object.keys(first.positions), performers.map((performer) => performer.id));
   assert.deepEqual(first.provenance, {
     kind: "template",
     templateId: "v",
     stage: DEFAULT_STAGE_DIMENSIONS,
-    performerCount: performers.length
+    performerCount: performers.length,
+    gridUnit: 1,
+    fitsAll: true
   });
 });
 
-test("templates adapt to roster counts and keep every point inside the stage", () => {
+test("templates adapt to roster counts with snapped unique stage positions", () => {
   for (const template of FORMATION_TEMPLATES) {
-    const solo = buildFormationTemplatePreview(template.id, performers.slice(0, 1));
-    const group = buildFormationTemplatePreview(template.id, performers);
+    for (const count of [1, 2, 5, 12, 24]) {
+      const currentRoster = roster(count);
+      const preview = buildFormationTemplatePreview(template.id, currentRoster);
 
-    assert.deepEqual(Object.keys(solo.positions), ["lead"]);
-    assert.deepEqual(Object.keys(group.positions), performers.map((performer) => performer.id));
-    assertBoundedPositions(solo.positions);
-    assertBoundedPositions(group.positions);
+      assert.equal(preview.fitsAll, true);
+      assert.deepEqual(Object.keys(preview.positions), currentRoster.map((performer) => performer.id));
+      assertBoundedPositions(preview.positions);
+      assertNoDuplicateGridPositions(preview.positions);
+    }
   }
 });
 
 test("templates scale into custom stage dimensions", () => {
-  const stage = { width: 140, height: 80 };
-  const preview = buildFormationTemplatePreview("circle", performers, stage);
+  for (const stage of [{ width: 20, height: 10 }, { width: 8, height: 6 }]) {
+    for (const template of FORMATION_TEMPLATES) {
+      const preview = buildFormationTemplatePreview(template.id, roster(12), stage);
 
-  assertBoundedPositions(preview.positions, stage);
-  assert.deepEqual(preview.provenance.stage, stage);
-  assert.ok(Object.values(preview.positions).some((position) => position.x > 100));
+      assert.equal(preview.fitsAll, true);
+      assertBoundedPositions(preview.positions, stage);
+      assertNoDuplicateGridPositions(preview.positions);
+      assert.deepEqual(preview.provenance.stage, stage);
+    }
+  }
+});
+
+test("template previews report impossible overflow when the grid cannot fit the roster", () => {
+  const preview = buildFormationTemplatePreview("block", roster(10), { width: 2, height: 2 });
+
+  assert.equal(preview.fitsAll, false);
+  assert.equal(preview.disabledReason, "무대/인원 초과");
+  assert.deepEqual(preview.positions, {});
+  assert.equal(preview.provenance.fitsAll, false);
 });
 
 test("template application patches a section without mutating inputs", () => {

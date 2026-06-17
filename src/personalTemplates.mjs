@@ -70,14 +70,21 @@ export function personalTemplateToPreview(template = {}) {
   return {
     templateId: normalized.id,
     label: normalized.label,
+    stage: normalized.stage,
     positions: normalized.positions,
+    performerCount: normalized.performerIds.length,
+    gridUnit: 1,
+    fitsAll: true,
+    disabledReason: "",
     provenance: {
       kind: "personal-template",
       templateId: normalized.id,
       source: normalized.source,
       createdAt: normalized.createdAt,
       stage: normalized.stage,
-      performerCount: normalized.performerIds.length
+      performerCount: normalized.performerIds.length,
+      gridUnit: 1,
+      fitsAll: true
     }
   };
 }
