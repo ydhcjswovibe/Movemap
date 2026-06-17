@@ -197,6 +197,64 @@ async function expectInsideViewport(page, locator) {
   expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize().height + 1);
 }
 
+function expectNoGeometryTransition(value) {
+  const properties = String(value || "")
+    .split(",")
+    .map((property) => property.trim())
+    .filter(Boolean);
+  for (const property of properties) {
+    expect(["left", "top", "right", "bottom", "width", "height"]).not.toContain(property);
+  }
+}
+
+function expectNoWhiteCssSignal(value) {
+  const matches = String(value || "").matchAll(/rgba?\(([^)]+)\)/g);
+  for (const match of matches) {
+    const [r, g, b, alpha = "1"] = match[1].split(",").map((part) => part.trim());
+    const channels = [Number(r), Number(g), Number(b)];
+    const opacity = Number(alpha);
+    if (channels.every((channel) => channel >= 235) && opacity > 0.5) {
+      throw new Error(`Expected no white visual signal, received ${value}`);
+    }
+  }
+}
+
+function expectNoWhiteCssSignals(signals) {
+  for (const value of Object.values(signals || {})) {
+    expectNoWhiteCssSignal(value);
+  }
+}
+
+function expectBlueCssSignal(value) {
+  const match = String(value || "").match(/rgba?\(([^)]+)\)/);
+  expect(match).not.toBeNull();
+  const [r, g, b] = match[1].split(",").map((part) => Number(part.trim()));
+  expect(r).toBeGreaterThanOrEqual(40);
+  expect(r).toBeLessThanOrEqual(190);
+  expect(g).toBeGreaterThanOrEqual(100);
+  expect(g).toBeLessThanOrEqual(215);
+  expect(b).toBeGreaterThanOrEqual(240);
+}
+
+async function cssVisualSignals(locator, pseudo = null) {
+  return locator.evaluate((node, pseudoElement) => {
+    const style = getComputedStyle(node, pseudoElement);
+    const visibleBorder = (side) => {
+      const width = style.getPropertyValue(`border-${side}-width`);
+      const borderStyle = style.getPropertyValue(`border-${side}-style`);
+      return borderStyle !== "none" && width !== "0px";
+    };
+    const borderColor = ["top", "right", "bottom", "left"].some(visibleBorder) ? style.borderColor : "";
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      borderColor,
+      boxShadow: style.boxShadow,
+      outlineColor: style.outlineStyle === "none" || style.outlineWidth === "0px" ? "" : style.outlineColor
+    };
+  }, pseudo);
+}
+
 async function storedProject(page) {
   return page.evaluate((storageKey) => JSON.parse(localStorage.getItem(storageKey)), STORAGE_KEY);
 }
@@ -503,6 +561,75 @@ test.describe("connected root V2 editor route", () => {
     await expect(diamondBlock).toHaveAttribute("aria-pressed", "true");
     await expect(tokenB2).toHaveAttribute("aria-pressed", "false");
     await expect(infoLine).toContainText("Diamond Form");
+    await expect(infoLine).toHaveAttribute("data-v2-stage-info-state", "selected");
+    await expect(infoLine).toHaveAttribute("data-v2-stage-info-section", "diamond");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+
+    await rail.getByRole("button", { name: "대형 목록" }).click();
+    const selectedSheet = root.locator('[data-v2-bottom-sheet="formation-list"]');
+    await expect(selectedSheet).toHaveAttribute("data-v2-bottom-sheet-state", "formation");
+    await expect(selectedSheet).toHaveAttribute("data-v2-bottom-sheet-section", "diamond");
+    await expect(selectedSheet.locator('[data-v2-formation-list-row="diamond"]')).toHaveClass(/is-active/);
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveClass(/is-active/);
+    const selectedStateStyles = await root.evaluate(() => {
+      const styleFor = (selector, pseudo = null) => {
+        const node = document.querySelector(selector);
+        return node ? getComputedStyle(node, pseudo) : null;
+      };
+      const info = styleFor("[data-v2-stage-info-line]");
+      const infoAccent = styleFor("[data-v2-stage-info-line]", "::before");
+      const block = styleFor('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+      const blockBadge = styleFor('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"] .v2-segment-badge');
+      const selectedHandle = styleFor('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]', "::after");
+      const row = styleFor('[data-v2-formation-list-row="diamond"]');
+      const sheet = styleFor("[data-v2-bottom-sheet]");
+      const header = styleFor("[data-v2-bottom-sheet] .v2-bottom-sheet-header strong");
+      const activeRail = styleFor("[data-v2-bottom-rail] .v2-icon-button.is-active");
+      return {
+        activeRailBackground: activeRail?.backgroundColor || "",
+        activeRailShadow: activeRail?.boxShadow || "",
+        blockBackground: block?.backgroundImage || block?.backgroundColor || "",
+        blockBadgeBackground: blockBadge?.backgroundColor || "",
+        blockBorder: block?.borderColor || "",
+        headerColor: header?.color || "",
+        infoAccent: infoAccent?.backgroundColor || "",
+        infoBackground: info?.backgroundImage || info?.backgroundColor || "",
+        rowBackground: row?.backgroundImage || row?.backgroundColor || "",
+        rowBorder: row?.borderColor || "",
+        selectedHandleBackground: selectedHandle?.backgroundColor || "",
+        selectedHandleShadow: selectedHandle?.boxShadow || "",
+        sheetBorderTop: sheet?.borderTopColor || ""
+      };
+    });
+    expect(selectedStateStyles.infoAccent).toContain("79, 141, 255");
+    expect(selectedStateStyles.infoBackground).toContain("79, 141, 255");
+    expect(selectedStateStyles.blockBorder).toContain("79, 141, 255");
+    expect(selectedStateStyles.blockBackground).toContain("47, 115, 246");
+    expect(selectedStateStyles.blockBadgeBackground).toContain("79, 141, 255");
+    expect(selectedStateStyles.rowBorder).toContain("79, 141, 255");
+    expect(selectedStateStyles.rowBackground).toContain("79, 141, 255");
+    expect(selectedStateStyles.sheetBorderTop).toContain("79, 141, 255");
+    expect(selectedStateStyles.headerColor).toContain("220, 233, 255");
+    expect(selectedStateStyles.activeRailBackground).toContain("79, 141, 255");
+    expect(selectedStateStyles.activeRailShadow).toContain("79, 141, 255");
+    expect(selectedStateStyles.selectedHandleBackground).toContain("79, 141, 255");
+    expect(selectedStateStyles.selectedHandleShadow).toContain("79, 141, 255");
+    for (const value of [
+      selectedStateStyles.activeRailBackground,
+      selectedStateStyles.activeRailShadow,
+      selectedStateStyles.blockBackground,
+      selectedStateStyles.blockBadgeBackground,
+      selectedStateStyles.blockBorder,
+      selectedStateStyles.infoAccent,
+      selectedStateStyles.infoBackground,
+      selectedStateStyles.rowBackground,
+      selectedStateStyles.rowBorder,
+      selectedStateStyles.selectedHandleBackground,
+      selectedStateStyles.selectedHandleShadow,
+      selectedStateStyles.sheetBorderTop
+    ]) {
+      expectNoWhiteCssSignal(value);
+    }
 
     await expect(root.locator('[data-v2-segment-kind="move"]')).toBeVisible();
     await expect(root.locator('[data-v2-playhead="ruler"]')).toBeVisible();
@@ -514,6 +641,18 @@ test.describe("connected root V2 editor route", () => {
     await tokenB2.click();
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
     await expect(infoLine).toContainText("B2 · groupB");
+    const tokenSelectedStyles = await root.evaluate(() => {
+      const token = document.querySelector(".v2-token.is-selected");
+      const style = token ? getComputedStyle(token) : null;
+      return {
+        border: style?.borderColor || "",
+        shadow: style?.boxShadow || ""
+      };
+    });
+    expectBlueCssSignal(tokenSelectedStyles.border);
+    expect(tokenSelectedStyles.shadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignal(tokenSelectedStyles.border);
+    expectNoWhiteCssSignal(tokenSelectedStyles.shadow);
 
     const boxes = await root.evaluate((node) => {
       const rectFor = (selector) => {
@@ -536,11 +675,9 @@ test.describe("connected root V2 editor route", () => {
         regularTokenTransform: getComputedStyle(node.querySelector(".v2-token:not(.is-selected)")).transform,
         selectedToken: rectFor(".v2-token.is-selected"),
         selectedTokenRing: getComputedStyle(node.querySelector(".v2-token.is-selected")).boxShadow,
-        selectedTokenTransitionDuration: getComputedStyle(node.querySelector(".v2-token.is-selected")).transitionDuration,
         selectedTokenTransitionProperty: getComputedStyle(node.querySelector(".v2-token.is-selected")).transitionProperty,
         selectedTokenTransform: getComputedStyle(node.querySelector(".v2-token.is-selected")).transform,
         regularHoldTransform: getComputedStyle(node.querySelector('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]')).transform,
-        selectedHoldTransitionDuration: getComputedStyle(node.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]')).transitionDuration,
         selectedHoldTransitionProperty: getComputedStyle(node.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]')).transitionProperty,
         selectedHoldTransform: getComputedStyle(node.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]')).transform,
         moveBlockTransitionProperty: getComputedStyle(node.querySelector(".v2-move-block")).transitionProperty,
@@ -576,15 +713,13 @@ test.describe("connected root V2 editor route", () => {
     expect(Math.abs(boxes.selectedToken.width - boxes.regularToken.width)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.selectedToken.height - boxes.regularToken.height)).toBeLessThanOrEqual(1);
     expect(boxes.selectedTokenRing).toContain("rgb");
-    expect(boxes.selectedTokenTransitionDuration).toBe("0s");
-    expect(boxes.selectedTokenTransitionProperty).toBe("none");
+    expectNoGeometryTransition(boxes.selectedTokenTransitionProperty);
     expect(boxes.selectedTokenTransform).toBe(boxes.regularTokenTransform);
-    expect(boxes.selectedHoldTransitionDuration).toBe("0s");
-    expect(boxes.selectedHoldTransitionProperty).toBe("none");
+    expectNoGeometryTransition(boxes.selectedHoldTransitionProperty);
     expect(boxes.selectedHoldTransform).toBe(boxes.regularHoldTransform);
-    expect(boxes.moveBlockTransitionProperty).toBe("none");
-    expect(boxes.trackAddTransitionProperty).toBe("none");
-    expect(boxes.bottomIconTransitionProperty).toBe("none");
+    expectNoGeometryTransition(boxes.moveBlockTransitionProperty);
+    expectNoGeometryTransition(boxes.trackAddTransitionProperty);
+    expectNoGeometryTransition(boxes.bottomIconTransitionProperty);
     expect(boxes.holdBlock.height).toBeGreaterThanOrEqual(boxes.formationLane.height * 0.8);
     expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.moveBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
@@ -606,6 +741,46 @@ test.describe("connected root V2 editor route", () => {
     await expectInsideViewport(page, timeline);
     await expectInsideViewport(page, bottomRail);
     await page.screenshot({ path: "test-results/v2-stage-timeline-bottom-390x844.png", fullPage: false });
+  });
+
+  test("V2 unselected performer token hover focus and active states stay color-coded", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const token = root.locator('[data-v2-performer-token="a1"]');
+    await expect(token).toHaveAttribute("aria-pressed", "false");
+
+    const baseSignals = await cssVisualSignals(token);
+    const tokenBox = await token.boundingBox();
+    expect(tokenBox).not.toBeNull();
+
+    await token.hover({ force: true });
+    await expect.poll(() => cssVisualSignals(token).then((signals) => signals.boxShadow)).toContain("79, 141, 255");
+    const hoverSignals = await cssVisualSignals(token);
+    expect(hoverSignals.backgroundColor).toBe(baseSignals.backgroundColor);
+    expectBlueCssSignal(hoverSignals.borderColor);
+    expect(hoverSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(hoverSignals);
+    await expect(token).toHaveAttribute("aria-pressed", "false");
+
+    await token.focus();
+    const focusSignals = await cssVisualSignals(token);
+    expect(focusSignals.backgroundColor).toBe(baseSignals.backgroundColor);
+    expectBlueCssSignal(focusSignals.borderColor);
+    expect(focusSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(focusSignals);
+    await expect(token).toHaveAttribute("aria-pressed", "false");
+
+    await page.mouse.move(tokenBox.x + tokenBox.width / 2, tokenBox.y + tokenBox.height / 2);
+    await page.mouse.down();
+    const activeSignals = await cssVisualSignals(token);
+    expectBlueCssSignal(activeSignals.backgroundColor);
+    expectBlueCssSignal(activeSignals.borderColor);
+    expect(activeSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(activeSignals);
+    await page.mouse.up();
   });
 
   test("renders stored audio waveform peaks with played-region progress on v2", async ({ page }) => {
@@ -1703,6 +1878,11 @@ test.describe("connected root V2 editor route", () => {
     await page.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y + blockBox.height / 2);
     await page.waitForTimeout(120);
     await expect(root.locator('[data-v2-timeline-handle][data-v2-section-id="diamond"]')).toHaveCount(0);
+    const centerHoverSignals = await cssVisualSignals(diamondBlock);
+    expectBlueCssSignal(centerHoverSignals.borderColor);
+    expect(centerHoverSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(centerHoverSignals);
+    await expect(diamondBlock).toHaveAttribute("aria-pressed", "false");
 
     await page.mouse.move(blockBox.x + 6, blockBox.y + blockBox.height / 2);
     const hoverLeftHandle = root.locator('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]');
@@ -1710,6 +1890,10 @@ test.describe("connected root V2 editor route", () => {
     await expect(hoverLeftHandle).toHaveAttribute("data-v2-trim-activation", "hover");
     await expect.poll(() => hoverLeftHandle.evaluate((node) => node.getBoundingClientRect().width)).toBe(20);
     await expect(root.locator('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]')).toHaveCount(0);
+    const hoverHandleSignals = await cssVisualSignals(hoverLeftHandle, "::after");
+    expect(hoverHandleSignals.backgroundColor).toContain("79, 141, 255");
+    expect(hoverHandleSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(hoverHandleSignals);
 
     const timingBefore = await v2TimingSnapshot(page);
     const hoverHandleBox = await hoverLeftHandle.boundingBox();
@@ -2145,6 +2329,29 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator("[data-v2-floating-block-preview]")).toBeVisible();
     await expect(root.locator("[data-v2-drop-preview]")).toBeVisible();
     await expect(diamondBlock).toHaveClass(/is-dragging-source/);
+    const previewStyles = await root.evaluate(() => {
+      const styleFor = (selector) => {
+        const node = document.querySelector(selector);
+        return node ? getComputedStyle(node) : null;
+      };
+      const floating = styleFor("[data-v2-floating-block-preview]");
+      const drop = styleFor("[data-v2-drop-preview]");
+      return {
+        dropBackground: drop?.backgroundColor || "",
+        dropBorder: drop?.borderColor || "",
+        dropOutline: drop && drop.outlineStyle !== "none" && drop.outlineWidth !== "0px" ? drop.outlineColor : "",
+        dropShadow: drop?.boxShadow || "",
+        floatingBorder: floating?.borderColor || "",
+        floatingShadow: floating?.boxShadow || ""
+      };
+    });
+    expect(previewStyles.dropBackground).toContain("79, 141, 255");
+    expect(previewStyles.dropBorder).toContain("79, 141, 255");
+    expect(previewStyles.floatingBorder).toContain("79, 141, 255");
+    expect(previewStyles.floatingShadow).toContain("79, 141, 255");
+    for (const value of Object.values(previewStyles)) {
+      expectNoWhiteCssSignal(value);
+    }
     const ghostBox = await root.locator("[data-v2-floating-block-preview]").boundingBox();
     expect(ghostBox).not.toBeNull();
     expect(Math.abs((ghostBox.x + ghostBox.width / 2) - (startX + 56))).toBeLessThan(28);
@@ -3372,7 +3579,7 @@ test.describe("connected root V2 editor route", () => {
     expect(guideMetrics.audienceIsCautionZone).toBe(false);
     expect(guideMetrics.audienceText).toBe("");
     expect(guideMetrics.cautionBackground).not.toContain("radial-gradient");
-    expect(guideMetrics.gridBackgroundImage).toContain("rgba(226, 232, 240, 0.18)");
+    expect(guideMetrics.gridBackgroundImage).toContain("rgba(226, 232, 240, 0.14)");
     expect(guideMetrics.gridBackgroundSize).toContain("8.333");
     expect(guideMetrics.gridBackgroundSize).toContain("12.5");
     expect(guideMetrics.tokenWidth).toBeCloseTo(guideMetrics.expectedTokenSize, 0);
@@ -4039,5 +4246,11 @@ test.describe("connected root V2 editor route", () => {
     await page.goto("/stitch-mobile-mock");
     await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
     await expect(page.locator("[data-v2-visual-editor]")).toHaveCount(0);
+    const resizeHandle = page.locator("[data-stitch-mobile-editor] .formation-resize-handle").first();
+    await expect(resizeHandle).toBeVisible();
+    const handleSignals = await cssVisualSignals(resizeHandle);
+    expect(handleSignals.backgroundColor).toContain("79, 141, 255");
+    expect(handleSignals.boxShadow).toContain("79, 141, 255");
+    expectNoWhiteCssSignals(handleSignals);
   });
 });

@@ -16,18 +16,18 @@
 
 @media (max-width: 900px), (min-width: 901px) {
     .stitch-mobile-editor {
-        --stitch-base: #131313;
-        --stitch-panel-low: #1c1b1b;
-        --stitch-panel: #201f1f;
-        --stitch-panel-high: #2a2a2a;
-        --stitch-panel-highest: #353534;
-        --stitch-outline: #434656;
-        --stitch-outline-strong: #8d90a2;
-        --stitch-blue: #2e62ff;
-        --stitch-blue-soft: #b7c4ff;
-        --stitch-green: #05e777;
-        --stitch-green-soft: #7dffa2;
-        --stitch-red: #d43237;
+        --stitch-base: #05070a;
+        --stitch-panel-low: #0d1117;
+        --stitch-panel: #111720;
+        --stitch-panel-high: #161d27;
+        --stitch-panel-highest: #1c2633;
+        --stitch-outline: rgba(226, 235, 247, 0.16);
+        --stitch-outline-strong: rgba(226, 235, 247, 0.28);
+        --stitch-blue: #4f8dff;
+        --stitch-blue-soft: #a8c5ff;
+        --stitch-green: #38d889;
+        --stitch-green-soft: #a8efc5;
+        --stitch-red: #ff6a5f;
         --stitch-stage-size: clamp(320px, calc(100dvw - 50px), 340px);
         --timeline-ruler-height: 10px;
         --timeline-lane-height: 68px;
@@ -55,7 +55,9 @@
         overflow: hidden;
         padding: 1px;
         padding-bottom: var(--mobile-bottom-padding);
-        background: var(--stitch-base);
+        background:
+            radial-gradient(circle at 50% 8%, rgba(56, 80, 114, 0.2), transparent 34%),
+            var(--stitch-base);
         color: #f6f6f6;
     }
 
@@ -167,7 +169,7 @@
     .stitch-mobile-editor button.active,
     .stitch-mobile-editor .active {
         border-color: var(--stitch-blue);
-        background: #1c2d6f;
+        background: rgba(47, 115, 246, 0.36);
         color: #fff;
     }
 
@@ -253,7 +255,7 @@
         aspect-ratio: var(--stitch-stage-ratio, 1 / 1);
         border: 1px solid var(--stitch-outline);
         border-radius: 8px;
-        background: #151515;
+        background: #080b10;
         overflow: visible;
     }
 
@@ -266,11 +268,11 @@
         border-radius: 0;
         display: block;
         touch-action: none;
-        background: #151515;
+        background: #080b10;
     }
 
     .stitch-mobile-editor .stitch-stage-base {
-        fill: #151515;
+        fill: #080b10;
     }
 
     .stitch-mobile-editor .stitch-stage-front-zone {
@@ -369,7 +371,7 @@
         min-height: 0;
         border: 0;
         border-radius: 0;
-        background: #151515;
+        background: #080b10;
     }
 
     .stitch-mobile-editor .stitch-stage-caption {
@@ -490,7 +492,7 @@
         overflow: hidden;
         border: 1px solid rgba(67, 70, 86, 0.78);
         border-radius: 4px;
-        background: #171717;
+        background: #0a0e14;
         touch-action: pan-y;
     }
 
@@ -587,7 +589,7 @@
         padding: 3px 5px;
         border-style: dashed;
         border-color: rgba(125, 255, 162, 0.4);
-        background: rgba(23, 52, 41, 0.92);
+        background: rgba(24, 48, 38, 0.92);
         text-align: center;
     }
 
@@ -646,10 +648,10 @@
 
     .stitch-mobile-editor .formation-block.selected {
         border-color: var(--stitch-blue);
-        background: #1c2d6f;
+        background: rgba(47, 115, 246, 0.36);
         box-shadow:
-            0 0 0 2px rgba(46, 98, 255, 0.95),
-            0 0 0 5px rgba(183, 196, 255, 0.22),
+            0 0 0 2px rgba(79, 141, 255, 0.9),
+            0 0 0 5px rgba(168, 197, 255, 0.18),
             0 10px 22px rgba(0, 0, 0, 0.38);
         z-index: 5;
     }
@@ -666,10 +668,10 @@
         z-index: 8;
         width: 12px;
         border-radius: 6px;
-        background: #f7f9ff;
+        background: rgba(79, 141, 255, 0.32);
         box-shadow:
             0 0 0 1px rgba(14, 14, 14, 0.56),
-            0 0 0 3px rgba(46, 98, 255, 0.28);
+            0 0 0 3px rgba(79, 141, 255, 0.2);
         cursor: ew-resize;
         touch-action: none;
     }
@@ -690,13 +692,13 @@
         width: 3px;
         height: 18px;
         border-radius: 99px;
-        background: #2e62ff;
+        background: var(--stitch-blue);
         transform: translate(-50%, -50%);
     }
 
     .stitch-mobile-editor .formation-block.blocked-left .formation-resize-handle.left,
     .stitch-mobile-editor .formation-block.blocked-right .formation-resize-handle.right {
-        background: #ffd166;
+        background: rgba(255, 209, 102, 0.42);
         box-shadow:
             0 0 0 1px rgba(14, 14, 14, 0.56),
             0 0 0 3px rgba(255, 209, 102, 0.28);
@@ -888,7 +890,7 @@
 
     .stitch-mobile-editor .performer.active {
         border-color: var(--stitch-blue);
-        background: #1c2d6f;
+        background: rgba(47, 115, 246, 0.36);
     }
 }
 
