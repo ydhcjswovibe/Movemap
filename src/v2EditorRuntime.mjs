@@ -537,6 +537,13 @@ export function createV2EditorRuntime(input = {}) {
       headerActions: [
         { key: "close-sheet", icon: "close", label: "닫기" }
       ]
+    } : activeBottomSheet === "cast-add" ? {
+      emptyState: { label: "사람 추가는 다음 단계에서 지원합니다" }
+    } : activeBottomSheet === "music" ? {
+      stateLabel: input.audioFileName || input.musicTitle || "음악 없음",
+      actions: [
+        { key: "replace-audio", label: input.audioFileName || input.musicTitle ? "교체" : "업로드", disabled: readonly }
+      ]
     } : {}),
     items: activeBottomSheet === "formation-list"
       ? sortedSections.map((section, index) => ({
@@ -584,6 +591,13 @@ export function createV2EditorRuntime(input = {}) {
             stageSheetToggleItem("toggle-snap", "스냅", input.snapEnabled !== false, readonly),
             stageSheetToggleItem("toggle-stage-references", "참조선", input.showStageReferences !== false),
             stageSheetToggleItem("toggle-stage-reference-labels", "참조선 라벨", input.showStageReferences !== false && input.showStageReferenceLabels !== false),
+            {
+              key: "front-caution-zone",
+              kind: "meter",
+              label: "앞쪽 주의 구역",
+              stateLabel: `${cautionZone.y}m`,
+              disabled: readonly
+            },
             stageSheetToggleItem("toggle-transition-paths", "동선", Boolean(input.showAllTransitionPaths))
           ]
   } : null;

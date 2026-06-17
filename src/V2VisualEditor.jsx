@@ -660,6 +660,10 @@ function V2VisualEditor({ model, actions = {} }) {
       runtimeActions.cancelFormationMultiSelect?.();
       return;
     }
+    if (action.key === "replace-audio") {
+      runtimeActions.addAudio?.();
+      return;
+    }
     runBottomAction(action);
   };
   const runBottomSheetItem = (item) => {
@@ -1531,16 +1535,21 @@ function V2VisualEditor({ model, actions = {} }) {
             )}
             {view.bottomSheet.key !== "formation-details" && view.bottomSheet.key !== "formation-template" && (
               <div className="v2-bottom-sheet-list">
+              {view.bottomSheet.stateLabel && (
+                <div className="v2-bottom-sheet-summary">{view.bottomSheet.stateLabel}</div>
+              )}
               {view.bottomSheet.emptyState && (
                 <div className="v2-bottom-sheet-empty" data-v2-empty-formations>
                   <strong>{view.bottomSheet.emptyState.label}</strong>
-                  <button
-                    type="button"
-                    disabled={Boolean(view.bottomSheet.emptyState.action.disabled)}
-                    onClick={() => runtimeActions.addFormation?.({ forceCreate: true })}
-                  >
-                    {view.bottomSheet.emptyState.action.label}
-                  </button>
+                  {view.bottomSheet.emptyState.action && (
+                    <button
+                      type="button"
+                      disabled={Boolean(view.bottomSheet.emptyState.action.disabled)}
+                      onClick={() => runtimeActions.addFormation?.({ forceCreate: true })}
+                    >
+                      {view.bottomSheet.emptyState.action.label}
+                    </button>
+                  )}
                 </div>
               )}
               {(view.bottomSheet.items || []).map((item) => {
@@ -1595,6 +1604,20 @@ function V2VisualEditor({ model, actions = {} }) {
                   </div>
                 );
               })}
+              {Boolean(view.bottomSheet.actions?.length) && (
+                <div className="v2-bottom-sheet-actions">
+                  {view.bottomSheet.actions.map((action) => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      disabled={Boolean(action.disabled)}
+                      onClick={() => runBottomSheetHeaderAction(action)}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               </div>
             )}
           </section>

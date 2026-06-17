@@ -266,6 +266,31 @@ test("V2 runtime exposes formation details and template sheets", () => {
   ]);
 });
 
+test("V2 minimal cast stage and music sheets honor readonly gating", () => {
+  const editable = createV2EditorRuntime({
+    activeBottomSheet: "music",
+    readonly: false,
+    audioFileName: "song.mp3"
+  });
+  assert.equal(editable.bottomSheet.key, "music");
+  assert.equal(editable.bottomSheet.actions.find((action) => action.key === "replace-audio").disabled, false);
+
+  const readonly = createV2EditorRuntime({
+    activeBottomSheet: "stage-settings",
+    readonly: true,
+    snapEnabled: true,
+    showStageReferences: true,
+    showStageReferenceLabels: true,
+    showAllTransitionPaths: true
+  });
+  assert.equal(readonly.bottomSheet.key, "stage-settings");
+  assert.equal(readonly.bottomSheet.items.find((item) => item.key === "toggle-snap").disabled, true);
+  assert.equal(readonly.bottomSheet.items.find((item) => item.key === "front-caution-zone").disabled, true);
+
+  const castAdd = createV2EditorRuntime({ activeBottomSheet: "cast-add", readonly: false });
+  assert.equal(castAdd.bottomSheet.emptyState.label, "사람 추가는 다음 단계에서 지원합니다");
+});
+
 test("V2 runtime exposes beta timeline edit metadata and mode contract", () => {
   const onFormationPointerDown = () => {};
   const onV2TimelineHandlePointerDown = () => {};

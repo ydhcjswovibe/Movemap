@@ -3654,6 +3654,24 @@ test.describe("connected root V2 editor route", () => {
     await expect.poll(() => storedProject(page).then((project) => project.sections.length)).toBe(beforeCount + 1);
   });
 
+  test("V2 minimal sheets open from the action bar", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const actionBar = root.locator("[data-v2-action-bar]");
+    await actionBar.getByRole("button", { name: "사람 추가" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="cast-add"]')).toContainText("사람 추가는 다음 단계에서 지원합니다");
+
+    await actionBar.getByRole("button", { name: "무대 설정" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="stage-settings"]')).toContainText("스냅");
+
+    await actionBar.getByRole("button", { name: "음악" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="music"]')).toBeVisible();
+    await expect(root.locator('[data-v2-bottom-sheet="music"]').getByRole("button", { name: /업로드|교체/ })).toBeEnabled();
+  });
+
   test("does not render edit controls for readonly root V2 share links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {
@@ -3685,6 +3703,10 @@ test.describe("connected root V2 editor route", () => {
     await root.getByRole("menuitem", { name: /Settings/ }).click();
     await expect(root.getByRole("menuitemcheckbox", { name: /Snap/ })).toBeDisabled();
     await page.keyboard.press("Escape");
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "무대 설정" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="stage-settings"]').getByRole("button", { name: /스냅/ })).toBeDisabled();
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "음악" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="music"]').getByRole("button", { name: /업로드|교체/ })).toBeDisabled();
     await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람 목록" }).click();
     await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
     await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
