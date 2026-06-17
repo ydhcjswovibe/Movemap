@@ -5470,6 +5470,7 @@ function App() {
     <div
       className={[
         "app",
+        isV2Route ? "v2-route" : "",
         isStageFocus ? "stage-focus" : ""
       ].filter(Boolean).join(" ")}
       data-selection-state={selectionVisualState}

@@ -3672,6 +3672,68 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator('[data-v2-bottom-sheet="music"]').getByRole("button", { name: /업로드|교체/ })).toBeEnabled();
   });
 
+  test("V2 action bar and sheets stay usable in 390px mobile viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const actionBar = root.locator("[data-v2-action-bar]");
+    await expect(actionBar).toBeVisible();
+    await actionBar.getByRole("button", { name: "대형 목록" }).click();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toBeVisible();
+
+    const boxes = await root.evaluate(() => {
+      const bar = document.querySelector("[data-v2-action-bar]").getBoundingClientRect();
+      const sheetNode = document.querySelector("[data-v2-bottom-sheet]").getBoundingClientRect();
+      const stage = document.querySelector("[data-v2-stage]").getBoundingClientRect();
+      return {
+        barTop: bar.top,
+        barBottom: bar.bottom,
+        sheetBottom: sheetNode.bottom,
+        stageTop: stage.top,
+        stageBottom: stage.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight
+      };
+    });
+
+    expect(boxes.viewportWidth).toBe(390);
+    expect(boxes.barBottom).toBeLessThanOrEqual(boxes.viewportHeight);
+    expect(boxes.sheetBottom).toBeLessThanOrEqual(boxes.barTop + 1);
+    expect(boxes.stageTop).toBeGreaterThanOrEqual(0);
+    expect(boxes.stageBottom).toBeLessThan(boxes.barTop);
+    await page.screenshot({ path: "test-results/v2-action-bar-formation-workflow-390.png", fullPage: false });
+  });
+
+  test("readonly V2 share route remains valid with zero formations", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const readonlyProject = {
+      ...seededV2Project(),
+      title: "Readonly Empty V2 Fixture",
+      sections: [],
+      shareLinks: {
+        view: { projectId: "readonly-empty-project", token: "", enabled: true },
+        edit: { projectId: "readonly-empty-project", token: "edit-token", enabled: true }
+      }
+    };
+    await page.route("**/rest/v1/movemap_projects**", async (route) => {
+      await route.fulfill({ json: [{ id: "readonly-empty-project", plan: readonlyProject }] });
+    });
+    await page.route("**/rest/v1/choreo_projects**", async (route) => {
+      await route.fulfill({ json: [] });
+    });
+
+    await page.goto("/share/readonly-empty-project");
+    const root = page.locator("[data-v2-visual-editor]");
+    await expect(root).toBeVisible();
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 목록" }).click();
+    await expect(root.locator("[data-v2-empty-formations]")).toBeVisible();
+    await expect(root.getByRole("button", { name: "삭제" })).toHaveCount(0);
+    await expect(root.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(root.locator(".v2-track-add-button")).toHaveCount(0);
+  });
+
   test("does not render edit controls for readonly root V2 share links", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const readonlyProject = {

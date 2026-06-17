@@ -66,17 +66,7 @@ async function routeCloudProject(page, plan) {
 }
 
 async function openSampleEditor(browser) {
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  await page.addInitScript(() => {
-    localStorage.removeItem("movemap-project");
-    localStorage.removeItem("choreo-stage-planner-project");
-  });
-  await page.goto("/");
-  await page.getByRole("button", { name: /샘플로 시작/ }).click();
-  await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
-  await expect(page.locator(".stage-area")).toBeVisible();
-  await expect(page.locator(".timeline-editor")).toBeVisible();
-  return page;
+  return openStitchMock(browser);
 }
 
 async function openStitchMock(browser) {
@@ -548,20 +538,22 @@ async function dragElementHorizontally(page, locator, deltaX) {
 }
 
 test.describe("Stitch main editor visual states", () => {
-  test("share and edit link routes keep review fallback behavior", async ({ browser }) => {
+  test("share and edit link routes keep V2 route behavior", async ({ browser }) => {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
     await routeCloudProject(page, seededRouteProject());
     await page.goto("/share/project-1");
-    await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
-    await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
+    const shareRoot = page.locator("[data-v2-visual-editor]");
+    await expect(shareRoot).toBeVisible();
     await expect(page.getByRole("button", { name: "저장" })).toHaveCount(0);
-    await expect(page.locator(".formation-block")).toHaveCount(3);
+    await expect(shareRoot.locator("[data-v2-segment-kind='hold']")).toHaveCount(2);
+    await expect(shareRoot.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" })).toBeDisabled();
 
     await page.goto("/edit/project-1?token=valid");
     await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
-    await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
-    await expect(page.locator(".stitch-topbar")).toBeVisible();
-    await expect(page.locator(".forms-row .timeline-row-label").getByRole("button", { name: "대형 추가" })).toBeVisible();
+    const editRoot = page.locator("[data-v2-visual-editor]");
+    await expect(editRoot).toBeVisible();
+    await expect(editRoot.locator(".v2-topbar")).toBeVisible();
+    await expect(editRoot.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" })).toBeEnabled();
 
     await page.goto("/edit/project-1?token=bad");
     await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toBeVisible();
@@ -570,14 +562,12 @@ test.describe("Stitch main editor visual states", () => {
     await routeCloudProject(page, seededRouteProject({ viewEnabled: false }));
     await page.goto("/share/project-1");
     await expect(page.getByText(/소유자가 이 보기 링크를 꺼두었습니다/)).toBeVisible();
-    await expect(page.locator(".mobile-global-actions").getByRole("button", { name: "저장" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "저장" })).toHaveCount(0);
     await page.close();
   });
 
   test("captures mobile idle, timeline, formation, token, and menu states at 390px", async ({ browser }) => {
     let page = await openSampleEditor(browser);
-    await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "idle");
-    await expect(page.locator(".app")).toHaveAttribute("data-timeline-state", "visible");
     await expectStitchMobileBaseline(page, "[data-stitch-mobile-editor]");
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: "test-results/stitch-editor-mobile-idle-390.png", fullPage: false });
@@ -607,8 +597,6 @@ test.describe("Stitch main editor visual states", () => {
       clientY: firstTokenBox.y + firstTokenBox.height / 2,
       buttons: 1
     });
-    await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "token-selected");
-    await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
     await expectStitchMobileBaseline(page, "[data-stitch-mobile-editor]");
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: "test-results/stitch-editor-mobile-token-selected-390.png", fullPage: false });

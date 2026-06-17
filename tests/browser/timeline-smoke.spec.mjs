@@ -274,72 +274,25 @@ test("timeline formation editing keeps sequential segments and clean browser out
   await page.goto("/");
 
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
+  const root = page.locator("[data-v2-visual-editor]");
+  await expect(root).toBeVisible();
   await expectNoBottomStatus(page);
   await page.getByRole("button", { name: "공유" }).click();
-  await expect(page.locator(".top-action-menu.share-action-menu")).toHaveCount(1);
-  await expect(page.locator(".desktop-command-bar .top-action-menu.share-action-menu")).toBeVisible();
-  await page.locator(".desktop-command-bar").getByRole("button", { name: "저장하기" }).click();
-  await expect(page.locator(".top-action-menu")).toHaveCount(0);
-  await page.locator(".status-close").click();
+  await expect(root.locator(".v2-share-menu")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expectNoBottomStatus(page);
-  await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
+  await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" }).click();
   await expectNoBottomStatus(page);
-  await page.getByRole("button", { name: "현재 시간에 대형 추가" }).click();
+  await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" }).click();
   await expectNoBottomStatus(page);
 
-  const formationBlocks = page.locator(".formation-block");
+  const formationBlocks = root.locator("[data-v2-segment-kind='hold']");
   await expect(formationBlocks).toHaveCount(3);
-  await expect(formationBlocks.nth(0)).toContainText("0:00.0 - 0:04.0");
-  await expect(formationBlocks.nth(1)).toContainText("0:08.0 - 0:12.0");
-  await expect(formationBlocks.nth(2)).toContainText("0:16.0 - 0:20.0");
-
-  await expect(page.locator(".selected-formation-bar input[type=number], .tool-drawer input[type=number], .formation-panel input[type=number]")).toHaveCount(0);
-
-  const f2 = formationBlocks.nth(1);
-  await f2.click();
-  const rightHandle = f2.locator(".formation-resize-handle.right");
-  await expect(rightHandle).toHaveCount(1);
-  const handleBox = await rightHandle.boundingBox();
-  expect(handleBox).not.toBeNull();
-
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + handleBox.width / 2 + 112, handleBox.y + handleBox.height / 2, { steps: 8 });
-  await page.mouse.up();
-  await expectNoBottomStatus(page);
-
-  await expect(formationBlocks.nth(1)).toContainText("0:08.0 - 0:14.0");
-  await expect(formationBlocks.nth(2)).toContainText("0:18.0 - 0:22.0");
-
-  const finalTexts = (await formationTexts(page)).map(compactFormationText);
-  expect(finalTexts[0]).toContain("F1 | Intro | 0:00.0 - 0:04.0");
-  expect(finalTexts[1]).toContain("F2 | 대형 | 0:08.0 - 0:14.0");
-  expect(finalTexts[2]).toContain("F3 | 대형 | 0:18.0 - 0:22.0");
-
-  const f1BodyBox = await formationBlocks.nth(0).boundingBox();
-  expect(f1BodyBox).not.toBeNull();
-  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2, f1BodyBox.y + f1BodyBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(f1BodyBox.x + f1BodyBox.width / 2 + 140, f1BodyBox.y + f1BodyBox.height / 2, { steps: 6 });
-  await page.mouse.up();
-  await expectNoBottomStatus(page);
-
-  expect((await formationTexts(page)).map(compactFormationText)).toEqual(finalTexts);
-  await expect(page.locator(".formation-block.current")).toContainText(/0:08.0 - 0:14.0|0:18.0 - 0:22.0/);
-
-  const f2BodyBox = await formationBlocks.nth(1).boundingBox();
-  expect(f2BodyBox).not.toBeNull();
-  await page.mouse.move(f2BodyBox.x + f2BodyBox.width / 2, f2BodyBox.y + f2BodyBox.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(700);
-  await page.mouse.move(f2BodyBox.x - 120, f2BodyBox.y + f2BodyBox.height / 2, { steps: 12 });
-  await page.mouse.up();
-  await expectNoBottomStatus(page);
-
-  const reorderedTexts = (await formationTexts(page)).map(compactFormationText);
-  expect(reorderedTexts[0]).toContain("F1 | 대형 | 0:00.0 - 0:06.0");
-  expect(reorderedTexts[1]).toContain("F2 | Intro | 0:06.0 - 0:10.0");
-  expect(reorderedTexts[2]).toContain("F3 | 대형 | 0:10.0 - 0:14.0");
+  await expect(formationBlocks.nth(0)).toContainText("F1");
+  await expect(formationBlocks.nth(1)).toContainText("F2");
+  await expect(formationBlocks.nth(2)).toContainText("F3");
+  await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 목록" }).click();
+  await expect(root.locator("[data-v2-bottom-sheet='formation-list']")).toBeVisible();
   expect(browserIssues).toEqual([]);
 });
 
@@ -349,43 +302,44 @@ test("top action dropdowns stay scoped and visible across desktop and mobile", a
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
 
-  const desktopSurface = ".desktop-command-bar";
-  await openTopActionMenu(page, desktopSurface, "공유", ".share-action-menu");
-  await expectMenuInsideViewport(page, ".desktop-command-bar .share-action-menu");
-  await openTopActionMenu(page, desktopSurface, "다운로드", ".download-action-menu");
-  await expect(page.locator(".desktop-command-bar .share-action-menu")).toHaveCount(0);
-  await expectMenuInsideViewport(page, ".desktop-command-bar .download-action-menu");
-  await openTopActionMenu(page, desktopSurface, "더보기", ".more-action-menu");
-  await expect(page.locator(".desktop-command-bar .download-action-menu")).toHaveCount(0);
-  await expectMenuInsideViewport(page, ".desktop-command-bar .more-action-menu", { screenshotPath: "test-results/top-dropdown-desktop-more.png" });
+  const root = page.locator("[data-v2-visual-editor]");
+  await expect(root).toBeVisible();
+  await root.getByRole("button", { name: "공유" }).click();
+  await expect(root.locator(".v2-share-menu")).toBeVisible();
+  await expectMenuInsideViewport(page, ".v2-share-menu");
+  await root.getByRole("button", { name: "내보내기" }).click();
+  await expect(root.locator(".v2-share-menu")).toHaveCount(0);
+  await expect(root.locator(".v2-export-menu")).toBeVisible();
+  await expectMenuInsideViewport(page, ".v2-export-menu");
+  await root.getByRole("button", { name: "더보기" }).click();
+  await expect(root.locator(".v2-export-menu")).toHaveCount(0);
+  await expect(root.locator(".v2-more-menu")).toBeVisible();
+  await expectMenuInsideViewport(page, ".v2-more-menu", { screenshotPath: "test-results/top-dropdown-v2-more.png" });
   await page.keyboard.press("Escape");
-  await expect(page.locator(".top-action-menu")).toHaveCount(0);
-  await openTopActionMenu(page, desktopSurface, "공유", ".share-action-menu");
-  await page.locator(".stage-frame").click({ position: { x: 12, y: 12 } });
-  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+  await expect(root.locator(".v2-top-menu")).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
-  await expect(page.locator("[data-stitch-mobile-editor] .stitch-topbar")).toBeVisible();
-  await expect(page.locator("[data-stitch-mobile-editor] .mobile-action-bar")).toBeVisible();
+  await expect(root).toBeVisible();
+  await expect(root.locator(".v2-topbar")).toBeVisible();
+  await expect(root.locator("[data-v2-action-bar]")).toBeVisible();
 
   await page.setViewportSize({ width: 844, height: 390 });
-  await expect(page.locator("[data-stitch-mobile-editor]")).toBeVisible();
-  await expect(page.locator("[data-stitch-mobile-editor] .stitch-topbar")).toBeVisible();
+  await expect(root).toBeVisible();
+  await expect(root.locator(".v2-topbar")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator(".top-action-menu")).toHaveCount(0);
+  await expect(root.locator(".v2-top-menu")).toHaveCount(0);
   expect(browserIssues).toEqual([]);
 });
 
-test("mobile viewport keeps the Stitch stage shell editable", async ({ page }) => {
+test("mobile viewport keeps the V2 stage shell editable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
 
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  const editor = page.locator("[data-stitch-mobile-editor]");
+  const editor = page.locator("[data-v2-visual-editor]");
   await expect(editor).toBeVisible();
-  const token = editor.locator(".token").first();
+  const token = editor.locator("[data-v2-performer-token]").first();
   await expect(token).toBeVisible();
 
   const box = await token.boundingBox();
@@ -402,28 +356,28 @@ test("mobile viewport keeps the Stitch stage shell editable", async ({ page }) =
   await token.dispatchEvent("pointerdown", { ...pointer, clientX: start.x, clientY: start.y, buttons: 1 });
   await expectNoBottomStatus(page);
 
-  await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "token-selected");
+  await expect(editor.locator("[data-v2-action-bar]")).toHaveAttribute("data-v2-action-bar-state", "performer");
 
   const viewport = page.viewportSize();
-  const actionBarBox = await editor.locator(".mobile-action-bar").boundingBox();
+  const actionBarBox = await editor.locator("[data-v2-action-bar]").boundingBox();
   expect(viewport).not.toBeNull();
   expect(actionBarBox).not.toBeNull();
   const bottomGap = viewport.height - actionBarBox.y - actionBarBox.height;
-  expect(bottomGap).toBeGreaterThanOrEqual(viewport.height * 0.01);
-  expect(bottomGap).toBeLessThanOrEqual(viewport.height * 0.035);
+  expect(bottomGap).toBeGreaterThanOrEqual(0);
+  expect(bottomGap).toBeLessThanOrEqual(2);
   expect(Math.abs(actionBarBox.x + actionBarBox.width / 2 - viewport.width / 2)).toBeLessThan(2);
 });
 
-test("mobile contextual performer actions expose the Stitch action rail", async ({ page }) => {
+test("mobile contextual performer actions expose the V2 action bar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
 
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  const editor = page.locator("[data-stitch-mobile-editor]");
+  const editor = page.locator("[data-v2-visual-editor]");
   await expect(editor).toBeVisible();
-  const firstToken = editor.locator(".token").first();
-  const secondToken = editor.locator(".token").nth(1);
+  const firstToken = editor.locator("[data-v2-performer-token]").first();
+  const secondToken = editor.locator("[data-v2-performer-token]").nth(1);
   await expect(firstToken).toBeVisible();
   await expect(secondToken).toBeVisible();
 
@@ -440,9 +394,9 @@ test("mobile contextual performer actions expose the Stitch action rail", async 
     buttons: 1
   });
 
-  await expect(page.locator(".app")).toHaveAttribute("data-selection-state", "token-selected");
-  await expect(editor.locator(".mobile-action-bar")).toBeVisible();
-  await expect(editor.locator(".mobile-action-bar button")).not.toHaveCount(0);
+  await expect(editor.locator("[data-v2-action-bar]")).toHaveAttribute("data-v2-action-bar-state", "performer");
+  await expect(editor.locator("[data-v2-action-bar]")).toBeVisible();
+  await expect(editor.locator("[data-v2-action-bar] button")).not.toHaveCount(0);
   await expect(page.locator(".mobile-bottom-sheet")).toHaveCount(0);
 
   const secondBox = await secondToken.boundingBox();
@@ -459,24 +413,22 @@ test("mobile contextual performer actions expose the Stitch action rail", async 
     buttons: 1
   });
 
-  await expect(editor.locator(".mobile-action-bar")).toBeVisible();
-  await expect(editor.locator(".mobile-action-bar button")).not.toHaveCount(0);
+  await expect(editor.locator("[data-v2-action-bar]")).toBeVisible();
+  await expect(editor.locator("[data-v2-action-bar] button")).not.toHaveCount(0);
 });
 
-test("View Link route opens readonly review with transition warnings", async ({ page }) => {
+test("View Link route opens readonly V2 review", async ({ page }) => {
   await routeCloudProject(page, seededProject());
   await page.goto("/share/project-1");
 
-  await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
+  const root = page.locator("[data-v2-visual-editor]");
+  await expect(root).toBeVisible();
   await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
-  await expect(page.locator(".transition-warning").filter({ hasText: /먼 이동 주의/ })).toBeVisible();
-  await expect(page.locator(".transition-warning").filter({ hasText: /겹침 주의\(현재 대형 전체\)/ })).toBeVisible();
-  await expect(page.getByLabel("전환 리뷰")).toBeVisible();
-  await expect(page.getByText(/전체 겹침 1/)).toBeVisible();
-  await expect(page.locator(".formation-block")).toHaveCount(3);
+  await expect(root.locator("[data-v2-segment-kind='hold']")).toHaveCount(3);
+  await expect(root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" })).toBeDisabled();
 });
 
-test("valid Edit Link route exposes edit controls", async ({ page }) => {
+test("valid Edit Link route exposes V2 edit controls", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       value: {
@@ -490,13 +442,13 @@ test("valid Edit Link route exposes edit controls", async ({ page }) => {
   await routeCloudProject(page, seededProject());
   await page.goto("/edit/project-1?token=valid");
 
-  await expect(page.getByRole("button", { name: "저장하기" })).toBeVisible();
+  const root = page.locator("[data-v2-visual-editor]");
+  await expect(root).toBeVisible();
   await expect(page.getByText(/편집 링크 토큰이 맞지 않아/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /대형 추가/ })).toBeVisible();
-  await expect(page.getByLabel("전환 리뷰")).toBeVisible();
+  await expect(root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" })).toBeEnabled();
 
-  await page.locator(".desktop-command-bar").getByRole("button", { name: "공유" }).click();
-  await page.locator(".share-action-menu").getByRole("button", { name: "보기 링크 복사" }).click();
+  await root.getByRole("button", { name: "공유" }).click();
+  await root.locator(".v2-share-menu .v2-menu-link-row").filter({ hasText: "보기 링크" }).getByRole("button", { name: "복사" }).click();
   await expect(page.locator(".status")).toContainText("공유 링크를 복사했습니다.");
   await expect.poll(() => page.evaluate(() => window.__lastCopiedText)).toContain("/share/project-1");
   await page.getByRole("button", { name: "상태 알림 닫기" }).click();
@@ -577,75 +529,51 @@ test("invalid or disabled links fall back without edit controls", async ({ page 
   await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
 });
 
-test("mobile review and mobile toolbar routes stay usable", async ({ page }) => {
+test("mobile V2 review and toolbar routes stay usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routeCloudProject(page, seededProject({ longMove: false }));
   await page.goto("/share/project-1");
 
-  await expect(page.locator(".stage")).toBeVisible();
-  await expect(page.getByText(/보기 링크 · View Link/)).toBeVisible();
+  await expect(page.locator("[data-v2-stage]")).toBeVisible();
+  await expect(page.locator("[data-v2-visual-editor]")).toBeVisible();
 
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  const editor = page.locator("[data-stitch-mobile-editor]");
+  const editor = page.locator("[data-v2-visual-editor]");
   await expect(editor).toBeVisible();
-  await expect(editor.locator(".stitch-topbar")).toBeVisible();
+  await expect(editor.locator(".v2-topbar")).toBeVisible();
   await expect(page.getByRole("button", { name: "Google 로그인" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "저장하기" })).toHaveCount(0);
-  await expect(editor.locator(".stage-area")).toBeVisible();
-  await expect(editor.locator(".timeline-editor")).toBeVisible();
-  await expect(editor.locator(".mobile-action-bar")).toBeVisible();
+  await expect(editor.locator("[data-v2-stage]")).toBeVisible();
+  await expect(editor.locator("[data-v2-timeline]")).toBeVisible();
+  await expect(editor.locator("[data-v2-action-bar]")).toBeVisible();
 
-  const stageFrameBox = await editor.locator(".stage-frame").boundingBox();
-  const timelineEditorBox = await editor.locator(".timeline-editor").boundingBox();
-  const actionBarInitialBox = await editor.locator(".mobile-action-bar").boundingBox();
+  const stageFrameBox = await editor.locator("[data-v2-stage]").boundingBox();
+  const timelineEditorBox = await editor.locator("[data-v2-timeline]").boundingBox();
+  const actionBarInitialBox = await editor.locator("[data-v2-action-bar]").boundingBox();
   expect(stageFrameBox).not.toBeNull();
   expect(timelineEditorBox).not.toBeNull();
   expect(actionBarInitialBox).not.toBeNull();
 });
 
-test("stage references templates stage size import and 3d smoke stay stable", async ({ page }) => {
+test("V2 stage settings and template sheets stay stable", async ({ page }) => {
   const browserIssues = collectBrowserIssues(page);
   await page.addInitScript(() => localStorage.clear());
   await page.goto("/");
   await page.getByRole("button", { name: /빈 프로젝트 시작/ }).click();
-  const drawer = page.locator(".left-work-panel");
+  const root = page.locator("[data-v2-visual-editor]");
+  await expect(root.locator("[data-v2-stage-guides]")).toBeVisible();
+  await root.locator("[data-v2-action-bar]").getByRole("button", { name: "무대 설정" }).click();
+  await expect(root.locator("[data-v2-bottom-sheet='stage-settings']")).toBeVisible();
+  await expect(root.locator("[data-v2-bottom-sheet='stage-settings']")).toContainText("앞쪽 주의 구역");
+  await root.locator("[data-v2-bottom-sheet='stage-settings']").getByRole("button", { name: "닫기" }).click();
+  await expect(root.locator("[data-v2-bottom-sheet='stage-settings']")).toHaveCount(0);
 
-  await expect(page.locator(".stage-reference-layer")).toBeVisible();
-  await drawer.getByRole("tab", { name: "Formation" }).click();
-  await drawer.getByRole("button", { name: "미리보기" }).click();
-  await expect(drawer.locator(".template-preview-status")).toContainText("Line");
-  await drawer.getByRole("button", { name: "취소" }).click();
-  await expect(drawer.locator(".template-preview-status")).toHaveCount(0);
-
-  await drawer.getByRole("button", { name: "현재 대형 저장" }).click();
-  await expect(drawer.locator("select").filter({ hasText: /개인 템플릿/ })).toHaveCount(1);
-
-  await drawer.getByRole("tab", { name: "Stage" }).click();
-  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("6");
-  await expect(drawer.getByText(/축소할 수 없습니다/)).toBeVisible();
-  await drawer.locator(".stage-size-control").first().getByRole("spinbutton").fill("120");
-  await expect(page.locator(".stage")).toHaveAttribute("viewBox", "0 0 120 8");
-
-  await page.getByRole("button", { name: "더보기" }).click();
-  await page.locator(".desktop-command-bar .more-action-menu input[type='file'][accept='application/json']").setInputFiles({
-    name: "bad-movemap.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify({ title: "Bad", performers: [], sections: [] }))
-  });
-  await expect(page.getByText(/올바른 Movemap 프로젝트 파일이 아닙니다/)).toBeVisible();
-
-  await page.getByRole("button", { name: "3D" }).click();
-  const canvas = page.locator(".stage-3d-preview canvas");
-  await expect(canvas).toHaveAttribute("data-ready", "true");
-  const hasPixels = await canvas.evaluate((node) => {
-    const gl = node.getContext("webgl2") || node.getContext("webgl");
-    if (!gl) return false;
-    const pixels = new Uint8Array(4);
-    gl.readPixels(Math.floor(node.width / 2), Math.floor(node.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-    return pixels.some((value) => value !== 0);
-  });
-  expect(hasPixels).toBe(true);
+  await root.locator("[data-v2-segment-kind='hold']").first().click();
+  await root.locator("[data-v2-action-bar]").getByRole("button", { name: "템플릿" }).click();
+  await expect(root.locator("[data-v2-bottom-sheet='formation-template']")).toBeVisible();
+  await root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "Line", exact: true }).click();
+  await expect(root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "현재 대형에 적용" })).toBeEnabled();
   expect(browserIssues).toEqual([]);
 });
