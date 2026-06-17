@@ -3914,12 +3914,44 @@ test.describe("connected root V2 editor route", () => {
     await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
     await root.locator("[data-v2-action-bar]").getByRole("button", { name: "템플릿" }).click();
     const sheet = root.locator('[data-v2-bottom-sheet="formation-template"]');
-    await sheet.getByRole("button", { name: "V" }).click();
-    await sheet.getByRole("button", { name: "현재 대형에 적용" }).click();
+    const cards = sheet.locator("[data-v2-template-card]");
+    await expect(cards).toHaveCount(8);
+    for (const templateId of ["line", "v", "circle", "pairs"]) {
+      const card = sheet.locator(`[data-v2-template-card="${templateId}"]`);
+      await expect(card.locator("[data-v2-template-mini-stage]")).toBeVisible();
+      await expect(card.locator("[data-v2-template-token]")).toHaveCount(4);
+    }
+
+    const lineCard = sheet.locator('[data-v2-template-card="line"]');
+    await lineCard.hover();
+    expectNoWhiteCssSignals(await cssVisualSignals(lineCard));
+    await lineCard.focus();
+    expectNoWhiteCssSignals(await cssVisualSignals(lineCard));
+
+    const activeCard = sheet.locator('[data-v2-template-card="v"]');
+    await activeCard.click();
+    await expect(activeCard).toHaveClass(/is-active/);
+    expectNoWhiteCssSignals(await cssVisualSignals(activeCard));
+    await expect(sheet.getByRole("button", { name: "현재 대형에 적용" })).toHaveCount(0);
+    await expect.poll(() => storedProject(page).then((project) => {
+      const section = project.sections.find((item) => item.id === "diamond");
+      return section?.formationProvenance?.templateId || "";
+    })).toBe("v");
     await expect.poll(() => storedProject(page).then((project) => {
       const section = project.sections.find((item) => item.id === "diamond");
       return new Set(Object.values(section?.positions || {}).map((position) => Number(position.x).toFixed(2))).size;
     })).toBeGreaterThan(1);
+    await expect.poll(() => storedProject(page).then((project) => {
+      const section = project.sections.find((item) => item.id === "diamond");
+      return Object.values(section?.positions || {}).every((position) => (
+        Number.isInteger(position.x)
+        && Number.isInteger(position.y)
+        && position.x >= 0
+        && position.x <= project.stage.width
+        && position.y >= 0
+        && position.y <= project.stage.height
+      ));
+    })).toBe(true);
     const beforeCount = await storedProject(page).then((project) => project.sections.length);
     await sheet.getByRole("button", { name: "새 대형으로 추가" }).click();
     await expect.poll(() => storedProject(page).then((project) => project.sections.length)).toBe(beforeCount + 1);

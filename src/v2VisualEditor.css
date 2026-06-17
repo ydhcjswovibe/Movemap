@@ -1898,11 +1898,17 @@
 .v2-template-list,
 .v2-template-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 6px;
 }
 
-.v2-template-list button,
+.v2-template-list {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.v2-template-actions {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
 .v2-template-actions button {
   min-width: 0;
   min-height: 34px;
@@ -1916,12 +1922,99 @@
   font-weight: 850;
 }
 
-.v2-template-list button.is-active,
-.v2-template-list button:focus-visible,
+.v2-template-card {
+  min-width: 0;
+  min-height: 118px;
+  display: grid;
+  grid-template-rows: minmax(72px, 1fr) auto auto;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--v2-line-strong);
+  border-radius: 6px;
+  background: var(--v2-panel-raised);
+  color: #e8eef8;
+  font: inherit;
+  text-align: left;
+}
+
+.v2-template-card:hover {
+  border-color: rgba(79, 141, 255, 0.38);
+  background: rgba(79, 141, 255, 0.12);
+}
+
+.v2-template-card.is-active,
+.v2-template-card:focus-visible,
 .v2-template-actions button:focus-visible {
   border-color: rgba(79, 141, 255, 0.58);
   background: rgba(79, 141, 255, 0.18);
   outline: none;
+}
+
+.v2-template-card:focus-visible {
+  box-shadow: 0 0 0 2px rgba(79, 141, 255, 0.16);
+}
+
+.v2-template-card:disabled,
+.v2-template-card.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v2-template-mini-stage {
+  width: 100%;
+  min-height: 72px;
+  align-self: stretch;
+  justify-self: stretch;
+}
+
+.v2-template-mini-stage-bg {
+  fill: rgba(6, 10, 16, 0.92);
+}
+
+.v2-template-mini-stage-grid line {
+  stroke: rgba(226, 235, 247, 0.14);
+  stroke-width: 0.035;
+  vector-effect: non-scaling-stroke;
+}
+
+.v2-template-mini-stage-outline {
+  fill: none;
+  stroke: rgba(226, 235, 247, 0.24);
+  stroke-width: 0.07;
+  vector-effect: non-scaling-stroke;
+}
+
+.v2-template-mini-stage-tokens circle {
+  fill: #4f8dff;
+  stroke: rgba(244, 247, 251, 0.78);
+  stroke-width: 0.055;
+  vector-effect: non-scaling-stroke;
+}
+
+.v2-template-mini-stage-tokens circle.is-alt {
+  fill: #f05f8f;
+}
+
+.v2-template-card-caption {
+  min-width: 0;
+  overflow: hidden;
+  color: #f4f7fb;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-template-card-state {
+  min-width: 0;
+  overflow: hidden;
+  color: #93a0b3;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .v2-template-actions button {

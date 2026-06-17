@@ -1430,11 +1430,20 @@ function App() {
     showLabels: showStageReferenceLabels,
     stage: stageDimensions
   }) : [], [plan, stageDimensions, showStageReferences, showStageReferenceLabels]);
-  const selectedTemplatePreview = useMemo(() => plan
-    ? selectedTemplateId.startsWith("personal:")
-      ? personalTemplateToPreview(personalTemplates.find((template) => `personal:${template.id}` === selectedTemplateId))
-      : buildFormationTemplatePreview(selectedTemplateId, plan.performers, plan.stage)
-    : null, [plan, selectedTemplateId, personalTemplates]);
+  const formationTemplatePreviews = useMemo(() => plan
+    ? [
+        ...FORMATION_TEMPLATES.map((template) => buildFormationTemplatePreview(template.id, plan.performers, plan.stage)),
+        ...personalTemplates.map((template) => {
+          const preview = personalTemplateToPreview(template);
+          return preview ? { ...preview, templateId: `personal:${template.id}` } : null;
+        }).filter(Boolean)
+      ]
+    : [], [plan, personalTemplates]);
+  const selectedTemplatePreview = useMemo(() => (
+    formationTemplatePreviews.find((template) => template.templateId === selectedTemplateId)
+      || formationTemplatePreviews[0]
+      || null
+  ), [formationTemplatePreviews, selectedTemplateId]);
   const counts = useMemo(() => plan ? exposureCounts({ ...plan, sections: sortedSections }) : {}, [plan, sortedSections]);
 
   useEffect(() => {
@@ -3272,9 +3281,11 @@ function App() {
     clearQuietStatus();
   }
 
-  function applySelectedTemplateToCurrentFormation() {
-    if (readonly || !selectedSection || !selectedTemplatePreview) return;
-    const nextSection = applyTemplatePositionsToSection(selectedSection, { kind: "template", ...selectedTemplatePreview });
+  function selectAndApplyTemplateToCurrentFormation(templateId) {
+    setSelectedTemplateId(templateId);
+    const preview = formationTemplatePreviews.find((template) => template.templateId === templateId);
+    if (readonly || !selectedSection || !preview?.fitsAll) return;
+    const nextSection = applyTemplatePositionsToSection(selectedSection, { kind: "template", ...preview });
     updatePlan((current) => ({
       ...current,
       sections: current.sections.map((section) => section.id === selectedSection.id ? nextSection : section)
@@ -3321,7 +3332,7 @@ function App() {
   }
 
   function addFormationFromSelectedTemplate() {
-    if (readonly || !selectedTemplatePreview || !plan) return;
+    if (readonly || !selectedTemplatePreview?.fitsAll || !plan) return;
     const captureTime = audioRef.current ? audioRef.current.currentTime || currentTime : currentTime;
     const target = resolveFormationAddTarget(sortedSections, captureTime);
     if (target.action === "select") {
@@ -5403,10 +5414,7 @@ function App() {
     exportJson,
     exportPng,
     formationListMode: v2FormationListMode,
-    formationTemplates: [
-      ...FORMATION_TEMPLATES,
-      ...personalTemplates.map((template) => ({ id: `personal:${template.id}`, label: template.label }))
-    ],
+    formationTemplates: formationTemplatePreviews,
     handleMobileAction,
     isShareOperationPending,
     mobileContextSelection,
@@ -5427,7 +5435,7 @@ function App() {
     redoPlan,
     selectionMode: mobileContextSelection,
     selectPerformer,
-    selectTemplate: setSelectedTemplateId,
+    selectTemplate: selectAndApplyTemplateToCurrentFormation,
     selectedFormationIds: v2SelectedFormationIds,
     selectedSection,
     selectedSectionId: mobileContextSelection === "formation" ? selectedSectionId : "",
@@ -5465,7 +5473,6 @@ function App() {
     updateSelectedFormationMetadataField,
     finishSelectedFormationMetadataEdit,
     saveCurrentFormationTemplate: saveCurrentPersonalTemplate,
-    applySelectedTemplateToCurrentFormation,
     addFormationFromSelectedTemplate,
     toggleSnap: () => setSnapEnabled((value) => !value),
     toggleStageReferenceLabels: () => setShowStageReferenceLabels((value) => !value),

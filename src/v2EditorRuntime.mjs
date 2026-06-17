@@ -490,6 +490,11 @@ export function createV2EditorRuntime(input = {}) {
   const selectedFormationForSheet = hasFormationSelection ? selectedSection : null;
   const selectedFormationIndex = sortedSections.findIndex((section) => section.id === selectedSectionId);
   const safeSelectedFormationIndex = Math.max(0, selectedFormationIndex);
+  const formationTemplateItems = normalizeArray(input.formationTemplates);
+  const selectedTemplateForSheet = formationTemplateItems.find((template) => template.id === input.selectedTemplateId || template.templateId === input.selectedTemplateId)
+    || formationTemplateItems[0]
+    || null;
+  const selectedTemplateFits = selectedTemplateForSheet?.fitsAll !== false;
   const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
     title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "formation-details" ? "이름/메모" : activeBottomSheet === "formation-template" ? "템플릿" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
@@ -532,8 +537,7 @@ export function createV2EditorRuntime(input = {}) {
       headerLabel: selectedFormationForSheet ? `${formationSequenceLabel(safeSelectedFormationIndex)} ${sectionDisplayName(selectedFormationForSheet)}` : "대형 없음",
       actions: [
         { key: "save-current-template", label: "현재 대형 저장", disabled: readonly || !selectedFormationForSheet },
-        { key: "apply-template", label: "현재 대형에 적용", disabled: readonly || !selectedFormationForSheet },
-        { key: "add-template-formation", label: "새 대형으로 추가", disabled: readonly || !selectedFormationForSheet }
+        { key: "add-template-formation", label: "새 대형으로 추가", disabled: readonly || !selectedFormationForSheet || !selectedTemplateFits }
       ],
       headerActions: [
         { key: "close-sheet", icon: "close", label: "닫기" }
@@ -560,12 +564,22 @@ export function createV2EditorRuntime(input = {}) {
           action: formationListMode === "multi" ? "toggle-formation-selection" : "select-formation"
         }))
       : activeBottomSheet === "formation-template"
-        ? normalizeArray(input.formationTemplates).map((template) => ({
-            key: `formation-template-${template.id}`,
+        ? formationTemplateItems.map((template) => ({
+            key: `formation-template-${template.templateId || template.id}`,
             kind: "formation-template",
-            templateId: template.id,
+            templateId: template.templateId || template.id,
             label: template.label || template.name || template.id,
-            active: template.id === input.selectedTemplateId
+            preview: {
+              stage: template.stage,
+              positions: template.positions,
+              performerCount: template.performerCount,
+              gridUnit: template.gridUnit,
+              fitsAll: template.fitsAll !== false,
+              disabledReason: template.disabledReason || ""
+            },
+            disabled: readonly || !selectedFormationForSheet || template.fitsAll === false,
+            stateLabel: template.fitsAll === false ? template.disabledReason || "무대/인원 초과" : `${template.performerCount ?? Object.keys(template.positions || {}).length}명 · 1m Snap`,
+            active: (template.templateId || template.id) === input.selectedTemplateId
           }))
       : activeBottomSheet === "cast-list"
         ? cast.performers.map((performer) => ({
@@ -647,7 +661,6 @@ export function createV2EditorRuntime(input = {}) {
     updateSelectedFormationMetadataField: input.updateSelectedFormationMetadataField,
     finishSelectedFormationMetadataEdit: input.finishSelectedFormationMetadataEdit,
     saveCurrentFormationTemplate: input.saveCurrentFormationTemplate,
-    applySelectedTemplateToCurrentFormation: input.applySelectedTemplateToCurrentFormation,
     addFormationFromSelectedTemplate: input.addFormationFromSelectedTemplate,
     selectTemplate: input.selectTemplate,
     updateFrontCautionZone: input.updateFrontCautionZone,

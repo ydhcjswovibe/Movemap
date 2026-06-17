@@ -574,6 +574,7 @@ test("V2 stage settings and template sheets stay stable", async ({ page }) => {
   await root.locator("[data-v2-action-bar]").getByRole("button", { name: "템플릿" }).click();
   await expect(root.locator("[data-v2-bottom-sheet='formation-template']")).toBeVisible();
   await root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "Line", exact: true }).click();
-  await expect(root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "현재 대형에 적용" })).toBeEnabled();
+  await expect(root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "현재 대형에 적용" })).toHaveCount(0);
+  await expect(root.locator("[data-v2-bottom-sheet='formation-template']").getByRole("button", { name: "새 대형으로 추가" })).toBeEnabled();
   expect(browserIssues).toEqual([]);
 });

@@ -269,17 +269,43 @@ test("V2 runtime exposes formation details and template sheets", () => {
     selectedSectionId: "f2",
     selectedSection: { id: "f2", name: "Chorus" },
     sortedSections: [{ id: "f2", name: "Chorus" }],
-    formationTemplates: [{ id: "v", label: "V" }],
+    formationTemplates: [{
+      templateId: "v",
+      label: "V",
+      stage: { width: 12, height: 8 },
+      positions: { a1: { x: 5, y: 3 }, a2: { x: 7, y: 3 } },
+      performerCount: 2,
+      gridUnit: 1,
+      fitsAll: true
+    }],
+    selectedTemplateId: "v",
     readonly: false
   });
 
   assert.equal(templateRuntime.bottomSheet.key, "formation-template");
   assert.equal(templateRuntime.bottomSheet.items[0].label, "V");
+  assert.equal(templateRuntime.bottomSheet.items[0].templateId, "v");
+  assert.deepEqual(templateRuntime.bottomSheet.items[0].preview.positions, { a1: { x: 5, y: 3 }, a2: { x: 7, y: 3 } });
+  assert.equal(templateRuntime.bottomSheet.items[0].stateLabel, "2명 · 1m Snap");
   assert.deepEqual(templateRuntime.bottomSheet.actions.map((action) => action.key), [
     "save-current-template",
-    "apply-template",
     "add-template-formation"
   ]);
+
+  const overflowRuntime = createV2EditorRuntime({
+    activeBottomSheet: "formation-template",
+    mobileContextSelection: "formation",
+    selectedSectionId: "f2",
+    selectedSection: { id: "f2", name: "Chorus" },
+    sortedSections: [{ id: "f2", name: "Chorus" }],
+    formationTemplates: [{ templateId: "block", label: "Block", fitsAll: false, disabledReason: "무대/인원 초과" }],
+    selectedTemplateId: "block",
+    readonly: false
+  });
+
+  assert.equal(overflowRuntime.bottomSheet.items[0].disabled, true);
+  assert.equal(overflowRuntime.bottomSheet.items[0].stateLabel, "무대/인원 초과");
+  assert.equal(overflowRuntime.bottomSheet.actions.find((action) => action.key === "add-template-formation").disabled, true);
 });
 
 test("V2 minimal cast stage and music sheets honor readonly gating", () => {

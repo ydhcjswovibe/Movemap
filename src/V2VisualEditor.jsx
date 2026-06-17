@@ -68,6 +68,48 @@ function roleClass(performer) {
   return performer.role === "groupB" || performer.group === "groupB" || performer.group === "b" ? "b" : "a";
 }
 
+function V2TemplateMiniStage({ preview = {}, label = "" }) {
+  const stage = preview.stage || { width: 12, height: 8 };
+  const width = Math.max(1, Number(stage.width) || 12);
+  const height = Math.max(1, Number(stage.height) || 8);
+  const gridWidth = Math.floor(width);
+  const gridHeight = Math.floor(height);
+  const tokenRadius = Math.max(0.18, Math.min(width, height) * 0.035);
+  const positions = Object.entries(preview.positions || {});
+  const gridLinesX = Array.from({ length: gridWidth + 1 }, (_, index) => index);
+  const gridLinesY = Array.from({ length: gridHeight + 1 }, (_, index) => index);
+
+  return (
+    <svg
+      className="v2-template-mini-stage"
+      data-v2-template-mini-stage
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={`${label} mini stage`}
+    >
+      <rect className="v2-template-mini-stage-bg" x="0" y="0" width={width} height={height} rx="0.18" />
+      <g className="v2-template-mini-stage-grid" aria-hidden="true">
+        {gridLinesX.map((x) => <line key={`x-${x}`} x1={x} y1="0" x2={x} y2={height} />)}
+        {gridLinesY.map((y) => <line key={`y-${y}`} x1="0" y1={y} x2={width} y2={y} />)}
+      </g>
+      <rect className="v2-template-mini-stage-outline" x="0" y="0" width={width} height={height} rx="0.18" />
+      <g className="v2-template-mini-stage-tokens">
+        {positions.map(([performerId, position], index) => (
+          <circle
+            key={performerId}
+            data-v2-template-token
+            cx={Math.max(0, Math.min(width, Number(position.x) || 0))}
+            cy={Math.max(0, Math.min(height, Number(position.y) || 0))}
+            r={tokenRadius}
+            className={index % 2 ? "is-alt" : ""}
+          />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 function normalizeSaveLabel(label) {
   const value = String(label || "").trim();
   if (!value) return "Saved";
@@ -1505,10 +1547,19 @@ function V2VisualEditor({ model, actions = {} }) {
                     <button
                       key={item.key}
                       type="button"
-                      className={item.active ? "is-active" : ""}
+                      className={[
+                        "v2-template-card",
+                        item.active ? "is-active" : "",
+                        item.disabled ? "is-disabled" : ""
+                      ].filter(Boolean).join(" ")}
+                      data-v2-template-card={item.templateId}
+                      disabled={Boolean(item.disabled)}
+                      aria-label={item.label}
                       onClick={() => runBottomSheetItem(item)}
                     >
-                      {item.label}
+                      <V2TemplateMiniStage preview={item.preview} label={item.label} />
+                      <span className="v2-template-card-caption">{item.label}</span>
+                      {item.stateLabel && <span className="v2-template-card-state">{item.stateLabel}</span>}
                     </button>
                   ))}
                 </div>
@@ -1516,9 +1567,7 @@ function V2VisualEditor({ model, actions = {} }) {
                   {(view.bottomSheet.actions || []).map((action) => {
                     const handler = action.key === "save-current-template"
                       ? runtimeActions.saveCurrentFormationTemplate
-                      : action.key === "apply-template"
-                        ? runtimeActions.applySelectedTemplateToCurrentFormation
-                        : runtimeActions.addFormationFromSelectedTemplate;
+                      : runtimeActions.addFormationFromSelectedTemplate;
                     return (
                       <button
                         key={action.key}
