@@ -769,12 +769,11 @@
 
 .v2-token.is-selected {
   z-index: 6;
-  border: 2px solid #9fc0ff;
-  background: var(--v2-accent-strong);
+  border: 2px solid #ffffff;
   box-shadow:
-    0 0 0 1px rgba(8, 12, 18, 0.72) inset,
-    0 0 0 var(--v2-token-selected-spread, 4px) rgba(79, 141, 255, 0.42),
-    0 0 18px rgba(79, 141, 255, 0.24);
+    0 0 0 1px rgba(8, 12, 18, 0.86) inset,
+    0 0 0 var(--v2-token-selected-spread, 4px) rgba(255, 255, 255, 0.72),
+    0 0 0 calc(var(--v2-token-selected-spread, 4px) + 2px) rgba(8, 12, 18, 0.58);
 }
 
 .v2-transport {

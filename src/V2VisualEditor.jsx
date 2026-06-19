@@ -5,6 +5,8 @@ import "./v2VisualEditor.css";
 
 const V2_BLOCK_TAP_SLOP_MOUSE_PX = 18;
 const V2_BLOCK_TAP_SLOP_TOUCH_PX = 24;
+const V2_STAGE_TAP_SLOP_MOUSE_PX = 10;
+const V2_STAGE_TAP_SLOP_TOUCH_PX = 16;
 const V2_TRIM_HIT_RATIO = 0.15;
 const V2_TRIM_HIT_MIN_WIDTH_PX = 10;
 const V2_SELECTED_TRIM_HIT_MAX_WIDTH_PX = 24;
@@ -307,11 +309,13 @@ function V2VisualEditor({ model, actions = {} }) {
   const stageSurfaceRef = useRef(null);
   const timelineTouchRef = useRef(null);
   const tokenGestureRef = useRef(null);
+  const stageTapGestureRef = useRef(null);
   const blockTapGestureRef = useRef(null);
   const settingsHoverTimerRef = useRef(null);
   const trimHoverTimerRef = useRef(null);
   const pendingTrimHoverRef = useRef(null);
   const suppressNextTokenClickRef = useRef(false);
+  const suppressNextStageClickRef = useRef(false);
   const [openTopMenu, setOpenTopMenu] = useState("");
   const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
   const [hoverTrimTarget, setHoverTrimTarget] = useState(null);
@@ -482,6 +486,47 @@ function V2VisualEditor({ model, actions = {} }) {
   const handlePlayheadPointerDown = (event) => {
     event.stopPropagation();
     runtimeActions.timelinePointerDown?.(event, { kind: "playhead" });
+  };
+  const isStageTapBlockedTarget = (event) => Boolean(
+    event?.target?.closest?.(".v2-token, .v2-zoom-rail")
+  );
+  const handleStageSurfacePointerDown = (event) => {
+    if (isStageTapBlockedTarget(event)) return;
+    stageTapGestureRef.current = {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || "mouse",
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    try {
+      event.currentTarget?.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic browser events may not support pointer capture.
+    }
+  };
+  const updateStageTapGesture = (event) => {
+    const gesture = stageTapGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return null;
+    const slopPx = gesture.pointerType === "touch" ? V2_STAGE_TAP_SLOP_TOUCH_PX : V2_STAGE_TAP_SLOP_MOUSE_PX;
+    if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > slopPx) {
+      gesture.moved = true;
+    }
+    return gesture;
+  };
+  const finishStageTapGesture = (event) => {
+    const gesture = updateStageTapGesture(event);
+    if (!gesture) return false;
+    stageTapGestureRef.current = null;
+    try {
+      event.currentTarget?.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Pointer capture may already be released.
+    }
+    if (gesture.moved || isStageTapBlockedTarget(event)) return false;
+    suppressNextStageClickRef.current = true;
+    runtimeActions.stageTap?.(event, stageSurfaceRef.current);
+    return true;
   };
   const isTimelineHandleEvent = (event) => Boolean(
     event?.target?.closest?.("[data-v2-timeline-handle]")
@@ -1022,11 +1067,13 @@ function V2VisualEditor({ model, actions = {} }) {
             className="v2-stage-surface"
             ref={stageSurfaceRef}
             style={stageSurfaceStyle}
+            onPointerDown={handleStageSurfacePointerDown}
             onPointerMove={(event) => {
               const gesture = tokenGestureRef.current;
               if (gesture?.pointerId === event.pointerId && Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 3) {
                 gesture.moved = true;
               }
+              updateStageTapGesture(event);
               runtimeActions.stagePointerMove?.(event, stageSurfaceRef.current);
             }}
             onPointerUp={(event) => {
@@ -1035,13 +1082,21 @@ function V2VisualEditor({ model, actions = {} }) {
                 suppressNextTokenClickRef.current = Boolean(gesture.moved);
                 tokenGestureRef.current = null;
               }
+              finishStageTapGesture(event);
               runtimeActions.stagePointerUp?.(event);
             }}
             onPointerCancel={(event) => {
               tokenGestureRef.current = null;
+              stageTapGestureRef.current = null;
               runtimeActions.stagePointerUp?.(event);
             }}
-            onClick={(event) => runtimeActions.stageTap?.(event, stageSurfaceRef.current)}
+            onClick={(event) => {
+              if (suppressNextStageClickRef.current) {
+                suppressNextStageClickRef.current = false;
+                return;
+              }
+              runtimeActions.stageTap?.(event, stageSurfaceRef.current);
+            }}
           >
             <div className="v2-stage-grid" data-v2-stage-grid aria-hidden="true" />
             {stage.referencesVisible && (

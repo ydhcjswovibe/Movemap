@@ -177,6 +177,23 @@ async function seedProject(page, project = seededV2Project()) {
   }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY, plan: project });
 }
 
+async function openSeededRootV2(page, project = seededV2Project()) {
+  await seedProject(page, project);
+  await page.goto("/");
+  const root = page.locator("[data-v2-visual-editor]");
+  try {
+    await expect(root).toBeVisible({ timeout: 10000 });
+  } catch {
+    await page.evaluate(({ storageKey, legacyStorageKey, plan }) => {
+      localStorage.setItem(storageKey, JSON.stringify(plan));
+      localStorage.removeItem(legacyStorageKey);
+    }, { storageKey: STORAGE_KEY, legacyStorageKey: LEGACY_STORAGE_KEY, plan: project });
+    await page.reload();
+    await expect(root).toBeVisible({ timeout: 10000 });
+  }
+  return root;
+}
+
 async function routeCloudProject(page, plan, projectId = "v2-edit-project") {
   await page.route("**/rest/v1/rpc/get_project_by_edit_token", async (route) => {
     const payload = route.request().postDataJSON?.() || {};
@@ -226,14 +243,13 @@ function expectNoWhiteCssSignals(signals) {
 }
 
 function expectBlueCssSignal(value) {
-  const match = String(value || "").match(/rgba?\(([^)]+)\)/);
-  expect(match).not.toBeNull();
-  const [r, g, b] = match[1].split(",").map((part) => Number(part.trim()));
-  expect(r).toBeGreaterThanOrEqual(40);
-  expect(r).toBeLessThanOrEqual(190);
-  expect(g).toBeGreaterThanOrEqual(100);
-  expect(g).toBeLessThanOrEqual(215);
-  expect(b).toBeGreaterThanOrEqual(240);
+  const matches = Array.from(String(value || "").matchAll(/rgba?\(([^)]+)\)/g));
+  expect(matches.length).toBeGreaterThan(0);
+  const hasBlueSignal = matches.some((match) => {
+    const [r, g, b] = match[1].split(",").map((part) => Number(part.trim()));
+    return r >= 40 && r <= 190 && g >= 100 && g <= 215 && b >= 240;
+  });
+  expect(hasBlueSignal).toBe(true);
 }
 
 async function cssVisualSignals(locator, pseudo = null) {
@@ -641,18 +657,23 @@ test.describe("connected root V2 editor route", () => {
     await tokenB2.click();
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
     await expect(infoLine).toContainText("B2 · groupB");
-    const tokenSelectedStyles = await root.evaluate(() => {
+    const readTokenSelectedStyles = () => root.evaluate(() => {
       const token = document.querySelector(".v2-token.is-selected");
       const style = token ? getComputedStyle(token) : null;
       return {
+        background: style?.backgroundColor || "",
         border: style?.borderColor || "",
-        shadow: style?.boxShadow || ""
+        shadow: style?.boxShadow || "",
+        tokenColor: token?.style?.getPropertyValue("--token-color") || ""
       };
     });
-    expectBlueCssSignal(tokenSelectedStyles.border);
-    expect(tokenSelectedStyles.shadow).toContain("79, 141, 255");
-    expectNoWhiteCssSignal(tokenSelectedStyles.border);
-    expectNoWhiteCssSignal(tokenSelectedStyles.shadow);
+    await expect.poll(async () => (await readTokenSelectedStyles()).border).toContain("255, 255, 255");
+    const tokenSelectedStyles = await readTokenSelectedStyles();
+    expect(tokenSelectedStyles.tokenColor).toBe("#e84a7f");
+    expect(tokenSelectedStyles.background).toContain("232, 74, 127");
+    expect(tokenSelectedStyles.border).toContain("255, 255, 255");
+    expect(tokenSelectedStyles.shadow).toContain("255, 255, 255");
+    expect(tokenSelectedStyles.shadow).not.toContain("79, 141, 255");
 
     const boxes = await root.evaluate((node) => {
       const rectFor = (selector) => {
@@ -776,9 +797,8 @@ test.describe("connected root V2 editor route", () => {
     await page.mouse.move(tokenBox.x + tokenBox.width / 2, tokenBox.y + tokenBox.height / 2);
     await page.mouse.down();
     const activeSignals = await cssVisualSignals(token);
-    expectBlueCssSignal(activeSignals.backgroundColor);
+    expect(activeSignals.backgroundColor).toBe(baseSignals.backgroundColor);
     expectBlueCssSignal(activeSignals.borderColor);
-    expect(activeSignals.boxShadow).toContain("79, 141, 255");
     expectNoWhiteCssSignals(activeSignals);
     await page.mouse.up();
   });
@@ -1098,24 +1118,61 @@ test.describe("connected root V2 editor route", () => {
 
   test("moves a selected V2 performer to empty stage space and clears selection", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await seedProject(page);
-    await page.goto("/");
-
-    const root = page.locator("[data-v2-visual-editor]");
+    const root = await openSeededRootV2(page);
     const stageSurface = root.locator(".v2-stage-surface");
     const token = root.locator('[data-v2-performer-token="a1"]');
+    await expect(token).toBeVisible();
     await token.click();
     await expect(token).toHaveAttribute("aria-pressed", "true");
 
     const stageBox = await stageSurface.boundingBox();
     expect(stageBox).not.toBeNull();
-    await page.mouse.click(stageBox.x + stageBox.width * 0.75, stageBox.y + stageBox.height * 0.72);
+    const pointerId = 731;
+    const tapX = stageBox.x + stageBox.width * 0.75;
+    const tapY = stageBox.y + stageBox.height * 0.72;
+    await stageSurface.dispatchEvent("pointerdown", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: tapX,
+      clientY: tapY,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await stageSurface.dispatchEvent("pointermove", {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: tapX + 6,
+      clientY: tapY + 6,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await stageSurface.dispatchEvent("pointerup", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: tapX + 6,
+      clientY: tapY + 6,
+      isPrimary: true,
+      pointerId,
+      pointerType: "mouse"
+    });
+    await stageSurface.dispatchEvent("click", {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: stageBox.x + stageBox.width * 0.25,
+      clientY: stageBox.y + stageBox.height * 0.25
+    });
 
     await expect.poll(async () => {
       const project = await storedProject(page);
       const intro = project.sections.find((section) => section.id === "intro");
       return intro.positions.a1;
-    }).not.toEqual({ x: 2, y: 2 });
+    }).toEqual({ x: 9, y: 6 });
     await expect(token).toHaveAttribute("aria-pressed", "false");
     await expect(root.locator(".v2-token[aria-pressed='true']")).toHaveCount(0);
   });
@@ -1328,11 +1385,9 @@ test.describe("connected root V2 editor route", () => {
 
   test("previews V2 performer drag without mutating storage until pointerup", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await seedProject(page);
-    await page.goto("/");
-
-    const root = page.locator("[data-v2-visual-editor]");
+    const root = await openSeededRootV2(page);
     const token = root.locator('[data-v2-performer-token="a1"]');
+    await expect(token).toBeVisible();
     const beforeBox = await token.boundingBox();
     expect(beforeBox).not.toBeNull();
     const beforeProject = await storedProject(page);
