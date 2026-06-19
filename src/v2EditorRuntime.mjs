@@ -234,14 +234,16 @@ function defaultActionBar({ capabilities, activeBottomSheet }) {
   ];
 }
 
+function enabledActions(actions) {
+  return actions.filter((action) => !action.disabled);
+}
+
 function formationActionBar({ capabilities, activeBottomSheet }) {
   return [
     { key: "delete-formation", icon: "close", label: "삭제", action: "delete-formation", danger: true, disabled: !capabilities.canDelete },
     { key: "duplicate-formation", icon: "add", label: "복제", action: "duplicate-formation", disabled: !capabilities.canDuplicate },
-    { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", active: activeBottomSheet === "formation-template" },
-    { key: "add-formation", icon: "add", label: "대형 추가", action: "add-formation", disabled: !capabilities.canAddFormation },
-    { key: "formation-list", icon: "layer", label: "대형 목록", sheet: "formation-list", active: activeBottomSheet === "formation-list" },
-    { key: "formation-details", icon: "edit", label: "이름/메모", sheet: "formation-details", active: activeBottomSheet === "formation-details" }
+    { key: "formation-template", icon: "sparkle", label: "템플릿", sheet: "formation-template", active: activeBottomSheet === "formation-template", disabled: !capabilities.canEditTimeline },
+    { key: "formation-details", icon: "edit", label: "이름/메모", sheet: "formation-details", active: activeBottomSheet === "formation-details", disabled: !capabilities.canEditTimeline }
   ];
 }
 
@@ -476,27 +478,29 @@ export function createV2EditorRuntime(input = {}) {
   let actionBar = defaultActionBar({ capabilities, activeBottomSheet });
   if (hasPerformerSelection) {
     actionBarState = "performer";
-    actionBar = selectedPerformerIds.length > 1
+    actionBar = enabledActions(selectedPerformerIds.length > 1
       ? [
           { key: "align-x", icon: "grid", label: "세로", disabled: readonly },
           { key: "align-y", icon: "grid", label: "가로", disabled: readonly },
-          { key: "delete-performers", icon: "close", label: "삭제", danger: true, disabled: readonly },
-          { key: "clear-selection", icon: "select", label: "해제" }
+          { key: "delete-performers", icon: "close", label: "삭제", danger: true, disabled: readonly }
         ]
       : [
           { key: "duplicate-performer", icon: "add", label: "복제", disabled: readonly },
-          { key: "delete-performer", icon: "close", label: "삭제", danger: true, disabled: readonly },
-          { key: "cast-list", icon: "users", label: "사람 목록", sheet: "cast-list", active: activeBottomSheet === "cast-list", disabled: false },
-          { key: "clear-selection", icon: "select", label: "해제" }
-        ];
+          { key: "delete-performer", icon: "close", label: "삭제", danger: true, disabled: readonly }
+        ]);
   } else if (hasFormationSelection) {
     actionBarState = "formation";
-    actionBar = formationActionBar({ capabilities, activeBottomSheet });
+    actionBar = enabledActions(formationActionBar({ capabilities, activeBottomSheet }));
   }
   const bottomRailMode = actionBarState;
   const bottomRail = actionBar;
-  const formationSheetKeys = new Set(["formation-list", "formation-details", "formation-template"]);
-  const shouldRenderBottomSheet = Boolean(activeBottomSheet && (actionBarState === "default" || formationSheetKeys.has(activeBottomSheet)));
+  const formationSheetKeys = new Set(["formation-details", "formation-template"]);
+  const bottomSheetAllowed = actionBarState === "default"
+    ? V2_ACTION_SHEET_KEYS
+    : actionBarState === "formation"
+      ? formationSheetKeys
+      : new Set();
+  const shouldRenderBottomSheet = Boolean(activeBottomSheet && bottomSheetAllowed.has(activeBottomSheet));
   const selectedFormationForSheet = hasFormationSelection ? selectedSection : null;
   const selectedFormationIndex = sortedSections.findIndex((section) => section.id === selectedSectionId);
   const safeSelectedFormationIndex = Math.max(0, selectedFormationIndex);

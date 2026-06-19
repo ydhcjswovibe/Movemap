@@ -581,12 +581,11 @@ test.describe("connected root V2 editor route", () => {
     await expect(infoLine).toHaveAttribute("data-v2-stage-info-section", "diamond");
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
 
-    await rail.getByRole("button", { name: "대형 목록" }).click();
-    const selectedSheet = root.locator('[data-v2-bottom-sheet="formation-list"]');
+    await rail.getByRole("button", { name: "템플릿" }).click();
+    const selectedSheet = root.locator('[data-v2-bottom-sheet="formation-template"]');
     await expect(selectedSheet).toHaveAttribute("data-v2-bottom-sheet-state", "formation");
     await expect(selectedSheet).toHaveAttribute("data-v2-bottom-sheet-section", "diamond");
-    await expect(selectedSheet.locator('[data-v2-formation-list-row="diamond"]')).toHaveClass(/is-active/);
-    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveClass(/is-active/);
+    await expect(rail.getByRole("button", { name: "템플릿" })).toHaveClass(/is-active/);
     const selectedStateStyles = await root.evaluate(() => {
       const styleFor = (selector, pseudo = null) => {
         const node = document.querySelector(selector);
@@ -597,7 +596,6 @@ test.describe("connected root V2 editor route", () => {
       const block = styleFor('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
       const blockBadge = styleFor('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"] .v2-segment-badge');
       const selectedHandle = styleFor('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]', "::after");
-      const row = styleFor('[data-v2-formation-list-row="diamond"]');
       const sheet = styleFor("[data-v2-bottom-sheet]");
       const header = styleFor("[data-v2-bottom-sheet] .v2-bottom-sheet-header strong");
       const activeRail = styleFor("[data-v2-bottom-rail] .v2-icon-button.is-active");
@@ -610,8 +608,6 @@ test.describe("connected root V2 editor route", () => {
         headerColor: header?.color || "",
         infoAccent: infoAccent?.backgroundColor || "",
         infoBackground: info?.backgroundImage || info?.backgroundColor || "",
-        rowBackground: row?.backgroundImage || row?.backgroundColor || "",
-        rowBorder: row?.borderColor || "",
         selectedHandleBackground: selectedHandle?.backgroundColor || "",
         selectedHandleShadow: selectedHandle?.boxShadow || "",
         sheetBorderTop: sheet?.borderTopColor || ""
@@ -622,8 +618,6 @@ test.describe("connected root V2 editor route", () => {
     expect(selectedStateStyles.blockBorder).toContain("79, 141, 255");
     expect(selectedStateStyles.blockBackground).toContain("47, 115, 246");
     expect(selectedStateStyles.blockBadgeBackground).toContain("79, 141, 255");
-    expect(selectedStateStyles.rowBorder).toContain("79, 141, 255");
-    expect(selectedStateStyles.rowBackground).toContain("79, 141, 255");
     expect(selectedStateStyles.sheetBorderTop).toContain("79, 141, 255");
     expect(selectedStateStyles.headerColor).toContain("220, 233, 255");
     expect(selectedStateStyles.activeRailBackground).toContain("79, 141, 255");
@@ -638,8 +632,6 @@ test.describe("connected root V2 editor route", () => {
       selectedStateStyles.blockBorder,
       selectedStateStyles.infoAccent,
       selectedStateStyles.infoBackground,
-      selectedStateStyles.rowBackground,
-      selectedStateStyles.rowBorder,
       selectedStateStyles.selectedHandleBackground,
       selectedStateStyles.selectedHandleShadow,
       selectedStateStyles.sheetBorderTop
@@ -3677,8 +3669,8 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
     await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
-    await rail.getByRole("button", { name: "해제" }).click();
-    await expect(root.locator(".v2-token[aria-pressed='true']")).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
 
     await root.getByRole("button", { name: "더보기" }).click();
     await expect(root.getByRole("menu", { name: "더보기 메뉴" })).toBeVisible();
@@ -3813,14 +3805,21 @@ test.describe("connected root V2 editor route", () => {
     await rail.getByRole("button", { name: "대형 목록" }).click();
     await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "formation-list");
     await sheet.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
-    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveCount(0);
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
     await expect(root.locator('[data-v2-formation-block="diamond"][aria-pressed="true"]').first()).toBeVisible();
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "대형 추가" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
     await root.locator('[data-v2-performer-token="a1"]').click();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await rail.getByRole("button", { name: "해제" }).click();
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
+    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
+    expect(stageBox).not.toBeNull();
+    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
 
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(sheet).toHaveCount(0);
     await rail.getByRole("button", { name: "사람 목록" }).click();
     await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
     await sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
@@ -3856,13 +3855,16 @@ test.describe("connected root V2 editor route", () => {
 
     await rail.getByRole("button", { name: "대형 목록" }).click();
     await root.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
-    await expect(root.locator('[data-v2-bottom-sheet="formation-list"]')).toBeVisible();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
     await expectVisibleRailButtonsHaveIcons();
-    await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "대형 추가" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "대형 추가" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "템플릿" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "이름/메모" })).toBeEnabled();
     await rail.getByRole("button", { name: "복제" }).click();
     await expect.poll(async () => {
       const project = await storedProject(page);
@@ -3872,10 +3874,22 @@ test.describe("connected root V2 editor route", () => {
 
     await root.locator('[data-v2-performer-token="a1"]').click();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
-    await rail.getByRole("button", { name: "해제" }).click();
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
-    await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
+
+    await page.keyboard.down("Shift");
+    await root.locator('[data-v2-performer-token="b2"]').click();
+    await page.keyboard.up("Shift");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(rail.getByRole("button", { name: "세로" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "가로" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
   });
 
   test("V2 action bar resets when tapping neutral stage and timeline surfaces", async ({ page }) => {
@@ -3931,40 +3945,48 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator("[data-v2-segment-kind='hold']")).toHaveCount(1);
   });
 
-  test("V2 formation multi-select starts from a selected formation list row", async ({ page }) => {
+  test("V2 formation list selection closes the sheet and does not revive after clear", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
+    const rail = root.locator("[data-v2-bottom-rail]");
     await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 목록" }).click();
     const sheet = root.locator('[data-v2-bottom-sheet="formation-list"]');
     await sheet.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
-    await expect(sheet).toContainText("F2 Diamond Form");
+    await expect(sheet).toHaveCount(0);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveCount(0);
 
-    await sheet.getByRole("button", { name: "다중선택" }).click();
-
-    await expect(sheet).toContainText("1개 선택됨");
-    await expect(sheet.locator('[data-v2-formation-list-row="diamond"] .v2-formation-row-check')).toHaveClass(/is-checked/);
-    await expect(sheet.locator('[data-v2-formation-list-row="intro"] .v2-formation-row-check')).not.toHaveClass(/is-checked/);
+    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
+    expect(stageBox).not.toBeNull();
+    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
   });
 
-  test("V2 formation multi-select starts from a selected timeline formation", async ({ page }) => {
+  test("V2 selected formation rail opens only direct edit sheets", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
     await page.goto("/");
 
     const root = page.locator("[data-v2-visual-editor]");
+    const rail = root.locator("[data-v2-bottom-rail]");
     await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
-    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 목록" }).click();
-    const sheet = root.locator('[data-v2-bottom-sheet="formation-list"]');
-    await expect(sheet).toContainText("F2 Diamond Form");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "템플릿" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "이름/메모" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "대형 추가" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
 
-    await sheet.getByRole("button", { name: "다중선택" }).click();
-
-    await expect(sheet).toContainText("1개 선택됨");
-    await expect(sheet.locator('[data-v2-formation-list-row="diamond"] .v2-formation-row-check')).toHaveClass(/is-checked/);
-    await expect(sheet.locator('[data-v2-formation-list-row="intro"] .v2-formation-row-check')).not.toHaveClass(/is-checked/);
+    await rail.getByRole("button", { name: "템플릿" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="formation-template"]')).toHaveAttribute("data-v2-bottom-sheet-state", "formation");
+    await rail.getByRole("button", { name: "이름/메모" }).click();
+    await expect(root.locator('[data-v2-bottom-sheet="formation-details"]')).toHaveAttribute("data-v2-bottom-sheet-state", "formation");
   });
 
   test("V2 formation details edits name and memo immediately", async ({ page }) => {
@@ -4189,9 +4211,16 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
     const readonlyRail = root.locator("[data-v2-bottom-rail]");
     await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await expect(readonlyRail.getByRole("button", { name: "해제" })).toBeEnabled();
-    await expect(readonlyRail.getByRole("button", { name: "복제" })).toBeDisabled();
-    await expect(readonlyRail.getByRole("button", { name: "삭제" })).toBeDisabled();
+    await expect(readonlyRail.getByRole("button", { name: "해제" })).toHaveCount(0);
+    await expect(readonlyRail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(readonlyRail.getByRole("button", { name: "삭제" })).toHaveCount(0);
+
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expect(readonlyRail.getByRole("button", { name: "삭제" })).toHaveCount(0);
+    await expect(readonlyRail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(readonlyRail.getByRole("button", { name: "템플릿" })).toHaveCount(0);
+    await expect(readonlyRail.getByRole("button", { name: "이름/메모" })).toHaveCount(0);
   });
 
   test("readonly V2 formation blocks still pan without mutating timing", async ({ page }) => {

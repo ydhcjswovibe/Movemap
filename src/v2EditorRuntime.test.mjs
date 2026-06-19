@@ -50,7 +50,7 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
   assert.equal(runtime.bottomRailMode, "performer");
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer", "cast-list", "clear-selection"]);
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer"]);
   assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["p1", true]]);
   assert.equal(runtime.cast.canClearSelection, true);
   assert.equal(runtime.cast.canOpenRoleActions, true);
@@ -130,8 +130,6 @@ test("V2 runtime exposes action bar states while preserving bottom rail aliases"
     "삭제",
     "복제",
     "템플릿",
-    "대형 추가",
-    "대형 목록",
     "이름/메모"
   ]);
   assert.equal(selectedRuntime.actionBar.some((action) => action.label === "해제"), false);
@@ -177,8 +175,31 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
   assert.equal(selectedRuntime.bottomSheet, null);
 });
 
-test("V2 formation list sheet exposes fixed row labels and selected header actions", () => {
+test("V2 formation list sheet exposes fixed row labels and closes in selected context", () => {
   const runtime = createV2EditorRuntime({
+    activeBottomSheet: "formation-list",
+    currentSectionId: "f1",
+    sortedSections: [
+      { id: "f1", name: "Intro", time: 8, start: 4, end: 8, moveDuration: 4 },
+      { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 }
+    ],
+    readonly: false
+  });
+
+  assert.equal(runtime.bottomSheet.key, "formation-list");
+  assert.equal(runtime.bottomSheet.title, "대형 목록");
+  assert.equal(runtime.bottomSheet.headerLabel, "대형 목록");
+  assert.deepEqual(runtime.bottomSheet.headerActions.map((action) => action.key), [
+    "multi-select",
+    "close-sheet"
+  ]);
+  assert.equal(runtime.bottomSheet.headerActions.find((action) => action.key === "multi-select").disabled, false);
+  assert.deepEqual(runtime.bottomSheet.items.map((item) => [item.sequenceLabel, item.label, item.timeRangeLabel]), [
+    ["F1", "Intro", "4.0s ~ 8.0s"],
+    ["F2", "Chorus", "12.0s ~ 16.0s"]
+  ]);
+
+  const selectedRuntime = createV2EditorRuntime({
     activeBottomSheet: "formation-list",
     currentSectionId: "f1",
     mobileContextSelection: "formation",
@@ -190,29 +211,10 @@ test("V2 formation list sheet exposes fixed row labels and selected header actio
     ],
     readonly: false
   });
-
-  assert.equal(runtime.bottomSheet.key, "formation-list");
-  assert.equal(runtime.bottomSheet.title, "대형 목록");
-  assert.equal(runtime.bottomSheet.headerLabel, "F2 Chorus");
-  assert.deepEqual(runtime.bottomSheet.headerActions.map((action) => action.key), [
-    "delete-formation",
-    "duplicate-formation",
-    "formation-template",
-    "formation-details",
-    "multi-select",
-    "close-sheet"
-  ]);
-  assert.equal(runtime.bottomSheet.headerActions.find((action) => action.key === "multi-select").disabled, false);
-  assert.deepEqual(runtime.bottomSheet.items.map((item) => [item.sequenceLabel, item.label, item.timeRangeLabel]), [
-    ["F1", "Intro", "4.0s ~ 8.0s"],
-    ["F2", "Chorus", "12.0s ~ 16.0s"]
-  ]);
+  assert.equal(selectedRuntime.bottomSheet, null);
 
   const readonlyRuntime = createV2EditorRuntime({
     activeBottomSheet: "formation-list",
-    mobileContextSelection: "formation",
-    selectedSectionId: "f2",
-    selectedSection: { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 },
     sortedSections: [
       { id: "f1", name: "Intro", time: 8, start: 4, end: 8, moveDuration: 4 },
       { id: "f2", name: "Chorus", time: 16, start: 12, end: 16, moveDuration: 4 }
@@ -382,7 +384,7 @@ test("V2 runtime exposes formation rail, settings toggles, and readonly settings
   });
 
   assert.equal(runtime.bottomRailMode, "formation");
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["delete-formation", "duplicate-formation", "formation-template", "add-formation", "formation-list", "formation-details"]);
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["delete-formation", "duplicate-formation", "formation-template", "formation-details"]);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").disabled, false);
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").scopeLabel, "Current view");
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-png").availabilityLabel, "사용 가능");

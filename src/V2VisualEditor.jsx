@@ -757,7 +757,7 @@ function V2VisualEditor({ model, actions = {} }) {
     if (!item || item.disabled) return;
     if (item.action === "select-formation") {
       const section = sectionById.get(item.sectionId);
-      if (section) runtimeActions.selectFormation?.(section, { force: true, keepSheetOpen: true });
+      if (section) runtimeActions.selectFormation?.(section, { force: true });
       return;
     }
     if (item.action === "toggle-formation-selection") {
@@ -1079,7 +1079,7 @@ function V2VisualEditor({ model, actions = {} }) {
             onPointerUp={(event) => {
               const gesture = tokenGestureRef.current;
               if (gesture?.pointerId === event.pointerId) {
-                suppressNextTokenClickRef.current = Boolean(gesture.moved);
+                suppressNextTokenClickRef.current = Boolean(gesture.moved || gesture.additive);
                 tokenGestureRef.current = null;
               }
               finishStageTapGesture(event);
@@ -1161,6 +1161,7 @@ function V2VisualEditor({ model, actions = {} }) {
                       pointerId: event.pointerId,
                       startX: event.clientX,
                       startY: event.clientY,
+                      additive: Boolean(event.shiftKey || event.metaKey),
                       moved: false
                     };
                     runtimeActions.stagePointerDown?.(event, performer.id, stageSurfaceRef.current);

@@ -3599,6 +3599,18 @@ function App() {
   function onV2StagePointerDown(event, performerId, stageElement) {
     if (readonly || !selectedSection || !stageElement) return;
     event.stopPropagation();
+    if (event.shiftKey || event.metaKey) {
+      const nextSelection = togglePerformerSelection(selectedPerformerIds, performerId, true);
+      setSelectedPerformerIds(nextSelection);
+      setSelectedPerformerId(performerId);
+      setSelectedPairKey("");
+      setTapMoveArmed(false);
+      setMobileContextSelection(nextSelection.length > 1 ? "multi" : "performer");
+      setStitchFormationContext(false);
+      setActiveV2BottomSheet(null);
+      clearQuietStatus();
+      return;
+    }
     try {
       event.currentTarget?.setPointerCapture?.(event.pointerId);
     } catch {
