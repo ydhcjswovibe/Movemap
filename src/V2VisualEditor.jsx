@@ -662,6 +662,9 @@ function V2VisualEditor({ model, actions = {} }) {
     if (key === "export-json") {
       runtimeActions.exportJson?.();
       closeTopMenus();
+    } else if (key === "new-project") {
+      runtimeActions.newProject?.();
+      closeTopMenus();
     } else if (key === "export-png") {
       runtimeActions.exportPng?.();
       closeTopMenus();

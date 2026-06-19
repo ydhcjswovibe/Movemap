@@ -7,6 +7,7 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   const selectPerformer = () => {};
   const onFormationSelect = () => {};
   const onV2StageTap = () => {};
+  const returnToProjectPicker = () => {};
   const runtime = createV2EditorRuntime({
     addSection: () => {},
     currentSectionId: "s2",
@@ -17,6 +18,7 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
     projectTitle: "V2 Runtime Fixture",
     readonly: false,
     redoDisabled: true,
+    returnToProjectPicker,
     selectPerformer,
     selectedPerformerId: "p1",
     selectedPerformerIds: ["p1"],
@@ -58,7 +60,10 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-json").label, "프로젝트 JSON 내보내기");
   assert.equal(runtime.exportMenu.find((item) => item.key === "export-json").scopeLabel, "Project backup");
   assert.equal(runtime.moreMenu[0].key, "settings");
+  assert.equal(runtime.moreMenu[1].key, "new-project");
+  assert.equal(runtime.moreMenu[1].label, "새 프로젝트");
   assert.equal(runtime.moreMenu.some((item) => item.key.startsWith("export-") || item.key === "print"), false);
+  assert.equal(runtime.actions.newProject, returnToProjectPicker);
   assert.equal(runtime.settingsMenu[0].key, "toggle-snap");
   assert.equal(runtime.actions.selectPerformer, selectPerformer);
   assert.equal(runtime.actions.selectFormation, onFormationSelect);

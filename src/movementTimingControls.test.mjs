@@ -110,14 +110,14 @@ test("mobile timeline keeps formation blocks compact and readable", () => {
   assert.match(portraitMobile, /\.audio-lane \{[\s\S]*?min-height:\s*34px;/);
 });
 
-test("new projects start with a single four-second intro formation", () => {
+test("new projects seed Intro at zero so the first visible hold begins immediately", () => {
   const defaultSectionsSource = appSource.match(/function defaultSections\(performers\) \{[\s\S]*?\n\}/)?.[0] || "";
 
   assert.match(defaultSectionsSource, /name: "Intro"/);
-  assert.match(defaultSectionsSource, /time: 4/);
-  assert.match(defaultSectionsSource, /moveDuration: 4/);
+  assert.match(defaultSectionsSource, /time: 0/);
+  assert.match(defaultSectionsSource, /moveDuration: 0/);
   assert.match(defaultSectionsSource, /start: 0/);
-  assert.match(defaultSectionsSource, /end: 4/);
+  assert.match(defaultSectionsSource, /end: 0/);
   assert.match(defaultSectionsSource, /moveMode: "hold"/);
   assert.doesNotMatch(defaultSectionsSource, /name: "Change"/);
 });

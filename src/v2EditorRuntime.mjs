@@ -374,7 +374,7 @@ export function createV2EditorRuntime(input = {}) {
   ];
   const moreMenu = [
     { key: "settings", label: "Settings", hasSubmenu: true },
-    { key: "project-info", label: shell.projectTitle },
+    { key: "new-project", label: "새 프로젝트" },
     { key: "help", label: "Help / Shortcuts", disabled: true }
   ];
   const hasAdvancedExports = Boolean(input.canUseAdvancedExports);
@@ -628,6 +628,7 @@ export function createV2EditorRuntime(input = {}) {
     exportAllPng: input.exportAllPng,
     exportJson: input.exportJson,
     exportPng: input.exportPng,
+    newProject: input.returnToProjectPicker,
     more: input.handleMobileAction,
     mobileAction: input.handleMobileAction,
     play: input.togglePlayback,
