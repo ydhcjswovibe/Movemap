@@ -3668,10 +3668,10 @@ function App() {
       x: pointer.x + drag.offsetX,
       y: pointer.y + drag.offsetY
     }, stageDimensions);
-    const snapped = snapPoint(rawPosition, snapEnabled && !event.altKey);
-    const nextPosition = clampV2DragPointToStage(snapped, stageDimensions);
+    const nextPosition = clampV2DragPointToStage(rawPosition, stageDimensions);
+    const dropPosition = clampV2DragPointToStage(snapPoint(rawPosition, snapEnabled && !event.altKey), stageDimensions);
     drag.finalPositions = {
-      [drag.performerId]: nextPosition
+      [drag.performerId]: dropPosition
     };
     previewV2TokenDrag(drag, nextPosition, stageElement);
   }

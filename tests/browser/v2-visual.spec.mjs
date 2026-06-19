@@ -1238,6 +1238,16 @@ test.describe("connected root V2 editor route", () => {
       pointerId,
       pointerType: "mouse"
     });
+    await expect.poll(async () => {
+      const box = await token.boundingBox();
+      return box ? {
+        x: Math.round(box.x + box.width / 2),
+        y: Math.round(box.y + box.height / 2)
+      } : null;
+    }).toEqual({
+      x: Math.round(targetX),
+      y: Math.round(targetY)
+    });
     await token.dispatchEvent("pointerup", {
       bubbles: true,
       button: 0,
