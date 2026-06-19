@@ -3980,6 +3980,37 @@ test.describe("connected root V2 editor route", () => {
     await expect.poll(() => storedProject(page).then((project) => project.sections.length)).toBe(beforeCount + 1);
   });
 
+  test("V2 template sheet keeps scrolled lower templates tappable", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedProject(page);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
+    await root.locator("[data-v2-action-bar]").getByRole("button", { name: "템플릿" }).click();
+    const sheet = root.locator('[data-v2-bottom-sheet="formation-template"]');
+    const templateSheet = sheet.locator(".v2-template-sheet");
+    await expect(templateSheet).toBeVisible();
+
+    await templateSheet.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+    });
+    const scrolledTop = await templateSheet.evaluate((node) => node.scrollTop);
+    expect(scrolledTop).toBeGreaterThan(0);
+
+    for (const templateId of ["block", "pairs"]) {
+      const card = sheet.locator(`[data-v2-template-card="${templateId}"]`);
+      await expect(card).toBeVisible();
+      await card.click();
+      await expect(card).toHaveClass(/is-active/);
+      await expect.poll(() => storedProject(page).then((project) => {
+        const section = project.sections.find((item) => item.id === "diamond");
+        return section?.formationProvenance?.templateId || "";
+      })).toBe(templateId);
+      await expect.poll(() => templateSheet.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    }
+  });
+
   test("V2 minimal sheets open from the action bar", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);

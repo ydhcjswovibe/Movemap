@@ -1934,6 +1934,7 @@
   background: var(--v2-panel-raised);
   color: #e8eef8;
   font: inherit;
+  overflow: hidden;
   text-align: left;
 }
 
@@ -1962,9 +1963,11 @@
 
 .v2-template-mini-stage {
   width: 100%;
-  min-height: 72px;
+  height: 72px;
   align-self: stretch;
+  display: block;
   justify-self: stretch;
+  pointer-events: none;
 }
 
 .v2-template-mini-stage-bg {
