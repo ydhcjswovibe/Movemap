@@ -2,8 +2,10 @@ import React, { memo } from "react";
 import addPlus from "./coolicons/add-plus.svg?raw";
 import closeMd from "./coolicons/close-md.svg?raw";
 import download from "./coolicons/download.svg?raw";
+import editPencilLine from "./coolicons/edit-pencil-line-01.svg?raw";
 import expand from "./coolicons/expand.svg?raw";
 import grid from "./coolicons/grid.svg?raw";
+import headphones from "./coolicons/headphones.svg?raw";
 import house from "./coolicons/house-02.svg?raw";
 import label from "./coolicons/label.svg?raw";
 import layer from "./coolicons/layer.svg?raw";
@@ -17,6 +19,7 @@ import save from "./coolicons/save.svg?raw";
 import selectMultiple from "./coolicons/select-multiple.svg?raw";
 import settings from "./coolicons/settings.svg?raw";
 import share from "./coolicons/share-ios-export.svg?raw";
+import star from "./coolicons/star.svg?raw";
 import timerAdd from "./coolicons/timer-add.svg?raw";
 import undo from "./coolicons/undo.svg?raw";
 import users from "./coolicons/users.svg?raw";
@@ -27,12 +30,14 @@ const ICONS = {
   add: addPlus,
   close: closeMd,
   download,
+  edit: editPencilLine,
   expand,
   grid,
   home: house,
   label,
   layer,
   more: moreGrid,
+  music: headphones,
   note,
   path,
   pause,
@@ -42,6 +47,7 @@ const ICONS = {
   select: selectMultiple,
   settings,
   share,
+  sparkle: star,
   "timer-add": timerAdd,
   undo,
   users,

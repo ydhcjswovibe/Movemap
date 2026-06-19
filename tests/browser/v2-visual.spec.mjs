@@ -3781,7 +3781,19 @@ test.describe("connected root V2 editor route", () => {
     const root = page.locator("[data-v2-visual-editor]");
     await expect(root).toBeVisible();
     const rail = root.locator("[data-v2-bottom-rail]");
+    const expectVisibleRailButtonsHaveIcons = async () => {
+      const missingIcons = await rail.locator(".v2-icon-button").evaluateAll((buttons) => buttons
+        .filter((button) => {
+          const rect = button.getBoundingClientRect();
+          const style = window.getComputedStyle(button);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+        })
+        .filter((button) => !button.querySelector(".cool-icon svg"))
+        .map((button) => button.getAttribute("aria-label") || button.textContent?.trim() || ""));
+      expect(missingIcons).toEqual([]);
+    };
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expectVisibleRailButtonsHaveIcons();
     await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
@@ -3791,6 +3803,7 @@ test.describe("connected root V2 editor route", () => {
     await root.locator('[data-v2-bottom-sheet-item="formation-diamond"]').click();
     await expect(root.locator('[data-v2-bottom-sheet="formation-list"]')).toBeVisible();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
+    await expectVisibleRailButtonsHaveIcons();
     await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "대형 추가" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
