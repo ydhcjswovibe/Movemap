@@ -476,19 +476,7 @@ export function createV2EditorRuntime(input = {}) {
   };
   let actionBarState = "default";
   let actionBar = defaultActionBar({ capabilities, activeBottomSheet });
-  if (hasPerformerSelection) {
-    actionBarState = "performer";
-    actionBar = enabledActions(selectedPerformerIds.length > 1
-      ? [
-          { key: "align-x", icon: "grid", label: "세로", disabled: readonly },
-          { key: "align-y", icon: "grid", label: "가로", disabled: readonly },
-          { key: "delete-performers", icon: "close", label: "삭제", danger: true, disabled: readonly }
-        ]
-      : [
-          { key: "duplicate-performer", icon: "add", label: "복제", disabled: readonly },
-          { key: "delete-performer", icon: "close", label: "삭제", danger: true, disabled: readonly }
-        ]);
-  } else if (hasFormationSelection) {
+  if (hasFormationSelection) {
     actionBarState = "formation";
     actionBar = enabledActions(formationActionBar({ capabilities, activeBottomSheet }));
   }

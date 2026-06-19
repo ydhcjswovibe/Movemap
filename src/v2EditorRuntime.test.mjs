@@ -49,8 +49,8 @@ test("V2 editor runtime exposes the stable shell, stage, selection, timeline, ca
   assert.equal(runtime.capabilities.canRedo, false);
   assert.deepEqual(runtime.topActions.map((action) => action.key), ["share", "export", "more"]);
   assert.deepEqual(runtime.transportActions.map((action) => action.key), ["play", "undo", "redo"]);
-  assert.equal(runtime.bottomRailMode, "performer");
-  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["duplicate-performer", "delete-performer"]);
+  assert.equal(runtime.bottomRailMode, "default");
+  assert.deepEqual(runtime.bottomRail.map((action) => action.key), ["add-formation", "formation-list", "cast-add", "cast-list", "stage-settings", "music"]);
   assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["p1", true]]);
   assert.equal(runtime.cast.canClearSelection, true);
   assert.equal(runtime.cast.canOpenRoleActions, true);
@@ -134,6 +134,33 @@ test("V2 runtime exposes action bar states while preserving bottom rail aliases"
   ]);
   assert.equal(selectedRuntime.actionBar.some((action) => action.label === "해제"), false);
   assert.equal(selectedRuntime.bottomRailMode, "formation");
+
+  const performerRuntime = createV2EditorRuntime({
+    activeTab: "Stage",
+    performers: [{ id: "p1", label: "A1", name: "A1" }],
+    readonly: false,
+    selectedPerformerId: "p1",
+    selectedPerformerIds: ["p1"],
+    sortedSections: [{ id: "intro", name: "Intro", time: 4, end: 4, moveDuration: 4 }]
+  });
+
+  assert.equal(performerRuntime.actionBarState, "default");
+  assert.deepEqual(performerRuntime.actionBar.map((action) => action.key), defaultRuntime.actionBar.map((action) => action.key));
+  assert.equal(performerRuntime.actionBar.some((action) => ["duplicate-performer", "delete-performer", "align-x", "align-y"].includes(action.key)), false);
+
+  const multiPerformerRuntime = createV2EditorRuntime({
+    activeTab: "Stage",
+    performers: [{ id: "p1", label: "A1" }, { id: "p2", label: "B2" }],
+    readonly: false,
+    selectedPerformerId: "p1",
+    selectedPerformerIds: ["p1", "p2"],
+    selectionMode: "multi",
+    sortedSections: [{ id: "intro", name: "Intro", time: 4, end: 4, moveDuration: 4 }]
+  });
+
+  assert.equal(multiPerformerRuntime.actionBarState, "default");
+  assert.deepEqual(multiPerformerRuntime.actionBar.map((action) => action.key), defaultRuntime.actionBar.map((action) => action.key));
+  assert.equal(multiPerformerRuntime.actionBar.some((action) => ["delete-performers", "align-x", "align-y"].includes(action.key)), false);
 });
 
 test("V2 default bottom sheet controls rail active state and closes outside default rail mode", () => {
@@ -171,8 +198,8 @@ test("V2 default bottom sheet controls rail active state and closes outside defa
     selectedPerformerIds: ["p1"],
     performers: [{ id: "p1", label: "P1" }]
   });
-  assert.equal(selectedRuntime.bottomRailMode, "performer");
-  assert.equal(selectedRuntime.bottomSheet, null);
+  assert.equal(selectedRuntime.bottomRailMode, "default");
+  assert.equal(selectedRuntime.bottomSheet.key, "stage-settings");
 });
 
 test("V2 formation list sheet exposes fixed row labels and closes in selected context", () => {

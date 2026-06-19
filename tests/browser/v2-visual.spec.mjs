@@ -556,6 +556,17 @@ test.describe("connected root V2 editor route", () => {
     await expect(tokenA1).toHaveAttribute("aria-pressed", "false");
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
     await expect(infoLine).toContainText("B2 · groupB");
+    await expect(rail).toHaveAttribute("data-v2-action-bar-state", "default");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "음악" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "세로" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "가로" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
 
     const introBlock = root.locator('[data-v2-formation-block="intro"][data-v2-segment-kind="hold"]');
     const diamondBlock = root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
@@ -649,6 +660,11 @@ test.describe("connected root V2 editor route", () => {
     await tokenB2.click();
     await expect(tokenB2).toHaveAttribute("aria-pressed", "true");
     await expect(infoLine).toContainText("B2 · groupB");
+    await expect(rail).toHaveAttribute("data-v2-action-bar-state", "default");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
     const readTokenSelectedStyles = () => root.evaluate(() => {
       const token = document.querySelector(".v2-token.is-selected");
       const style = token ? getComputedStyle(token) : null;
@@ -3666,11 +3682,14 @@ test.describe("connected root V2 editor route", () => {
     await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
     await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "음악" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
-    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
 
     await root.getByRole("button", { name: "더보기" }).click();
     await expect(root.getByRole("menu", { name: "더보기 메뉴" })).toBeVisible();
@@ -3812,8 +3831,10 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail.getByRole("button", { name: "대형 추가" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
     await root.locator('[data-v2-performer-token="a1"]').click();
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
     const stageBox = await root.locator(".v2-stage-surface").boundingBox();
     expect(stageBox).not.toBeNull();
     await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
@@ -3824,7 +3845,8 @@ test.describe("connected root V2 editor route", () => {
     await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
     await sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
     await expect(sheet).toHaveCount(0);
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
   });
 
   test("drives bottom rail actions from V2 selection context", async ({ page }) => {
@@ -3873,23 +3895,25 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.getByRole("button", { name: "실행 취소" })).toBeEnabled();
 
     await root.locator('[data-v2-performer-token="a1"]').click();
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
     await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(rail.getByRole("button", { name: "복제" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
+    await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
 
     await page.keyboard.down("Shift");
     await root.locator('[data-v2-performer-token="b2"]').click();
     await page.keyboard.up("Shift");
-    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
-    await expect(rail.getByRole("button", { name: "세로" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "가로" })).toBeEnabled();
-    await expect(rail.getByRole("button", { name: "삭제" })).toBeEnabled();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail.getByRole("button", { name: "세로" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "가로" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "해제" })).toHaveCount(0);
-    await expect(rail.getByRole("button", { name: "사람 목록" })).toHaveCount(0);
+    await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
   });
 
   test("V2 action bar resets when tapping neutral stage and timeline surfaces", async ({ page }) => {
@@ -3910,7 +3934,7 @@ test.describe("connected root V2 editor route", () => {
     await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
 
     await root.locator("[data-v2-performer-token]").first().click();
-    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "performer");
+    await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
     await expect(root.locator("[data-v2-performer-token][aria-pressed='true']")).toHaveCount(1);
 
     const timelineBox = await root.locator("[data-v2-timeline]").boundingBox();
@@ -4210,7 +4234,12 @@ test.describe("connected root V2 editor route", () => {
     expect(readonlyTopbarBox.y).toBeGreaterThanOrEqual(0);
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
     const readonlyRail = root.locator("[data-v2-bottom-rail]");
-    await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "performer");
+    await expect(readonlyRail).toHaveAttribute("data-v2-action-bar-state", "default");
+    await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(readonlyRail.getByRole("button", { name: "무대 설정" })).toBeEnabled();
+    await expect(readonlyRail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
+    await expect(readonlyRail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
+    await expect(readonlyRail.getByRole("button", { name: "음악" })).toBeEnabled();
     await expect(readonlyRail.getByRole("button", { name: "해제" })).toHaveCount(0);
     await expect(readonlyRail.getByRole("button", { name: "복제" })).toHaveCount(0);
     await expect(readonlyRail.getByRole("button", { name: "삭제" })).toHaveCount(0);
