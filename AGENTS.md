@@ -9,10 +9,12 @@
 
 ## Workflow
 
-- Keep routine work lightweight. Load Superpowers or Compound workflows only when explicitly requested or when a task-specific instruction requires them.
+- Keep routine work lightweight. Load Superpowers or Compound workflows only when explicitly requested or when a task-specific instruction requires them. For non-trivial implementation plans, write plans for fresh-session execution with files to inspect, execution order, verification, and commit criteria.
+- Default non-trivial implementation-plan execution to `superpowers:subagent-driven-development`. If changes are tightly coupled or product/UX judgment is high-risk, keep main-agent control and use subagents only for independent work, review, or verification.
 - When a checked-in Superpowers plan/spec is the active task source, follow its required workflow skill unless the user explicitly overrides it.
 - Preserve dirty worktrees. Do not revert unrelated user or previous-agent changes.
 - Stage, commit, or push only the intended slice unless the user explicitly asks for broader cleanup.
+- After implementation is complete and verification passes, commit the intended slice without another prompt. Do not commit unrelated dirty worktree changes, generated artifacts, or local tool/planning files unless explicitly requested.
 - Prefer narrow behavior changes over broad refactors.
 - Do not commit generated build/test artifacts such as `dist/` or `test-results/` unless explicitly requested.
 
