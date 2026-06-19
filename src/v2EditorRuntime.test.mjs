@@ -535,6 +535,9 @@ test("V2 runtime exposes a readonly-visible Stage info line", () => {
 
   assert.deepEqual(runtime.stageInfoLine, {
     visible: true,
+    state: "performer",
+    sectionId: "diamond",
+    performerId: "b2",
     leftLabel: "B2 · groupB",
     rightLabel: "Snap on · 12x8 · 1m grid"
   });
@@ -548,6 +551,9 @@ test("V2 Stage info line falls back to formation context and snap-off wording", 
     snapEnabled: false,
     stageDimensions: { width: 12, height: 8 }
   });
+  assert.equal(selectedRuntime.stageInfoLine.state, "selected");
+  assert.equal(selectedRuntime.stageInfoLine.sectionId, "diamond");
+  assert.equal(selectedRuntime.stageInfoLine.performerId, "");
   assert.equal(selectedRuntime.stageInfoLine.leftLabel, "Diamond Form");
   assert.equal(selectedRuntime.stageInfoLine.rightLabel, "Snap off · 12x8 · free move");
 
@@ -560,6 +566,8 @@ test("V2 Stage info line falls back to formation context and snap-off wording", 
     snapEnabled: true,
     stageDimensions: { width: 12, height: 8 }
   });
+  assert.equal(currentRuntime.stageInfoLine.state, "current");
+  assert.equal(currentRuntime.stageInfoLine.sectionId, "finale");
   assert.equal(currentRuntime.stageInfoLine.leftLabel, "Finale Scene");
   assert.equal(currentRuntime.stageInfoLine.rightLabel, "Snap on · 12x8 · 1m grid");
 });

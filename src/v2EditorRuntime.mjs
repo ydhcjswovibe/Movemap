@@ -343,8 +343,18 @@ export function createV2EditorRuntime(input = {}) {
     || stage.performers.find((performer) => selectedPerformerIds.includes(performer.id))
     || null;
   const stageInfoFormation = selectedSection || currentSection || sortedSections[0] || null;
+  const stageInfoState = stageInfoPerformer
+    ? "performer"
+    : selectedSection
+      ? "selected"
+      : currentSection
+        ? "current"
+        : "empty";
   const stageInfoLine = {
     visible: true,
+    state: stageInfoState,
+    sectionId: stageInfoFormation?.id || "",
+    performerId: stageInfoPerformer?.id || "",
     leftLabel: stageInfoPerformer
       ? `${performerStageInfoLabel(stageInfoPerformer)} · ${String(stageInfoPerformer.group || stageInfoPerformer.role || "No role").trim()}`
       : String(stageInfoFormation?.name || stageInfoFormation?.label || stageInfoFormation?.id || "No formation").trim(),
@@ -497,6 +507,8 @@ export function createV2EditorRuntime(input = {}) {
   const selectedTemplateFits = selectedTemplateForSheet?.fitsAll !== false;
   const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
+    state: actionBarState,
+    selectedSectionId: selectedFormationForSheet?.id || "",
     title: activeBottomSheet === "formation-list" ? "대형 목록" : activeBottomSheet === "formation-details" ? "이름/메모" : activeBottomSheet === "formation-template" ? "템플릿" : activeBottomSheet === "cast-list" ? "사람 목록" : activeBottomSheet === "cast-add" ? "사람 추가" : activeBottomSheet === "music" ? "음악" : "무대 설정",
     ...(activeBottomSheet === "formation-list" ? {
       headerLabel: formationListMode === "multi"

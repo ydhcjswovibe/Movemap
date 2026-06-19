@@ -3506,6 +3506,40 @@ label,
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 64px);
 }
 
+.loading.unsupported-route {
+  min-height: min(100dvh, 100vh);
+  background:
+    radial-gradient(circle at 50% 8%, rgba(56, 80, 114, 0.2), transparent 34%),
+    linear-gradient(180deg, #090c11, #05070a 54%, #040609);
+  color: #f4f7fb;
+}
+
+.unsupported-route .wizard-card {
+  width: min(560px, calc(100vw - 32px));
+  border: 1px solid rgba(226, 235, 247, 0.16);
+  border-radius: 8px;
+  background: #0d1117;
+  box-shadow: 0 24px 68px rgba(0, 0, 0, 0.5);
+}
+
+.unsupported-route .wizard-card h1 {
+  color: #f4f7fb;
+}
+
+.unsupported-route .muted {
+  color: #9aa6b8;
+}
+
+.unsupported-route .eyebrow {
+  color: #4f8dff;
+}
+
+.unsupported-route .route-link-button.primary {
+  border-color: rgba(79, 141, 255, 0.58);
+  background: #2f73f6;
+  color: #ffffff;
+}
+
 .wizard-card,
 .stage-area,
 .card,

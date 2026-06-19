@@ -1007,7 +1007,13 @@ function V2VisualEditor({ model, actions = {} }) {
 
         <section className="v2-stage-wrap" data-v2-stage aria-label="Stage">
           {stageInfoLine?.visible !== false && (
-            <div className="v2-stage-info-line" data-v2-stage-info-line>
+            <div
+              className={`v2-stage-info-line v2-stage-info-line-${stageInfoLine?.state || "empty"}`}
+              data-v2-stage-info-line
+              data-v2-stage-info-state={stageInfoLine?.state || "empty"}
+              data-v2-stage-info-section={stageInfoLine?.sectionId || undefined}
+              data-v2-stage-info-performer={stageInfoLine?.performerId || undefined}
+            >
               <span>{stageInfoLine?.leftLabel || "No formation"}</span>
               <span>{stageInfoLine?.rightLabel || "Snap on · 12x8 · 1m grid"}</span>
             </div>
@@ -1497,6 +1503,8 @@ function V2VisualEditor({ model, actions = {} }) {
           <section
             className={`v2-bottom-sheet v2-bottom-sheet-${view.bottomSheet.key}`}
             data-v2-bottom-sheet={view.bottomSheet.key}
+            data-v2-bottom-sheet-state={view.bottomSheet.state || "default"}
+            data-v2-bottom-sheet-section={view.bottomSheet.selectedSectionId || undefined}
             aria-label={`${view.bottomSheet.title} 작업 시트`}
           >
             <div className="v2-bottom-sheet-header">
