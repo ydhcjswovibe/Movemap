@@ -119,7 +119,8 @@ Expected behavior:
 - creates a new performer with a unique id
 - copies color as the starting value
 - creates a distinct name and token display fallback, rather than duplicating the exact visible token into ambiguity
-- materializes a position for the new performer in the current formation using the nearest safe placement policy already used by performer-add flows, or a simple adjacent offset if that is the local pattern
+- materializes project-safe positions for the new performer across every section that needs a performer position, using the nearest safe placement policy already used by performer-add flows or a simple adjacent offset if that is the local pattern
+- does not leave timeline, transition, template, warning, or preview helpers depending on missing positions for the duplicated performer
 - selects the new performer after creation
 
 ### 삭제
@@ -130,7 +131,8 @@ Expected behavior:
 
 - presented as a danger action
 - disabled in readonly
-- should not leave invalid performer ids in current formation positions
+- removes the performer from project-wide references, including all section positions, movement keyframes, pair data, transition filtering state, warnings, and selected performer state
+- should not leave invalid performer ids anywhere in the persisted project plan
 - should not delete the last performer unless the existing product policy allows an empty roster
 
 If the current app does not already have a delete-confirmation pattern for destructive roster actions, this slice should use a lightweight two-step confirmation inside the inspector rather than a blocking modal.
@@ -142,7 +144,7 @@ On readonly share routes:
 - users may select performers
 - `사람 목록` remains available
 - the inspector may show selected performer information
-- edit fields are readonly or hidden behind disabled controls
+- edit fields stay visible and disabled so the readonly layout matches editable layout
 - `복제` and `삭제` are disabled
 - global bottom action bar remains default during performer selection
 
@@ -158,13 +160,20 @@ The current app already has performer fields such as:
 
 This design treats `role` as out of scope.
 
-Implementation should avoid a broad data migration. Prefer a compatibility layer:
+The target model adds `tokenLabel` as an optional manual override. Implementation should avoid a broad data migration, but it should make manual token override explicit. Use a compatibility layer:
 
 - preserve existing `label` values
-- introduce or reuse a manual token display field only if the current model has a safe place for it
-- resolve display through a helper that can read manual token display, name, label, and id in order
+- introduce `tokenLabel` as the manual token-display override
+- keep `label` as legacy fallback data, not as the source of truth for whether manual override is enabled
+- resolve display through a helper that reads `tokenLabel`, then auto-generates from `name`, then falls back to `label`, then `id`
 
-If `label` is currently the only stable token-display field, it may temporarily serve as the manual override, but the UI should still describe the behavior as automatic unless the value has been intentionally edited.
+Manual override state is determined by `tokenLabel` only:
+
+- non-empty `tokenLabel` means manual mode
+- empty or missing `tokenLabel` means automatic mode
+- clearing the `토큰 표시` field removes `tokenLabel` and returns to automatic mode
+
+Existing projects with `label` values should continue to render the same visible token when name-based automatic display cannot produce a useful value, but `label` should not force the new UI into manual mode.
 
 ## Implementation Seams
 
@@ -193,6 +202,7 @@ Likely seams:
   - duplicate selects the new performer
   - delete removes the performer safely
   - readonly route disables mutation controls
+  - duplicate/delete clean up or materialize project-wide performer references
 
 ## Acceptance Criteria
 
