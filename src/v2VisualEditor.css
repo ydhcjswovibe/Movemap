@@ -709,7 +709,7 @@
   padding: 0;
   border: 1px solid rgba(226, 235, 247, 0.22);
   border-radius: 999px;
-  color: #ffffff;
+  color: var(--token-text-color, #ffffff);
   font-family: inherit;
   font-size: var(--v2-token-label-size, 8px);
   font-weight: 900;

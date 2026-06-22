@@ -4189,6 +4189,7 @@ test.describe("connected root V2 editor route", () => {
     await sheet.getByLabel("색상").fill("#00aa88");
     await expect.poll(() => storedProject(page).then((stored) => stored.performers.find((performer) => performer.id === "a1")?.color)).toBe("#00aa88");
     await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveCSS("background-color", "rgb(0, 170, 136)");
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveCSS("color", "rgb(17, 24, 39)");
 
     const beforeDuplicate = await storedProject(page);
     await sheet.getByRole("button", { name: "복제" }).click();

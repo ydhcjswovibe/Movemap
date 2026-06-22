@@ -6,6 +6,7 @@ import {
   clientPointToV2Stage,
   createV2EditorRuntime,
   performerTokenMode,
+  performerTokenTextColor,
   resolvedPerformerTokenLabel
 } from "./v2EditorRuntime.mjs";
 
@@ -21,6 +22,15 @@ test("V2 performer token labels resolve manual, automatic, legacy, and id fallba
   assert.equal(performerTokenMode({ tokenLabel: "Lead" }), "manual");
   assert.equal(performerTokenMode({ tokenLabel: "" }), "auto");
   assert.equal(performerTokenMode({}), "auto");
+});
+
+test("V2 performer token text color preserves contrast against performer color", () => {
+  assert.equal(performerTokenTextColor("#f6e45c"), "#111827");
+  assert.equal(performerTokenTextColor("#ffffff"), "#111827");
+  assert.equal(performerTokenTextColor("#2457c5"), "#ffffff");
+  assert.equal(performerTokenTextColor("#111827"), "#ffffff");
+  assert.equal(performerTokenTextColor("#0a8"), "#111827");
+  assert.equal(performerTokenTextColor("not-a-color"), "#ffffff");
 });
 
 test("V2 editor runtime exposes the stable shell, stage, selection, timeline, capability, and action contract", () => {

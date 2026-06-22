@@ -1176,7 +1176,8 @@ function V2VisualEditor({ model, actions = {} }) {
                   style={{
                     "--token-x": `${x}%`,
                     "--token-y": `${y}%`,
-                    "--token-color": performer.color || undefined
+                    "--token-color": performer.color || undefined,
+                    "--token-text-color": performer.tokenTextColor || undefined
                   }}
                   type="button"
                   aria-label={`${performerLabel(performer)} performer`}

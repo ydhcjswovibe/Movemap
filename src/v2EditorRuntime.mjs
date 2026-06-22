@@ -70,6 +70,47 @@ export function performerTokenMode(performer) {
   return String(performer?.tokenLabel || "").trim() ? "manual" : "auto";
 }
 
+function parseHexColor(value) {
+  const normalized = String(value || "").trim();
+  const match = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return null;
+  const hex = match[1].length === 3
+    ? Array.from(match[1]).map((char) => `${char}${char}`).join("")
+    : match[1];
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16)
+  };
+}
+
+function relativeLuminance({ r, g, b }) {
+  const channel = (value) => {
+    const normalized = value / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastRatio(first, second) {
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+export function performerTokenTextColor(color) {
+  const parsed = parseHexColor(color);
+  if (!parsed) return "#ffffff";
+  const backgroundLuminance = relativeLuminance(parsed);
+  const lightTextLuminance = 1;
+  const darkTextLuminance = relativeLuminance({ r: 17, g: 24, b: 39 });
+  return contrastRatio(darkTextLuminance, backgroundLuminance) >= contrastRatio(lightTextLuminance, backgroundLuminance)
+    ? "#111827"
+    : "#ffffff";
+}
+
 function performerMetaLabel(performer) {
   const parts = [performer?.group, performer?.role].map((part) => String(part || "").trim()).filter(Boolean);
   return parts.length ? parts.join(" / ") : "No role";
@@ -299,7 +340,8 @@ export function createV2EditorRuntime(input = {}) {
     ...performer,
     tokenLabel: resolvedPerformerTokenLabel(performer),
     resolvedTokenLabel: resolvedPerformerTokenLabel(performer),
-    tokenMode: performerTokenMode(performer)
+    tokenMode: performerTokenMode(performer),
+    tokenTextColor: performerTokenTextColor(performer.color)
   }));
   const selectedPerformerForInspector = sourcePerformers.find((performer) => performer.id === selectedPerformerId) || null;
 
