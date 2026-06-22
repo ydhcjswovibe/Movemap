@@ -43,6 +43,33 @@ function performerDisplayLabel(performer) {
   return String(performer?.name || performer?.label || performer?.id || "").trim() || "Performer";
 }
 
+export function autoTokenLabelForName(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  const visibleChars = Array.from(value.replace(/\s+/g, ""));
+  if (/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value)) {
+    return visibleChars.slice(0, 2).join("");
+  }
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words.map((word) => Array.from(word)[0] || "").join("").slice(0, 3).toUpperCase();
+  }
+  const length = visibleChars.length <= 2 ? 2 : 3;
+  return visibleChars.slice(0, length).join("");
+}
+
+export function resolvedPerformerTokenLabel(performer) {
+  const manual = String(performer?.tokenLabel || "").trim();
+  if (manual) return manual;
+  const automatic = autoTokenLabelForName(performer?.name);
+  if (automatic) return automatic;
+  return String(performer?.label || performer?.id || "").trim() || "Performer";
+}
+
+export function performerTokenMode(performer) {
+  return String(performer?.tokenLabel || "").trim() ? "manual" : "auto";
+}
+
 function performerMetaLabel(performer) {
   const parts = [performer?.group, performer?.role].map((part) => String(part || "").trim()).filter(Boolean);
   return parts.length ? parts.join(" / ") : "No role";
@@ -267,6 +294,14 @@ export function createV2EditorRuntime(input = {}) {
   const currentSectionId = currentSectionIdFor(input);
   const currentSection = normalizeArray(input.sortedSections || input.timeline?.sortedSections).find((section) => section.id === currentSectionId) || null;
   const cautionZone = cautionZoneFor(input, stageDimensions);
+  const sourcePerformers = normalizeArray(input.performers || input.stage?.performers);
+  const stagePerformers = sourcePerformers.map((performer) => ({
+    ...performer,
+    tokenLabel: resolvedPerformerTokenLabel(performer),
+    resolvedTokenLabel: resolvedPerformerTokenLabel(performer),
+    tokenMode: performerTokenMode(performer)
+  }));
+  const selectedPerformerForInspector = sourcePerformers.find((performer) => performer.id === selectedPerformerId) || null;
 
   const shell = {
     projectTitle: input.projectTitle || input.shell?.projectTitle || input.title || "Movemap",
@@ -280,7 +315,7 @@ export function createV2EditorRuntime(input = {}) {
     frontZone: input.frontZone || input.stage?.frontZone || null,
     cautionZone,
     grid: stageGridFor(stageDimensions),
-    performers: normalizeArray(input.performers || input.stage?.performers),
+    performers: stagePerformers,
     referenceGuides: stageReferenceGuidesFor(input, stageDimensions),
     referenceLabelsVisible: input.showStageReferences !== false && input.showStageReferenceLabels !== false,
     referencesVisible: input.showStageReferences !== false,
@@ -497,6 +532,29 @@ export function createV2EditorRuntime(input = {}) {
     || formationTemplateItems[0]
     || null;
   const selectedTemplateFits = selectedTemplateForSheet?.fitsAll !== false;
+  const isLastPerformer = sourcePerformers.length <= 1;
+  const deleteConfirming = !readonly
+    && Boolean(selectedPerformerForInspector)
+    && input.performerDeleteConfirmingId === selectedPerformerForInspector.id;
+  const performerInspector = selectedPerformerForInspector ? {
+    performerId: selectedPerformerForInspector.id,
+    name: performerDisplayLabel(selectedPerformerForInspector),
+    tokenLabel: String(selectedPerformerForInspector.tokenLabel || ""),
+    resolvedTokenLabel: resolvedPerformerTokenLabel(selectedPerformerForInspector),
+    tokenMode: performerTokenMode(selectedPerformerForInspector),
+    color: selectedPerformerForInspector.color || "",
+    deleteConfirming,
+    actions: [
+      { key: "edit-performer", label: "편집", expanded: Boolean(input.performerInspectorExpanded) },
+      { key: "duplicate-performer", label: "복제", disabled: readonly },
+      { key: "delete-performer", label: "삭제", danger: true, disabled: readonly || isLastPerformer }
+    ],
+    fields: {
+      name: { label: "이름", value: performerDisplayLabel(selectedPerformerForInspector), disabled: readonly },
+      tokenLabel: { label: "토큰 표시", value: String(selectedPerformerForInspector.tokenLabel || ""), helper: "비워두면 이름에서 자동 생성", disabled: readonly },
+      color: { label: "색상", value: selectedPerformerForInspector.color || "", disabled: readonly }
+    }
+  } : null;
   const bottomSheet = shouldRenderBottomSheet ? {
     key: activeBottomSheet,
     state: actionBarState,
@@ -554,6 +612,7 @@ export function createV2EditorRuntime(input = {}) {
         { key: "replace-audio", label: input.audioFileName || input.musicTitle ? "교체" : "업로드", disabled: readonly }
       ]
     } : {}),
+    ...(activeBottomSheet === "cast-list" && performerInspector ? { inspector: performerInspector } : {}),
     items: activeBottomSheet === "formation-list"
       ? sortedSections.map((section, index) => ({
           key: `formation-${section.id}`,
@@ -590,6 +649,8 @@ export function createV2EditorRuntime(input = {}) {
             key: `cast-${performer.id}`,
             kind: "performer",
             label: performerDisplayLabel(performer),
+            tokenLabel: performer.resolvedTokenLabel || performer.tokenLabel || resolvedPerformerTokenLabel(performer),
+            color: performer.color || "",
             metaLabel: performerMetaLabel(performer),
             stateLabel: performer.active ? "선택됨" : "",
             performerId: performer.id,
@@ -665,6 +726,13 @@ export function createV2EditorRuntime(input = {}) {
     deleteSelectedFormations: (ids = selectedFormationIds) => input.deleteSelectedFormations?.(ids),
     updateSelectedFormationMetadataField: input.updateSelectedFormationMetadataField,
     finishSelectedFormationMetadataEdit: input.finishSelectedFormationMetadataEdit,
+    updateSelectedPerformerMetadataField: input.updateSelectedPerformerMetadataField,
+    finishSelectedPerformerMetadataEdit: input.finishSelectedPerformerMetadataEdit,
+    duplicateSelectedPerformer: input.duplicateSelectedPerformer,
+    requestDeleteSelectedPerformer: input.requestDeleteSelectedPerformer,
+    confirmDeleteSelectedPerformer: input.confirmDeleteSelectedPerformer,
+    cancelDeleteSelectedPerformer: input.cancelDeleteSelectedPerformer,
+    toggleSelectedPerformerInspectorEdit: input.toggleSelectedPerformerInspectorEdit,
     saveCurrentFormationTemplate: input.saveCurrentFormationTemplate,
     addFormationFromSelectedTemplate: input.addFormationFromSelectedTemplate,
     selectTemplate: input.selectTemplate,

@@ -6,7 +6,7 @@ import TopActionDropdown, { TOP_ACTION_MENUS } from "./TopActionDropdown.jsx";
 import StitchMobileEditor from "./StitchMobileEditor.jsx";
 import V2VisualEditor from "./V2VisualEditor.jsx";
 import { createStitchEditorRuntime } from "./stitchEditorRuntime.mjs";
-import { clientPointToV2Stage, createV2EditorRuntime } from "./v2EditorRuntime.mjs";
+import { autoTokenLabelForName, clientPointToV2Stage, createV2EditorRuntime } from "./v2EditorRuntime.mjs";
 import { findPairGridPlacement, pairMetricsForStage, pairPlacementCollides } from "./pairLayout.mjs";
 import { loadCloudProject, loadCloudProjectByEditToken, saveCloudProject, saveCloudProjectByEditToken } from "./cloudProject.mjs";
 import { authRedirectTo, authRequest, createMovemapSupabaseClient, getAuthSession, onAuthStateChange, signInWithGoogle, signInWithGoogleIdentity, signOut } from "./authClient.mjs";
@@ -171,6 +171,10 @@ function parseNumber(value, fallback = 0) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function isValidPerformerColor(value) {
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(String(value || "").trim());
 }
 
 function stageSafeMargin(stage) {
@@ -936,6 +940,8 @@ function App() {
   const [activeV2BottomSheet, setActiveV2BottomSheet] = useState(null);
   const [v2FormationListMode, setV2FormationListMode] = useState("normal");
   const [v2SelectedFormationIds, setV2SelectedFormationIds] = useState([]);
+  const [v2PerformerInspectorExpanded, setV2PerformerInspectorExpanded] = useState(false);
+  const [v2PerformerDeleteConfirmingId, setV2PerformerDeleteConfirmingId] = useState("");
   const [selectedMovementKeyframeId, setSelectedMovementKeyframeId] = useState("");
   const [showAllTransitionPaths, setShowAllTransitionPaths] = useState(false);
   const [showStageReferences, setShowStageReferences] = useState(true);
@@ -2639,6 +2645,7 @@ function App() {
     setSelectedPerformerId("");
     setSelectedPerformerIds([]);
     setSelectedPairKey("");
+    setV2PerformerDeleteConfirmingId("");
     setTapMoveArmed(false);
     setMobileContextSelection("");
     setStitchFormationContext(false);
@@ -2651,14 +2658,15 @@ function App() {
     clearSelection();
   }
 
-  function selectPerformer(performerId) {
+  function selectPerformer(performerId, options = {}) {
     setSelectedPerformerId(performerId);
     setSelectedPerformerIds(performerId ? [performerId] : []);
     setSelectedPairKey("");
+    setV2PerformerDeleteConfirmingId("");
     setTapMoveArmed(Boolean(performerId));
     setMobileContextSelection(performerId ? "performer" : "");
     setStitchFormationContext(false);
-    setActiveV2BottomSheet(null);
+    setActiveV2BottomSheet(options.keepSheetOpen ? "cast-list" : null);
   }
 
   function selectPair(nextPairKey, performerId = "") {
@@ -3076,56 +3084,112 @@ function App() {
 
   function duplicateSelectedPerformer() {
     const performerToCopy = selectedPerformerId ? performerById(selectedPerformerId) : null;
-    if (readonly || !plan || !performerToCopy || !selectedSection) return;
+    if (readonly || !plan || !performerToCopy) return;
     const index = plan.performers.length;
-    const palette = ROLE_COLORS[performerToCopy.role] || ROLE_COLORS.other;
+    const baseName = performerToCopy.name || performerToCopy.label || "출연자";
+    const nextName = `${baseName} 복사`;
+    const automaticToken = autoTokenLabelForName(nextName);
+    const usedTokenLabels = new Set(plan.performers.map((performer) => (
+      autoTokenLabelForName(performer.tokenLabel || performer.name || performer.label || performer.id)
+    )));
+    const distinctTokenLabel = usedTokenLabels.has(automaticToken)
+      ? `${automaticToken || "P"}${index + 1}`
+      : "";
     const performer = {
       ...performerToCopy,
       id: uid("p"),
       label: `${performerToCopy.label || "P"} 복사`,
-      name: `${performerToCopy.name || performerToCopy.label || "출연자"} 복사`,
-      color: palette[index % palette.length]
+      name: nextName,
+      color: performerToCopy.color || (ROLE_COLORS[performerToCopy.role] || ROLE_COLORS.other)[index % (ROLE_COLORS[performerToCopy.role] || ROLE_COLORS.other).length]
     };
+    if (distinctTokenLabel) {
+      performer.tokenLabel = distinctTokenLabel;
+    } else {
+      delete performer.tokenLabel;
+    }
     updatePlan((current) => ({
       ...current,
       performers: [...current.performers, performer],
       sections: current.sections.map((section) => {
         const fallbackPosition = { x: stageDimensions.width / 2, y: stageDimensions.height / 2 };
-        const sourcePosition = section.positions?.[performerToCopy.id] || selectedSection.positions?.[performerToCopy.id] || fallbackPosition;
+        const selectedSectionPosition = selectedSection?.positions?.[performerToCopy.id];
+        const sourcePosition = section.positions?.[performerToCopy.id] || selectedSectionPosition || fallbackPosition;
         const offset = stageOffsetDistance(stageDimensions);
-        return {
+        const nextPosition = clampPointToStage({
+          x: (sourcePosition.x ?? fallbackPosition.x) + offset,
+          y: (sourcePosition.y ?? fallbackPosition.y) + offset
+        }, stageDimensions);
+        const movementKeyframes = normalizeMovementKeyframes(section.movementKeyframes);
+        const nextSection = {
           ...section,
           positions: {
             ...(section.positions || {}),
-            [performer.id]: clampPointToStage({
-              x: (sourcePosition.x ?? fallbackPosition.x) + offset,
-              y: (sourcePosition.y ?? fallbackPosition.y) + offset
-            }, stageDimensions)
+            [performer.id]: nextPosition
           }
+        };
+        if (!movementKeyframes.length && !section.movementKeyframes) return nextSection;
+        return {
+          ...nextSection,
+          movementKeyframes: movementKeyframes.map((keyframe) => {
+            const sourceKeyframePosition = keyframe.positions?.[performerToCopy.id] || sourcePosition || fallbackPosition;
+            return {
+              ...keyframe,
+              positions: {
+                ...(keyframe.positions || {}),
+                [performer.id]: clampPointToStage({
+                  x: (sourceKeyframePosition.x ?? fallbackPosition.x) + offset,
+                  y: (sourceKeyframePosition.y ?? fallbackPosition.y) + offset
+                }, stageDimensions)
+              }
+            };
+          })
         };
       })
     }));
-    selectPerformer(performer.id);
+    setSelectedPerformerId(performer.id);
+    setSelectedPerformerIds([performer.id]);
+    setSelectedPairKey("");
+    setMobileContextSelection("performer");
+    setStitchFormationContext(false);
+    setActiveV2BottomSheet("cast-list");
+    setV2PerformerInspectorExpanded(true);
+    setV2PerformerDeleteConfirmingId("");
     clearQuietStatus();
   }
 
   function deletePerformersByIds(performerIds) {
     if (readonly || !plan || !performerIds.length) return;
     const idsToDelete = new Set(performerIds);
+    if ((plan.performers || []).filter((performer) => !idsToDelete.has(performer.id)).length < 1) return;
     updatePlan((current) => ({
       ...current,
       performers: current.performers.filter((performer) => !idsToDelete.has(performer.id)),
       sections: current.sections.map((section) => {
         const nextPositions = { ...(section.positions || {}) };
         idsToDelete.forEach((id) => delete nextPositions[id]);
-        return { ...section, positions: nextPositions };
+        const movementKeyframes = normalizeMovementKeyframes(section.movementKeyframes);
+        const nextSection = {
+          ...section,
+          positions: nextPositions
+        };
+        if (!movementKeyframes.length && !section.movementKeyframes) return nextSection;
+        return {
+          ...nextSection,
+          movementKeyframes: movementKeyframes.map((keyframe) => {
+            const nextKeyframePositions = { ...(keyframe.positions || {}) };
+            idsToDelete.forEach((id) => delete nextKeyframePositions[id]);
+            return { ...keyframe, positions: nextKeyframePositions };
+          })
+        };
       }),
       partnerSets: (current.partnerSets || []).map((set) => ({
         ...set,
         pairs: (set.pairs || []).filter((pair) => pair.every((id) => !idsToDelete.has(id)))
       }))
     }));
+    setTransitionPathFilter((filter) => filter === "selected-performer" ? "auto" : filter);
     clearSelection();
+    setActiveV2BottomSheet("cast-list");
     clearQuietStatus();
   }
 
@@ -3179,6 +3243,68 @@ function App() {
   function finishSelectedFormationMetadataEdit(field, value) {
     if (readonly || !selectedSection || !["name", "notes"].includes(field)) return;
     updateSection(selectedSection.id, { [field]: value });
+  }
+
+  function performerMetadataPatch(field, value) {
+    if (field === "name") return { name: String(value || "") };
+    if (field === "tokenLabel") {
+      const tokenLabel = String(value || "").trim();
+      return tokenLabel ? { tokenLabel } : { tokenLabel: undefined };
+    }
+    if (field === "color") {
+      const color = String(value || "").trim();
+      if (!isValidPerformerColor(color)) return null;
+      return { color };
+    }
+    return null;
+  }
+
+  function updateSelectedPerformerMetadataField(field, value) {
+    if (readonly || !selectedPerformerId || !["name", "tokenLabel", "color"].includes(field)) return;
+    const patch = performerMetadataPatch(field, value);
+    if (!patch) return;
+    updatePlan((current) => ({
+      ...current,
+      performers: current.performers.map((performer) => {
+        if (performer.id !== selectedPerformerId) return performer;
+        const nextPerformer = { ...performer, ...patch };
+        if (field === "tokenLabel" && patch.tokenLabel === undefined) {
+          delete nextPerformer.tokenLabel;
+        }
+        return nextPerformer;
+      })
+    }), { history: false });
+  }
+
+  function finishSelectedPerformerMetadataEdit(field, value) {
+    if (readonly || !selectedPerformerId || !["name", "tokenLabel", "color"].includes(field)) return;
+    const patch = performerMetadataPatch(field, value);
+    if (!patch) return;
+    updatePlan((current) => ({
+      ...current,
+      performers: current.performers.map((performer) => {
+        if (performer.id !== selectedPerformerId) return performer;
+        const nextPerformer = { ...performer, ...patch };
+        if (field === "tokenLabel" && patch.tokenLabel === undefined) {
+          delete nextPerformer.tokenLabel;
+        }
+        return nextPerformer;
+      })
+    }));
+  }
+
+  function requestDeleteSelectedPerformer() {
+    if (readonly || !selectedPerformerId || (plan.performers || []).length <= 1) return;
+    setV2PerformerDeleteConfirmingId(selectedPerformerId);
+  }
+
+  function confirmDeleteSelectedPerformer() {
+    if (!selectedPerformerId || v2PerformerDeleteConfirmingId !== selectedPerformerId) return;
+    deletePerformersByIds([selectedPerformerId]);
+  }
+
+  function cancelDeleteSelectedPerformer() {
+    setV2PerformerDeleteConfirmingId("");
   }
 
   function saveCurrentPersonalTemplate() {
@@ -5484,6 +5610,15 @@ function App() {
     deleteSelectedFormations: deleteV2SelectedFormations,
     updateSelectedFormationMetadataField,
     finishSelectedFormationMetadataEdit,
+    updateSelectedPerformerMetadataField,
+    finishSelectedPerformerMetadataEdit,
+    duplicateSelectedPerformer,
+    requestDeleteSelectedPerformer,
+    confirmDeleteSelectedPerformer,
+    cancelDeleteSelectedPerformer,
+    toggleSelectedPerformerInspectorEdit: () => setV2PerformerInspectorExpanded((value) => !value),
+    performerInspectorExpanded: v2PerformerInspectorExpanded,
+    performerDeleteConfirmingId: v2PerformerDeleteConfirmingId,
     saveCurrentFormationTemplate: saveCurrentPersonalTemplate,
     addFormationFromSelectedTemplate,
     toggleSnap: () => setSnapEnabled((value) => !value),

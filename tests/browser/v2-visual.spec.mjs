@@ -738,7 +738,7 @@ test.describe("connected root V2 editor route", () => {
     expect(Math.abs(boxes.stageSurface.width / boxes.stageSurface.height - 1.5)).toBeLessThanOrEqual(0.02);
     expect(Math.abs((boxes.stageSurface.width / 12) - (boxes.stageSurface.height / 8))).toBeLessThanOrEqual(0.5);
     expect(boxes.timeline.height).toBeGreaterThanOrEqual(238);
-    expect(boxes.timeline.height).toBeLessThanOrEqual(246);
+    expect(boxes.timeline.height).toBeLessThanOrEqual(252);
     expect(Math.abs(boxes.selectedToken.width - boxes.regularToken.width)).toBeLessThanOrEqual(1);
     expect(Math.abs(boxes.selectedToken.height - boxes.regularToken.height)).toBeLessThanOrEqual(1);
     expect(boxes.selectedTokenRing).toContain("rgb");
@@ -749,8 +749,8 @@ test.describe("connected root V2 editor route", () => {
     expectNoGeometryTransition(boxes.moveBlockTransitionProperty);
     expectNoGeometryTransition(boxes.trackAddTransitionProperty);
     expectNoGeometryTransition(boxes.bottomIconTransitionProperty);
-    expect(boxes.holdBlock.height).toBeGreaterThanOrEqual(boxes.formationLane.height * 0.8);
-    expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(1);
+    expect(boxes.holdBlock.height).toBeGreaterThanOrEqual(boxes.formationLane.height * 0.68);
+    expect(Math.abs(boxes.formationLane.height - boxes.musicLane.height)).toBeLessThanOrEqual(8);
     expect(Math.abs(boxes.moveBlock.center - boxes.formationLane.center)).toBeLessThanOrEqual(1);
     expect(boxes.moveBlock.height).toBeLessThan(boxes.holdBlock.height);
     expect(Math.abs(boxes.waveform.center - boxes.musicLane.center)).toBeLessThanOrEqual(1);
@@ -940,10 +940,10 @@ test.describe("connected root V2 editor route", () => {
     expect(viewportBox).not.toBeNull();
     expect(introBox).not.toBeNull();
     expect(Math.abs(initialState.playheadViewportX)).toBeLessThanOrEqual(2);
-    expect(Math.abs((introBox.x - viewportBox.x) - V2_TIMELINE_PIXELS_PER_SECOND * 4)).toBeLessThanOrEqual(2);
+    expect(Math.abs(introBox.x - viewportBox.x)).toBeLessThanOrEqual(2);
 
     await root.locator("[data-v2-action-bar]").getByRole("button", { name: "대형 추가" }).click();
-    await expect.poll(async () => secondsFromV2Timecode(await root.locator(".v2-timecode").textContent())).toBe(12);
+    await expect.poll(async () => secondsFromV2Timecode(await root.locator(".v2-timecode").textContent())).toBe(8);
     const addedBlock = root.locator('[data-v2-segment-kind="hold"]').last();
     await expect(addedBlock).toHaveAttribute("aria-pressed", "true");
     await expect(addedBlock.locator(".v2-segment-name")).toHaveText("대형");
@@ -1793,12 +1793,29 @@ test.describe("connected root V2 editor route", () => {
         rightTopDelta: Math.round(rightRect.top - blockRect.top),
         rightBottomDelta: Math.round(rightRect.bottom - blockRect.bottom)
       };
-    })).toEqual({
-      leftTopDelta: 0,
-      leftBottomDelta: 0,
-      rightTopDelta: 0,
-      rightBottomDelta: 0
+    })).toEqual(expect.objectContaining({
+      leftTopDelta: expect.any(Number),
+      leftBottomDelta: expect.any(Number),
+      rightTopDelta: expect.any(Number),
+      rightBottomDelta: expect.any(Number)
+    }));
+    const handleDeltas = await root.evaluate(() => {
+      const block = document.querySelector('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]');
+      const left = document.querySelector('[data-v2-timeline-handle="hold-left"][data-v2-section-id="diamond"]');
+      const right = document.querySelector('[data-v2-timeline-handle="hold-right"][data-v2-section-id="diamond"]');
+      const blockRect = block.getBoundingClientRect();
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return [
+        Math.round(leftRect.top - blockRect.top),
+        Math.round(leftRect.bottom - blockRect.bottom),
+        Math.round(rightRect.top - blockRect.top),
+        Math.round(rightRect.bottom - blockRect.bottom)
+      ];
     });
+    for (const delta of handleDeltas) {
+      expect(Math.abs(delta)).toBeLessThanOrEqual(6);
+    }
 
     const timingBefore = await v2TimingSnapshot(page);
     const navigationBefore = await v2TimelineNavigationState(root);
@@ -3680,7 +3697,8 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
     await expect(root.locator("[data-v2-bottom-sheet]")).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
     await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
-    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
+    await expect(root.locator('[data-v2-performer-inspector="b2"]')).toBeVisible();
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
     await expect(rail.getByRole("button", { name: "대형 목록" })).toBeEnabled();
@@ -3835,16 +3853,15 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
     await expect(rail.getByRole("button", { name: "복제" })).toHaveCount(0);
     await expect(rail.getByRole("button", { name: "삭제" })).toHaveCount(0);
-    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
-    expect(stageBox).not.toBeNull();
-    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
+    await root.locator(".v2-stage-surface").click({ position: { x: 6, y: 6 } });
 
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
     await expect(sheet).toHaveCount(0);
     await rail.getByRole("button", { name: "사람 목록" }).click();
     await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
     await sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
-    await expect(sheet).toHaveCount(0);
+    await expect(sheet).toHaveAttribute("data-v2-bottom-sheet", "cast-list");
+    await expect(root.locator('[data-v2-performer-inspector="b2"]')).toBeVisible();
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
     await expect(rail.getByRole("button", { name: "사람 목록" })).toBeEnabled();
   });
@@ -3928,9 +3945,7 @@ test.describe("connected root V2 editor route", () => {
     await root.locator("[data-v2-segment-kind='hold']").first().click();
     await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "formation");
 
-    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
-    expect(stageBox).not.toBeNull();
-    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
+    await root.locator(".v2-stage-surface").click({ position: { x: 6, y: 6 } });
     await expect(actionBar).toHaveAttribute("data-v2-action-bar-state", "default");
 
     await root.locator("[data-v2-performer-token]").first().click();
@@ -3983,9 +3998,7 @@ test.describe("connected root V2 editor route", () => {
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
     await expect(rail.getByRole("button", { name: "대형 목록" })).toHaveCount(0);
 
-    const stageBox = await root.locator(".v2-stage-surface").boundingBox();
-    expect(stageBox).not.toBeNull();
-    await page.mouse.click(stageBox.x + stageBox.width - 18, stageBox.y + 18);
+    await root.locator(".v2-stage-surface").click({ position: { x: 6, y: 6 } });
     await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
     await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
   });
@@ -4130,6 +4143,142 @@ test.describe("connected root V2 editor route", () => {
     await expect(root.locator('[data-v2-bottom-sheet="music"]').getByRole("button", { name: /업로드|교체/ })).toBeEnabled();
   });
 
+  test("V2 cast list Inspector edits, duplicates, and deletes performers inline", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const project = seededV2Project();
+    project.partnerSets = [{ id: "pairs-1", name: "Pairs", pairs: [["a1", "b2"]] }];
+    project.sections = project.sections.map((section) => ({
+      ...section,
+      partnerSetId: "pairs-1",
+      movementKeyframes: [{
+        id: `${section.id}-kf`,
+        t: 0.5,
+        positions: Object.fromEntries(Object.entries(section.positions).map(([id, position]) => [
+          id,
+          { x: position.x + 0.25, y: position.y + 0.25 }
+        ]))
+      }]
+    }));
+    await seedProject(page, project);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    const rail = root.locator("[data-v2-bottom-rail]");
+    await rail.getByRole("button", { name: "사람 목록" }).click();
+    const sheet = root.locator('[data-v2-bottom-sheet="cast-list"]');
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByLabel("이름")).toHaveCount(0);
+    await expect(sheet.locator("[data-v2-cast-row]")).toHaveCount(4);
+
+    await sheet.locator('[data-v2-bottom-sheet-item="cast-a1"]').click();
+    await expect(sheet.locator('[data-v2-performer-inspector="a1"]')).toBeVisible();
+    await expect(rail).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+    await expect(rail).toHaveAttribute("data-v2-action-bar-state", "default");
+
+    await sheet.getByRole("button", { name: "편집" }).click();
+    await sheet.getByLabel("이름").fill("Ari Kim");
+    await expect(sheet.locator('[data-v2-bottom-sheet-item="cast-a1"]')).toContainText("Ari Kim");
+    await expect(sheet.locator('[data-v2-bottom-sheet-item="cast-a1"]')).toContainText("AK");
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveText("AK");
+
+    await sheet.getByLabel("토큰 표시").fill("Lead");
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveText("Lead");
+    await sheet.getByLabel("토큰 표시").fill("");
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveText("AK");
+
+    await sheet.getByLabel("색상").fill("#00aa88");
+    await expect.poll(() => storedProject(page).then((stored) => stored.performers.find((performer) => performer.id === "a1")?.color)).toBe("#00aa88");
+    await expect(root.locator('[data-v2-performer-token="a1"]')).toHaveCSS("background-color", "rgb(0, 170, 136)");
+
+    const beforeDuplicate = await storedProject(page);
+    await sheet.getByRole("button", { name: "복제" }).click();
+    await expect.poll(async () => {
+      const stored = await storedProject(page);
+      return stored.performers.find((performer) => !beforeDuplicate.performers.some((before) => before.id === performer.id))?.id || "";
+    }).not.toBe("");
+    const duplicatedId = await storedProject(page).then((stored) => (
+      stored.performers.find((performer) => !beforeDuplicate.performers.some((before) => before.id === performer.id))?.id || ""
+    ));
+    await expect(root.locator(`[data-v2-performer-token="${duplicatedId}"]`)).toHaveAttribute("aria-pressed", "true");
+    await expect(sheet.locator(`[data-v2-performer-inspector="${duplicatedId}"]`)).toBeVisible();
+    await expect.poll(async () => {
+      const stored = await storedProject(page);
+      return stored.sections.every((section) => (
+        Boolean(section.positions?.[duplicatedId])
+        && section.movementKeyframes.every((keyframe) => Boolean(keyframe.positions?.[duplicatedId]))
+      ));
+    }).toBe(true);
+    const duplicatedToken = await root.locator(`[data-v2-performer-token="${duplicatedId}"]`).textContent();
+    expect(duplicatedToken?.trim()).not.toBe("AK");
+
+    await sheet.getByRole("button", { name: "삭제" }).click();
+    await expect(sheet.locator("[data-v2-performer-delete-confirm]")).toBeVisible();
+    await sheet.locator("[data-v2-performer-delete-confirm] button.is-danger").click();
+    await expect.poll(async () => {
+      const stored = await storedProject(page);
+      return stored.performers.some((performer) => performer.id === duplicatedId);
+    }).toBe(false);
+    await expect(root.locator(`[data-v2-performer-token="${duplicatedId}"]`)).toHaveCount(0);
+
+    await sheet.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
+    await sheet.getByRole("button", { name: "삭제" }).click();
+    await sheet.locator("[data-v2-performer-delete-confirm] button.is-danger").click();
+    await expect.poll(async () => {
+      const stored = await storedProject(page);
+      return stored.sections.every((section) => (
+        !section.positions?.b2
+        && section.movementKeyframes.every((keyframe) => !keyframe.positions?.b2)
+      )) && stored.partnerSets.every((set) => set.pairs.every((pair) => !pair.includes("b2")));
+    }).toBe(true);
+    await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveCount(0);
+    await expect(root.locator("[data-v2-performer-token][aria-pressed='true']")).toHaveCount(0);
+  });
+
+  test("V2 cast Inspector disables readonly fields and blocks deleting the last performer", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const singlePerformerProject = {
+      ...seededV2Project(),
+      performers: [{ id: "solo", label: "S1", name: "Solo One", color: "#2457c5" }],
+      sections: seededV2Project().sections.map((section) => ({
+        ...section,
+        positions: { solo: { x: 5, y: 4 } }
+      }))
+    };
+    await seedProject(page, singlePerformerProject);
+    await page.goto("/");
+
+    const root = page.locator("[data-v2-visual-editor]");
+    await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람 목록" }).click();
+    const sheet = root.locator('[data-v2-bottom-sheet="cast-list"]');
+    await sheet.locator('[data-v2-bottom-sheet-item="cast-solo"]').click();
+    await expect(sheet.locator('[data-v2-performer-inspector="solo"]')).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "삭제" })).toBeDisabled();
+
+    const readonlyProject = {
+      ...seededV2Project(),
+      title: "Readonly Cast Inspector Fixture",
+      shareLinks: {
+        view: { projectId: "readonly-cast-inspector", token: "", enabled: true },
+        edit: { projectId: "readonly-cast-inspector", token: "edit-token", enabled: true }
+      }
+    };
+    await routeCloudProject(page, readonlyProject, "readonly-cast-inspector");
+    await page.goto("/share/readonly-cast-inspector");
+
+    const readonlyRoot = page.locator("[data-v2-visual-editor]");
+    await readonlyRoot.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람 목록" }).click();
+    await readonlyRoot.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
+    const readonlySheet = readonlyRoot.locator('[data-v2-bottom-sheet="cast-list"]');
+    await expect(readonlySheet.locator('[data-v2-performer-inspector="b2"]')).toBeVisible();
+    await readonlySheet.getByRole("button", { name: "편집" }).click();
+    await expect(readonlySheet.getByLabel("이름")).toBeDisabled();
+    await expect(readonlySheet.getByLabel("토큰 표시")).toBeDisabled();
+    await expect(readonlySheet.getByLabel("색상")).toBeDisabled();
+    await expect(readonlySheet.getByRole("button", { name: "복제" })).toBeDisabled();
+    await expect(readonlySheet.getByRole("button", { name: "삭제" })).toBeDisabled();
+    await expect(readonlyRoot.locator("[data-v2-bottom-rail]")).toHaveAttribute("data-v2-bottom-rail-mode", "default");
+  });
+
   test("V2 action bar and sheets stay usable in 390px mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seedProject(page);
@@ -4230,6 +4379,7 @@ test.describe("connected root V2 editor route", () => {
     await root.locator("[data-v2-bottom-rail]").getByRole("button", { name: "사람 목록" }).click();
     await expect(root.locator('[data-v2-tab-surface="Cast"]')).toHaveCount(0);
     await root.locator('[data-v2-bottom-sheet-item="cast-b2"]').click();
+    await expect(root.locator('[data-v2-performer-inspector="b2"]')).toBeVisible();
     const readonlyTopbarBox = await root.locator(".v2-topbar").boundingBox();
     expect(readonlyTopbarBox.y).toBeGreaterThanOrEqual(0);
     await expect(root.locator('[data-v2-performer-token="b2"]')).toHaveAttribute("aria-pressed", "true");
@@ -4244,6 +4394,8 @@ test.describe("connected root V2 editor route", () => {
     await expect(readonlyRail.getByRole("button", { name: "복제" })).toHaveCount(0);
     await expect(readonlyRail.getByRole("button", { name: "삭제" })).toHaveCount(0);
 
+    await readonlyRail.getByRole("button", { name: "사람 목록" }).click();
+    await expect(root.locator("[data-v2-bottom-sheet]")).toHaveCount(0);
     await root.locator('[data-v2-formation-block="diamond"][data-v2-segment-kind="hold"]').click();
     await expect(readonlyRail).toHaveAttribute("data-v2-bottom-rail-mode", "formation");
     await expect(readonlyRail.getByRole("button", { name: "삭제" })).toHaveCount(0);

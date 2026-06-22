@@ -62,6 +62,8 @@ function preciseTimeLabel(label = "00 : 01 : 14 .23") {
 }
 
 function performerLabel(performer) {
+  const resolved = String(performer.resolvedTokenLabel || performer.tokenLabel || "").trim();
+  if (resolved) return resolved;
   const value = String(performer.name || performer.label || performer.id || "").trim();
   return Array.from(value.replace(/\s+/g, "")).slice(0, /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(value) ? 2 : 3).join("") || performer.id;
 }
@@ -754,6 +756,26 @@ function V2VisualEditor({ model, actions = {} }) {
       runtimeActions.addAudio?.();
       return;
     }
+    if (action.key === "edit-performer") {
+      runtimeActions.toggleSelectedPerformerInspectorEdit?.();
+      return;
+    }
+    if (action.key === "duplicate-performer") {
+      runtimeActions.duplicateSelectedPerformer?.();
+      return;
+    }
+    if (action.key === "delete-performer") {
+      runtimeActions.requestDeleteSelectedPerformer?.();
+      return;
+    }
+    if (action.key === "confirm-delete-performer") {
+      runtimeActions.confirmDeleteSelectedPerformer?.();
+      return;
+    }
+    if (action.key === "cancel-delete-performer") {
+      runtimeActions.cancelDeleteSelectedPerformer?.();
+      return;
+    }
     runBottomAction(action);
   };
   const runBottomSheetItem = (item) => {
@@ -772,7 +794,7 @@ function V2VisualEditor({ model, actions = {} }) {
       return;
     }
     if (item.action === "select-performer") {
-      runtimeActions.selectPerformer?.(item.performerId);
+      runtimeActions.selectPerformer?.(item.performerId, { keepSheetOpen: true });
       return;
     }
     if (item.action === "add-formation") {
@@ -1688,6 +1710,25 @@ function V2VisualEditor({ model, actions = {} }) {
                     </button>
                   );
                 }
+                if (item.kind === "performer") {
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`v2-cast-list-row ${item.active ? "is-active" : ""}`}
+                      aria-pressed={Boolean(item.active)}
+                      disabled={Boolean(item.disabled)}
+                      data-v2-bottom-sheet-item={item.key}
+                      data-v2-cast-row={item.performerId}
+                      onClick={() => runBottomSheetItem(item)}
+                    >
+                      <span className="v2-cast-row-swatch" style={{ "--cast-row-color": item.color || "#64748b" }} aria-hidden="true" />
+                      <span className="v2-cast-row-name">{item.label}</span>
+                      <span className="v2-cast-row-token">{item.tokenLabel}</span>
+                      {item.stateLabel && <span className="v2-cast-row-state">{item.stateLabel}</span>}
+                    </button>
+                  );
+                }
                 const isButton = item.kind !== "info";
                 const content = (
                   <>
@@ -1720,6 +1761,82 @@ function V2VisualEditor({ model, actions = {} }) {
                   </div>
                 );
               })}
+              {view.bottomSheet.inspector && (
+                <div
+                  className={`v2-performer-inspector ${view.bottomSheet.inspector.deleteConfirming ? "is-delete-confirming" : ""}`}
+                  data-v2-performer-inspector={view.bottomSheet.inspector.performerId}
+                >
+                  <div className="v2-performer-inspector-summary">
+                    <span className="v2-performer-inspector-swatch" style={{ "--performer-inspector-color": view.bottomSheet.inspector.color || "#64748b" }} aria-hidden="true" />
+                    <span>
+                      <strong>{view.bottomSheet.inspector.name}</strong>
+                      <em>{view.bottomSheet.inspector.resolvedTokenLabel}</em>
+                    </span>
+                  </div>
+                  <div className="v2-performer-inspector-actions">
+                    {view.bottomSheet.inspector.actions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        className={[
+                          action.danger ? "is-danger" : "",
+                          action.expanded ? "is-active" : ""
+                        ].filter(Boolean).join(" ")}
+                        disabled={Boolean(action.disabled)}
+                        aria-pressed={action.key === "edit-performer" ? Boolean(action.expanded) : undefined}
+                        onClick={() => runBottomSheetHeaderAction(action)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                  {view.bottomSheet.inspector.deleteConfirming && (
+                    <div className="v2-performer-delete-confirm" data-v2-performer-delete-confirm>
+                      <span>삭제할까요?</span>
+                      <button type="button" className="is-danger" onClick={() => runBottomSheetHeaderAction({ key: "confirm-delete-performer" })}>삭제</button>
+                      <button type="button" onClick={() => runBottomSheetHeaderAction({ key: "cancel-delete-performer" })}>취소</button>
+                    </div>
+                  )}
+                  {view.bottomSheet.inspector.actions.find((action) => action.key === "edit-performer")?.expanded && (
+                    <div className="v2-performer-inspector-fields">
+                      <label>
+                        <span>{view.bottomSheet.inspector.fields.name.label}</span>
+                        <input
+                          value={view.bottomSheet.inspector.fields.name.value}
+                          disabled={Boolean(view.bottomSheet.inspector.fields.name.disabled)}
+                          aria-label={view.bottomSheet.inspector.fields.name.label}
+                          onChange={(event) => runtimeActions.updateSelectedPerformerMetadataField?.("name", event.target.value)}
+                          onBlur={(event) => runtimeActions.finishSelectedPerformerMetadataEdit?.("name", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>{view.bottomSheet.inspector.fields.tokenLabel.label}</span>
+                        <input
+                          value={view.bottomSheet.inspector.fields.tokenLabel.value}
+                          disabled={Boolean(view.bottomSheet.inspector.fields.tokenLabel.disabled)}
+                          aria-label={view.bottomSheet.inspector.fields.tokenLabel.label}
+                          placeholder={view.bottomSheet.inspector.fields.tokenLabel.helper}
+                          onChange={(event) => runtimeActions.updateSelectedPerformerMetadataField?.("tokenLabel", event.target.value)}
+                          onBlur={(event) => runtimeActions.finishSelectedPerformerMetadataEdit?.("tokenLabel", event.target.value)}
+                        />
+                        <em>{view.bottomSheet.inspector.fields.tokenLabel.helper}</em>
+                      </label>
+                      <label className="v2-performer-color-field">
+                        <span>{view.bottomSheet.inspector.fields.color.label}</span>
+                        <input
+                          type="color"
+                          value={/^#(?:[0-9a-f]{6})$/i.test(view.bottomSheet.inspector.fields.color.value) ? view.bottomSheet.inspector.fields.color.value : "#64748b"}
+                          disabled={Boolean(view.bottomSheet.inspector.fields.color.disabled)}
+                          aria-label={view.bottomSheet.inspector.fields.color.label}
+                          onChange={(event) => runtimeActions.updateSelectedPerformerMetadataField?.("color", event.target.value)}
+                          onBlur={(event) => runtimeActions.finishSelectedPerformerMetadataEdit?.("color", event.target.value)}
+                        />
+                        <span className="v2-performer-color-value">{view.bottomSheet.inspector.fields.color.value || "#64748b"}</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
               {Boolean(view.bottomSheet.actions?.length) && (
                 <div className="v2-bottom-sheet-actions">
                   {view.bottomSheet.actions.map((action) => (

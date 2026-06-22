@@ -1,7 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { clientPointToV2Stage, createV2EditorRuntime } from "./v2EditorRuntime.mjs";
+import {
+  autoTokenLabelForName,
+  clientPointToV2Stage,
+  createV2EditorRuntime,
+  performerTokenMode,
+  resolvedPerformerTokenLabel
+} from "./v2EditorRuntime.mjs";
+
+test("V2 performer token labels resolve manual, automatic, legacy, and id fallbacks", () => {
+  assert.equal(autoTokenLabelForName("Ari Kim"), "AK");
+  assert.equal(autoTokenLabelForName("김민지"), "김민");
+  assert.equal(autoTokenLabelForName("Bo"), "Bo");
+  assert.equal(autoTokenLabelForName("Charlotte"), "Cha");
+  assert.equal(resolvedPerformerTokenLabel({ id: "p1", label: "Legacy", name: "" }), "Legacy");
+  assert.equal(resolvedPerformerTokenLabel({ id: "p1", label: "Legacy", name: "Ari Kim", tokenLabel: "Lead" }), "Lead");
+  assert.equal(resolvedPerformerTokenLabel({ id: "p1", label: "Legacy", name: "Ari Kim", tokenLabel: " " }), "AK");
+  assert.equal(resolvedPerformerTokenLabel({ id: "p1", label: "", name: "" }), "p1");
+  assert.equal(performerTokenMode({ tokenLabel: "Lead" }), "manual");
+  assert.equal(performerTokenMode({ tokenLabel: "" }), "auto");
+  assert.equal(performerTokenMode({}), "auto");
+});
 
 test("V2 editor runtime exposes the stable shell, stage, selection, timeline, capability, and action contract", () => {
   const selectPerformer = () => {};
@@ -465,10 +485,121 @@ test("V2 runtime exposes tab state and Cast selection action model", () => {
 
   assert.equal(runtime.activeTab, "Cast");
   assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.active]), [["a1", false], ["b2", true]]);
+  assert.deepEqual(runtime.cast.performers.map((performer) => [performer.id, performer.tokenLabel]), [["a1", "A1"], ["b2", "B2"]]);
   assert.equal(runtime.cast.canClearSelection, true);
   assert.equal(runtime.cast.canOpenRoleActions, true);
   assert.equal(runtime.actions.selectPerformer, selectPerformer);
   assert.equal(runtime.actions.mobileAction, handleMobileAction);
+});
+
+test("V2 cast list sheet keeps rows lightweight and opens a selected performer inspector", () => {
+  const updateSelectedPerformerMetadataField = () => {};
+  const finishSelectedPerformerMetadataEdit = () => {};
+  const duplicateSelectedPerformer = () => {};
+  const requestDeleteSelectedPerformer = () => {};
+  const runtime = createV2EditorRuntime({
+    activeBottomSheet: "cast-list",
+    performers: [
+      { id: "a1", label: "A1", name: "Ari Kim", color: "#2457c5", role: "groupA" },
+      { id: "b2", label: "B2", name: "김민지", tokenLabel: "MJ", color: "#e84a7f", role: "groupB" }
+    ],
+    readonly: false,
+    selectedPerformerId: "b2",
+    selectedPerformerIds: ["b2"],
+    updateSelectedPerformerMetadataField,
+    finishSelectedPerformerMetadataEdit,
+    duplicateSelectedPerformer,
+    requestDeleteSelectedPerformer,
+    performerInspectorExpanded: true
+  });
+
+  assert.equal(runtime.actionBarState, "default");
+  assert.equal(runtime.bottomRailMode, "default");
+  assert.equal(runtime.bottomSheet.key, "cast-list");
+  assert.deepEqual(runtime.bottomSheet.items.map((item) => ({
+    label: item.label,
+    tokenLabel: item.tokenLabel,
+    color: item.color,
+    active: item.active,
+    performerId: item.performerId,
+    action: item.action,
+    fields: item.fields
+  })), [
+    {
+      label: "Ari Kim",
+      tokenLabel: "AK",
+      color: "#2457c5",
+      active: false,
+      performerId: "a1",
+      action: "select-performer",
+      fields: undefined
+    },
+    {
+      label: "김민지",
+      tokenLabel: "MJ",
+      color: "#e84a7f",
+      active: true,
+      performerId: "b2",
+      action: "select-performer",
+      fields: undefined
+    }
+  ]);
+  assert.deepEqual(runtime.bottomSheet.inspector, {
+    performerId: "b2",
+    name: "김민지",
+    tokenLabel: "MJ",
+    resolvedTokenLabel: "MJ",
+    tokenMode: "manual",
+    color: "#e84a7f",
+    deleteConfirming: false,
+    actions: [
+      { key: "edit-performer", label: "편집", expanded: true },
+      { key: "duplicate-performer", label: "복제", disabled: false },
+      { key: "delete-performer", label: "삭제", danger: true, disabled: false }
+    ],
+    fields: {
+      name: { label: "이름", value: "김민지", disabled: false },
+      tokenLabel: { label: "토큰 표시", value: "MJ", helper: "비워두면 이름에서 자동 생성", disabled: false },
+      color: { label: "색상", value: "#e84a7f", disabled: false }
+    }
+  });
+  assert.equal(runtime.actions.updateSelectedPerformerMetadataField, updateSelectedPerformerMetadataField);
+  assert.equal(runtime.actions.finishSelectedPerformerMetadataEdit, finishSelectedPerformerMetadataEdit);
+  assert.equal(runtime.actions.duplicateSelectedPerformer, duplicateSelectedPerformer);
+  assert.equal(runtime.actions.requestDeleteSelectedPerformer, requestDeleteSelectedPerformer);
+});
+
+test("V2 selected performer inspector stays visible but disables mutation fields in readonly and last-performer states", () => {
+  const readonlyRuntime = createV2EditorRuntime({
+    activeBottomSheet: "cast-list",
+    performers: [{ id: "a1", label: "A1", name: "Ari Kim", color: "#2457c5" }],
+    readonly: true,
+    selectedPerformerId: "a1",
+    selectedPerformerIds: ["a1"],
+    performerInspectorExpanded: true,
+    performerDeleteConfirmingId: "a1"
+  });
+
+  assert.equal(readonlyRuntime.bottomSheet.inspector.performerId, "a1");
+  assert.equal(readonlyRuntime.bottomSheet.inspector.resolvedTokenLabel, "AK");
+  assert.deepEqual(readonlyRuntime.bottomSheet.inspector.actions, [
+    { key: "edit-performer", label: "편집", expanded: true },
+    { key: "duplicate-performer", label: "복제", disabled: true },
+    { key: "delete-performer", label: "삭제", danger: true, disabled: true }
+  ]);
+  assert.equal(readonlyRuntime.bottomSheet.inspector.fields.name.disabled, true);
+  assert.equal(readonlyRuntime.bottomSheet.inspector.fields.tokenLabel.disabled, true);
+  assert.equal(readonlyRuntime.bottomSheet.inspector.fields.color.disabled, true);
+  assert.equal(readonlyRuntime.bottomSheet.inspector.deleteConfirming, false);
+
+  const lastEditableRuntime = createV2EditorRuntime({
+    activeBottomSheet: "cast-list",
+    performers: [{ id: "a1", label: "A1", name: "Ari Kim", color: "#2457c5" }],
+    readonly: false,
+    selectedPerformerId: "a1",
+    selectedPerformerIds: ["a1"]
+  });
+  assert.equal(lastEditableRuntime.bottomSheet.inspector.actions.find((action) => action.key === "delete-performer").disabled, true);
 });
 
 test("V2 Cast task model summarizes selection and edit action availability", () => {
